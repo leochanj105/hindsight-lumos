@@ -36,11 +36,11 @@ typedef struct Pool {
 } Pool;
 
 typedef struct SendQueue {
-	queue_handle_t queue;
+	Queue queue;
 } SendQueue;
 
 typedef struct RecvQueue {
-	queue_handle_t queue;
+	Queue queue;
 } RecvQueue;
 
 

@@ -1,4 +1,4 @@
-### Use "make"
+### Use "make" or "make debug"
 
 CC = gcc
 AR = ar
@@ -23,11 +23,13 @@ OBJFILES = ${SRCFILES:.c=.o}
 INCLUDEFLAGS = -I $(SRCDIR)
 PTHREADFLAGS = -lpthread
 
-TARGET = dirs bin/basic_test
-.PHONY: all
+TARGET = dirs bin/tracer_test bin/queue_test bin/memory_test
+.PHONY: all debug
 
 all: $(TARGET)
 
+debug: CFLAGS += -DDEBUG=1 -ggdb3
+debug: clean all
 
 dirs:
 	@mkdir -p $(BINDIR)
