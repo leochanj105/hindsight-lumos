@@ -8,9 +8,19 @@
 #define DEBUG 0
 #endif
 
-typedef struct queue_t queue_t;
+#define HEAD  0
+#define TAIL  1
+#define CAP   2
+#define COUNT 3
 
-typedef queue_t* Queue;
+#define IDX(x) x*2+4
+#define AVL_IDX(x) x*2+5
+
+// typedef struct queue_t queue_t;
+
+// typedef queue_t* Queue;
+
+typedef int* Queue;
 
 Queue queue_init(int cap);
 

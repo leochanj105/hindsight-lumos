@@ -1,12 +1,13 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <pthread.h>
+#include <time.h>
 
 #include "queue.h"
 
-#define num_threads 4
-#define enqueue_per_thread 100000
-#define queue_cap 10000
+#define num_threads 8
+#define enqueue_per_thread 100
+#define queue_cap 200
 
 Queue queue;
 
@@ -19,21 +20,24 @@ void* get(void* arg) {
 	while(1) {
 		count++;
 		int data = queue_get(queue);
-		if (data != -1) {
-			count++;
+		for(int j=0; j<1; j++) {
+			sched_yield();
 		}
-
-		if (count == 1000000000) break;
+		// if (count == 1000000) break;
 	}
 	return NULL;
 }
 
 void* put(void* arg) {
 	int thread_num = (int)arg;
+	printf("thread %d\n", thread_num);
 	pthread_barrier_wait(&barrier);
 
 	for(int i=0; i<enqueue_per_thread; i++) {
 		queue_put(queue, thread_num*enqueue_per_thread+i);
+		for(int j=0; j<1; j++) {
+			sched_yield();
+		}
 	}
 
 	return NULL;

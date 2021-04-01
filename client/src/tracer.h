@@ -6,6 +6,7 @@
 #include <stdbool.h>
 
 #include "queue.h"
+#include "memory.h"
 
 // Trace Data Structures
 
@@ -22,18 +23,6 @@ typedef struct Header {
 	AgentAddress breadcrumbs[8];
 	int bredcrumb_count;
 } Header;
-
-typedef struct Buffer {
-	int buffer_id;
-	void* ptr;
-	size_t offset;
-} Buffer;
-
-typedef struct Pool {
-	void* ptr;
-	size_t pool_size;
-	const size_t buffer_length;
-} Pool;
 
 typedef struct SendQueue {
 	Queue queue;
