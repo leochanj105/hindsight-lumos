@@ -1,7 +1,6 @@
 package queue
 
 import (
-	"bytes"
 	"encoding/binary"
 	"fmt"
 	"os"
@@ -23,29 +22,23 @@ type Queue struct {
 }
 
 func Int32ToBytes(data int32) []byte {
-	bytebuf := bytes.NewBuffer([]byte{})
-	binary.Write(bytebuf, binary.BigEndian, data)
-	return bytebuf.Bytes()
+	bytebuf := make([]byte, 4)
+	binary.LittleEndian.PutUint32(bytebuf, uint32(data))
+	return bytebuf
 }
 
 func BytesToInt32(bys []byte) int32 {
-	bytebuff := bytes.NewBuffer(bys)
-	var data int32
-	binary.Read(bytebuff, binary.BigEndian, &data)
-	return int32(data)
+	return int32(binary.LittleEndian.Uint32(bys))
 }
 
 func Int64ToBytes(data int64) []byte {
-	bytebuf := bytes.NewBuffer([]byte{})
-	binary.Write(bytebuf, binary.BigEndian, data)
-	return bytebuf.Bytes()
+	bytebuf := make([]byte, 8)
+	binary.LittleEndian.PutUint64(bytebuf, uint64(data))
+	return bytebuf
 }
 
 func BytesToInt64(bys []byte) int64 {
-	bytebuff := bytes.NewBuffer(bys)
-	var data int64
-	binary.Read(bytebuff, binary.BigEndian, &data)
-	return int64(data)
+	return int64(binary.LittleEndian.Uint64(bys))
 }
 
 func header_idx(index int) int {
@@ -53,11 +46,11 @@ func header_idx(index int) int {
 }
 
 func val_idx(index int) int {
-	return LEN * (index + 4)
+	return LEN*4 + index*8
 }
 
 func avl_idx(index int) int {
-	return LEN * (index + 5)
+	return LEN*4 + index*8 + 4
 }
 
 func set_val(queue Queue, index int, value int) {
@@ -86,10 +79,14 @@ func QueueInit(fname string, size int) Queue {
 	var queue_handle Queue
 	queue_handle.queue = queue
 
-	set_val(queue_handle, header_idx(HEAD), 0)
-	set_val(queue_handle, header_idx(TAIL), 0)
-	set_val(queue_handle, header_idx(CAP), size)
-	set_val(queue_handle, header_idx(COUNT), 0)
+	// for i := 0; i < queue_size; i++ {
+	// 	queue[i] = 0
+	// }
+
+	// set_val(queue_handle, header_idx(HEAD), 0)
+	// set_val(queue_handle, header_idx(TAIL), 0)
+	// set_val(queue_handle, header_idx(CAP), size)
+	// set_val(queue_handle, header_idx(COUNT), 0)
 
 	return queue_handle
 }
@@ -137,7 +134,28 @@ func get_tail(queue Queue) int {
 
 func QueueGet(queue Queue) int {
 	tail := get_tail(queue)
+	fmt.Println("queueget", tail)
 	data := get_val(queue, val_idx(tail))
 	set_val(queue, avl_idx(tail), 0)
 	return data
+}
+
+func QueueTest(queue Queue) {
+	// fmt.Println(get_val(queue, header_idx(HEAD)))
+	fmt.Println(get_val(queue, header_idx(HEAD)))
+	fmt.Println(get_val(queue, header_idx(TAIL)))
+	fmt.Println(get_val(queue, header_idx(CAP)))
+	fmt.Println(get_val(queue, header_idx(COUNT)))
+	for i := 0; i < 10; i++ {
+		fmt.Println(get_val(queue, val_idx(i)), get_val(queue, avl_idx(i)))
+		fmt.Println(queue.queue[16+i*8 : 24+i*8])
+	}
+	// fmt.Println(queue.queue[0:16])
+	// fmt.Println(BytesToInt32(queue.queue[0:4]))
+	// fmt.Println(BytesToInt32(queue.queue[4:8]))
+	// fmt.Println(BytesToInt32(queue.queue[8:12]))
+	// fmt.Println(BytesToInt32(queue.queue[12:16]))
+	// fmt.Println(Int32ToBytes(10))
+	// fmt.Println(Int32ToBytes(-90))
+	return
 }

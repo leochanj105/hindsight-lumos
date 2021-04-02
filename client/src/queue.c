@@ -9,18 +9,8 @@
 
 #include "queue.h"
 
-// struct queue_t{
-// 	int head;
-// 	int tail;
-// 	int cap;
-// 	int count;
-// 	int *buf;
-// 	int *buf_avail;
-// };
 
 Queue queue_init(int cap){
-	// TODO: queue might be defined by agent, change to mmap here
-
 	Queue queue;
 
 	size_t fsize = 4*sizeof(int)+cap*sizeof(int)*2;
@@ -30,6 +20,8 @@ Queue queue_init(int cap){
 	int fd = open(fname, O_RDWR | O_CREAT, 0666);
 	assert(fd >= 0);
 
+	printf("%d\n", fd);
+
 	int i = ftruncate(fd, fsize);
 	assert(i == 0);
 
@@ -37,12 +29,14 @@ Queue queue_init(int cap){
 	assert(queue != MAP_FAILED);	
 	close(fd);
 
-	memset(queue, 0, fsize);
+	if (!isFileExist(fname)) {
+		memset(queue, 0, fsize);
 
-	queue[HEAD] = 0;
-	queue[TAIL] = 0;
-	queue[CAP] = cap;
-	queue[COUNT] = 0;
+		queue[HEAD] = 0;
+		queue[TAIL] = 0;
+		queue[CAP] = cap;
+		queue[COUNT] = 0;
+	}
 
 	return queue;
 }
@@ -72,20 +66,6 @@ int get_head(Queue queue) {
 	}
 
 	return head % queue[CAP];
-
-	// while(__sync_val_compare_and_swap(&queue->buf_avail[queue->head % queue->cap], 0, 1) != 0) {
-	// 	sched_yield();
-	// }
-	// int head = __sync_fetch_and_add(&queue->head, 1);
-
-	// if (head == queue->cap) {
-	// 	int new_head = __sync_sub_and_fetch(&queue->head, queue->cap);
-	// 	#if(DEBUG)
-	// 		printf("mod head to %d\n", new_head);
-	// 	#endif
-	// }
-
-	// return head % queue->cap;
 }
 
 void queue_put(Queue queue, int data){
@@ -99,17 +79,6 @@ void queue_put(Queue queue, int data){
 	#endif
 
 	return;
-
-	// int head = get_head(queue);
-	// queue->buf[head] = data;
-	// __sync_fetch_and_add(&queue->count, 1);
-	// queue->buf_avail[head] = 2;
-
-	// #if(DEBUG)
-	// 	printf("PUT %d AT %d\n", data, head);
-	// #endif
-
-	// return;
 }
 
 int get_tail(Queue queue) {
@@ -129,20 +98,6 @@ int get_tail(Queue queue) {
 	}
 
 	return tail % queue[CAP];
-
-	// while(__sync_val_compare_and_swap(&queue->buf_avail[queue->tail % queue->cap], 2, 0) != 2) {
-	// 	sched_yield();
-	// }
-	// int tail = __sync_fetch_and_add(&queue->tail, 1);
-
-	// if (tail == queue->cap) {
-	// 	int new_head = __sync_sub_and_fetch(&queue->tail, queue->cap);
-	// 	#if(DEBUG)
-	// 		printf("mod tail to %d\n", new_head);
-	// 	#endif
-	// }
-
-	// return tail % queue->cap;
 }
 
 int queue_get(Queue queue){
@@ -154,13 +109,8 @@ int queue_get(Queue queue){
 	#endif
 
 	return data;
+}
 
-	// int tail = get_tail(queue);
-	// int data = queue->buf[tail];
-	// queue->buf_avail[tail] = 0;
-	// #if(DEBUG)
-	// 	printf("GET %d AT %d\n", data, tail);
-	// #endif
-
-	// return data;
+bool isFileExist(const char* fname) {
+	return (access(fname, F_OK) != -1);
 }

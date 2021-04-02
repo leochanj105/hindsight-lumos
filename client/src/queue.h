@@ -3,6 +3,7 @@
 
 #include <stdlib.h>
 #include <stdint.h>
+#include <stdbool.h>
 
 #ifndef DEBUG
 #define DEBUG 0
@@ -16,10 +17,6 @@
 #define IDX(x) x*2+4
 #define AVL_IDX(x) x*2+5
 
-// typedef struct queue_t queue_t;
-
-// typedef queue_t* Queue;
-
 typedef int* Queue;
 
 Queue queue_init(int cap);
@@ -30,5 +27,6 @@ void queue_put(Queue queue, int data);
 
 int queue_get(Queue queue);
 
+bool isFileExist(const char* fname);
 
 #endif
