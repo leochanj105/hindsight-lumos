@@ -3,7 +3,7 @@
 
 #include <stdlib.h>
 #include <stdint.h>
-#include <stdbool.h>
+
 
 #ifndef DEBUG
 #define DEBUG 0
@@ -26,7 +26,5 @@ void queue_print(Queue queue);
 void queue_put(Queue queue, int data);
 
 int queue_get(Queue queue);
-
-bool isFileExist(const char* fname);
 
 #endif

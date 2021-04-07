@@ -2,26 +2,21 @@
 #define _MEMORY_H_
 
 #include <stdlib.h>
+#include <stdbool.h>
 #include <inttypes.h>
 
-typedef struct Buffer {
-	int buffer_id;
-	void* ptr;
-	size_t offset;
-} Buffer;
-
-typedef struct Pool {
-	void* ptr;
-	size_t pool_size;
-	const size_t buffer_length;
-} Pool;
 
 
 void trigger(uint64_t trigger_id);
 
-Buffer acquire();
+int acquire();
 
-void release(Buffer buffer);
+void release(int buffer);
 
+void* mem_init(const char* fname, size_t fsize);
+
+bool isFileExist(const char* fname);
+
+void write_buffer(void* data, size_t offset);
 
 #endif

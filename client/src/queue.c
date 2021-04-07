@@ -8,6 +8,7 @@
 #include <sched.h>
 
 #include "queue.h"
+#include "memory.h"
 
 
 Queue queue_init(int cap){
@@ -109,8 +110,4 @@ int queue_get(Queue queue){
 	#endif
 
 	return data;
-}
-
-bool isFileExist(const char* fname) {
-	return (access(fname, F_OK) != -1);
 }
