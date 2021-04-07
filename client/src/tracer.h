@@ -10,8 +10,16 @@
 
 // Trace Data Structures
 
+// typedef struct Pool {
+// 	int size;
+// 	int buffer_length;
+// 	int* ptr;
+// } Pool;
+
+typedef int* Pool;
+
 /*
-	Buffer data structure:
+	Each buffer data entry structure in pool
 	variable 		type 		size
 	req_id  		uint64_t 	8
 	time 			uint64_t 	8
@@ -26,25 +34,6 @@
 	payload(n) 		int*n 		4*n
 */
 
-typedef struct Buffer {
-	int buffer_id;
-	int offset;
-	int* ptr;
-} Buffer;
-
-// typedef struct Pool {
-// 	int size;
-// 	int buffer_length;
-// 	int* ptr;
-// } Pool;
-
-typedef int* Pool;
-
-/*
-	char*, 32*100
-*/
-typedef char* Dictionary;
-
 typedef struct Medadata {
 	uint64_t request_id;
 	uint64_t timestamp;
@@ -52,13 +41,24 @@ typedef struct Medadata {
 	uint64_t parent_span_id;
 } Metadata;
 
-typedef const char* AgentAddress;
-
 typedef struct Header {
 	Metadata* trace_md;
 	int* breadcrumbs;
 	int breadcrumb_count;
 } Header;
+
+typedef struct Buffer {
+	int buffer_id;
+	int offset;
+	int* ptr;
+} Buffer;
+
+/*
+	char*, 32*100
+*/
+typedef char* Dictionary;
+
+typedef const char* AgentAddress;
 
 typedef struct SendQueue {
 	Queue queue;
@@ -83,6 +83,7 @@ extern int dict_count;
 
 // Thread Local Variables
 extern __thread bool active;
+extern __thread bool first_buf;
 extern __thread Header *header;
 extern __thread Buffer *buffer;
 

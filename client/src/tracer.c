@@ -18,6 +18,7 @@ int dict_count;
 
 // Thread Local Variables
 __thread bool active;
+__thread bool first_buf;
 __thread Header *header;
 __thread Buffer *buffer;
 
@@ -26,20 +27,23 @@ __thread Buffer *buffer;
 
 void flush() {
 	if (active == true) {
-		int offset = buffer->buffer_id * pool_size;
-		pool[offset] = (int)(header->trace_md->request_id >> 32);
-		pool[offset+1] = (int)(header->trace_md->request_id & 0xffffffff);
-		pool[offset+2] = 0; // time
-		pool[offset+4] = (int)(header->trace_md->span_id >> 32);
-		pool[offset+5] = (int)(header->trace_md->span_id & 0xffffffff);
-		pool[offset+6] = (int)(header->trace_md->parent_span_id >> 32);
-		pool[offset+7] = (int)(header->trace_md->parent_span_id & 0xffffffff);
+		int offset = buffer->buffer_id * pool_buffer_length;
+		pool[offset+1] = (int)(header->trace_md->request_id >> 32);
+		pool[offset] = (int)(header->trace_md->request_id & 0xffffffff);
+		if (first_buf) {
+			pool[offset+3] = (int)(header->trace_md->timestamp >> 32);
+			pool[offset+2] = (int)(header->trace_md->timestamp & 0xffffffff);
+			pool[offset+5] = (int)(header->trace_md->span_id >> 32);
+			pool[offset+4] = (int)(header->trace_md->span_id & 0xffffffff);
+			pool[offset+7] = (int)(header->trace_md->parent_span_id >> 32);
+			pool[offset+6] = (int)(header->trace_md->parent_span_id & 0xffffffff);
+		}
 		pool[offset+8] = header->breadcrumb_count;
 		for (int i=0; i<8; i++) {
 			pool[offset+9+i] = header->breadcrumbs[i];
 		}
-		for (int i=0; i<buffer->offset; i++) {
-			pool[offset+17+i] = buffer->ptr[i];
+		for (int i=17; i<pool_buffer_length; i++) {
+			pool[offset+i] = buffer->ptr[i];
 		}
 	}
 	active = false;
@@ -56,16 +60,18 @@ void trace_init(int cap){
 	pool = (int*)mem_init("/dev/shm/pool_test", (cap+2)*sizeof(int));
 	pool_size = cap;
 	pool_buffer_length = 50;
-	pool[pool_size] = cap; // pool->size
-	pool[pool_size+1] = 50; // pool->buffer_length, header takes 17, must more than it
-
+	pool[pool_size] = pool_size; // pool->size
+	pool[pool_size+1] = pool_buffer_length; // pool->buffer_length, header takes 17, must more than it
 
 	// TODO: queue initializations (open|create)
+	buffer_counter = 0; // testing only
+
 	// TODO: Dictionary
 	dictionary = (char*)mem_init("/dev/shm/dict", 3200);
 	dict_count = 0;
 
 	active = false;	
+	first_buf = true;
 
 	buffer = malloc(sizeof(Buffer));
 	buffer->buffer_id = 0;
@@ -85,6 +91,7 @@ void trace_begin(uint64_t request_id, uint64_t span_id, uint64_t parent_span_id)
 		flush();
 	}
 	int buf = acquire();
+	first_buf = true;
 	if (buf == -1) {
 		active = false;
 		printf("no buffer acquired\n");
@@ -94,10 +101,10 @@ void trace_begin(uint64_t request_id, uint64_t span_id, uint64_t parent_span_id)
 	active = true;
 	
 	buffer->buffer_id = buf;
-	buffer->offset = 0;
+	buffer->offset = 17;
 
 	header->trace_md->request_id = request_id;
-	header->trace_md->timestamp = 0;
+	header->trace_md->timestamp = get_time();
 	header->trace_md->span_id = span_id;
 	header->trace_md->parent_span_id = parent_span_id;
 
@@ -120,11 +127,20 @@ void trace_end(){
 void tracepoint(int id, int payload){
 	// write to buffer->ptr, allow partial data of payloads across buffers
 	for (int i=0; i<payload + 1; i++) {
-		if (buffer->offset > pool[pool_size+1]) {
+		if (buffer->offset >= pool[pool_size+1]) {
 			flush();
 			int buf = acquire();
+			first_buf = false;
+			
+			#if(DEBUG)
+				printf("acquire new buffer %d %d\n", buf, pool[pool_size+1]);
+			#endif
+			active = true;
 			buffer->buffer_id = buf;
-			buffer->offset = 0;
+			buffer->offset = 17;
+			for (int j=17; j<pool_buffer_length; j++) {
+				buffer->ptr[j] = 0;
+			}
 		}
 
 		if(i==0){
@@ -133,8 +149,12 @@ void tracepoint(int id, int payload){
 		}
 		else {
 			buffer->ptr[buffer->offset] = i;
-			buffer->offset++;	
+			buffer->offset++;
 		}
+
+		#if(DEBUG)
+			printf("writing payload %d in buffer %d offset %d\n", i, buffer->buffer_id, buffer->offset);
+		#endif
 	}
 
 	return;

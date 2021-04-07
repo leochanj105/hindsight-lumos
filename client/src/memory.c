@@ -7,12 +7,15 @@
 
 #include "memory.h"
 
+int buffer_counter;
+
 void trigger(uint64_t trigger_id){
 
 }
 
 int acquire(){
-	return 0;
+	buffer_counter++;
+	return buffer_counter - 1;
 }
 
 void release(int buffer){

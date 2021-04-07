@@ -5,7 +5,7 @@
 #include <stdbool.h>
 #include <inttypes.h>
 
-
+extern int buffer_counter;
 
 void trigger(uint64_t trigger_id);
 
