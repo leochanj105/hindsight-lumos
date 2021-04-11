@@ -19,7 +19,8 @@ void* get(void* arg) {
 	int count = 0;
 	while(1) {
 		count++;
-		int data = queue_get(queue);
+		// int data = queue_get(queue);
+		queue_get(queue);
 		for(int j=0; j<1; j++) {
 			sched_yield();
 		}
@@ -47,7 +48,7 @@ void* put(void* arg) {
 
 int main(int argc, char const *argv[])
 {
-	queue = queue_init(queue_cap);
+	queue = queue_init("/dev/shm/queue_test", queue_cap);
 
 	pthread_barrier_init(&barrier, NULL, num_threads);
 

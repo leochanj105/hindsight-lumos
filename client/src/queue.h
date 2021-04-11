@@ -19,7 +19,7 @@
 
 typedef int* Queue;
 
-Queue queue_init(int cap);
+Queue queue_init(const char* fname, int cap);
 
 void queue_print(Queue queue);
 

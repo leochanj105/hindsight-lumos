@@ -5,8 +5,11 @@
 #include <inttypes.h>
 #include <stdbool.h>
 
+#ifndef DEBUG
+#define DEBUG 0
+#endif
+
 #include "queue.h"
-#include "memory.h"
 
 // Trace Data Structures
 
@@ -74,9 +77,9 @@ typedef struct RecvQueue {
 extern Pool pool;
 extern int pool_size;
 extern int pool_buffer_length;
-extern SendQueue complete;
-extern RecvQueue available;
-extern SendQueue triggers;
+extern SendQueue* complete;
+extern RecvQueue* available;
+extern SendQueue* triggers;
 
 extern Dictionary dictionary;
 extern int dict_count;
@@ -87,6 +90,17 @@ extern __thread bool first_buf;
 extern __thread Header *header;
 extern __thread Buffer *buffer;
 
+// Queue handler APIs
+
+void trigger(uint64_t trigger_id);
+
+int acquire();
+
+void release(int buffer_id);
+
+void* mem_init(const char* fname, size_t fsize);
+
+bool isFileExist(const char* fname);
 
 // Tracer APIs
 

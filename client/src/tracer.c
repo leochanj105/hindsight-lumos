@@ -1,17 +1,24 @@
 #define _GNU_SOURCE
 #include <time.h>
 #include <string.h>
+#include <sys/mman.h>
+#include <fcntl.h>
+#include <assert.h>
+#include <stdio.h>
+#include <unistd.h>
+#include <sys/types.h>
+
 
 #include "tracer.h"
+#include "queue.h"
 
 // Global Structures
-
 Pool pool;
 int pool_size;
 int pool_buffer_length;
-SendQueue complete;
-RecvQueue available;
-SendQueue triggers;
+SendQueue* complete;
+RecvQueue* available;
+SendQueue* triggers;
 
 Dictionary dictionary;
 int dict_count;
@@ -21,6 +28,44 @@ __thread bool active;
 __thread bool first_buf;
 __thread Header *header;
 __thread Buffer *buffer;
+
+// Queue Handler APIs
+void trigger(uint64_t trigger_id){
+	return;
+}
+
+int acquire(){
+	return queue_get(available->queue);
+}
+
+void release(int buffer_id){
+	queue_put(complete->queue, buffer_id);
+	return;
+}
+
+void* mem_init(const char* fname, size_t fsize) {
+	void* shm;
+	
+	int fd = open(fname, O_RDWR | O_CREAT, 0666);
+	assert(fd >= 0);
+
+	// int isExist = isFileExist(fname);
+
+	int i = ftruncate(fd, fsize);
+	assert(i == 0);
+
+	shm = mmap(NULL, fsize, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+	assert(shm != MAP_FAILED);	
+	close(fd);
+
+	memset(shm, 0, fsize);
+
+	return shm;
+}
+
+bool isFileExist(const char* fname) {
+	return (access(fname, F_OK) != -1);
+}
 
 
 // Tracer APIs
@@ -46,6 +91,7 @@ void flush() {
 			pool[offset+i] = buffer->ptr[i];
 		}
 	}
+	release(buffer->buffer_id);
 	active = false;
 	return;
 }
@@ -57,16 +103,23 @@ time_t get_time() {
 }
 
 void trace_init(int cap){
-	pool = (int*)mem_init("/dev/shm/pool_test", (cap+2)*sizeof(int));
+	pool = (int*)mem_init("/dev/shm/pool", cap*50*sizeof(int));
 	pool_size = cap;
 	pool_buffer_length = 50;
-	pool[pool_size] = pool_size; // pool->size
-	pool[pool_size+1] = pool_buffer_length; // pool->buffer_length, header takes 17, must more than it
+	// pool[pool_size] = pool_size; // pool->size
+	// pool[pool_size+1] = pool_buffer_length; // pool->buffer_length, header takes 17, must more than it
 
-	// TODO: queue initializations (open|create)
-	buffer_counter = 0; // testing only
+	complete = malloc(sizeof(SendQueue));
+	available = malloc(sizeof(RecvQueue));
+	triggers = malloc(sizeof(SendQueue));
 
-	// TODO: Dictionary
+	available->queue = (Queue)queue_init("/dev/shm/available_queue", cap);
+	complete->queue = (Queue)queue_init("/dev/shm/complete_queue", cap);
+	triggers->queue = (Queue)queue_init("/dev/shm/triggers_queue", cap);
+
+	// avail queue initialization should be in agent
+	// for (int i=0; i<pool_size; i++) queue_put(available->queue, i);
+
 	dictionary = (char*)mem_init("/dev/shm/dict", 3200);
 	dict_count = 0;
 
@@ -94,7 +147,9 @@ void trace_begin(uint64_t request_id, uint64_t span_id, uint64_t parent_span_id)
 	first_buf = true;
 	if (buf == -1) {
 		active = false;
-		printf("no buffer acquired\n");
+		#if(DEBUG)
+			printf("no buffer acquired\n");
+		#endif
 		return;
 	}
 	
@@ -102,6 +157,9 @@ void trace_begin(uint64_t request_id, uint64_t span_id, uint64_t parent_span_id)
 	
 	buffer->buffer_id = buf;
 	buffer->offset = 17;
+	#if(DEBUG)
+		printf("[trace_begin] buffer %d\n", buf);
+	#endif
 
 	header->trace_md->request_id = request_id;
 	header->trace_md->timestamp = get_time();
@@ -121,20 +179,23 @@ void trace_end(){
 		flush();
 		active = false;
 	}
+	#if(DEBUG)
+		printf("[trace_end]\n");
+	#endif
 	return;
 }
 
 void tracepoint(int id, int payload){
 	// write to buffer->ptr, allow partial data of payloads across buffers
 	for (int i=0; i<payload + 1; i++) {
-		if (buffer->offset >= pool[pool_size+1]) {
+		if (buffer->offset >= pool_buffer_length) {
+			#if(DEBUG)
+				printf("[tracepoint]acquire new buffer when offset %d >= buffer length %d\n", buffer->offset, pool_buffer_length);
+			#endif
 			flush();
 			int buf = acquire();
 			first_buf = false;
 			
-			#if(DEBUG)
-				printf("acquire new buffer %d %d\n", buf, pool[pool_size+1]);
-			#endif
 			active = true;
 			buffer->buffer_id = buf;
 			buffer->offset = 17;
@@ -153,7 +214,7 @@ void tracepoint(int id, int payload){
 		}
 
 		#if(DEBUG)
-			printf("writing payload %d in buffer %d offset %d\n", i, buffer->buffer_id, buffer->offset);
+			printf("[tracepoint]writing payload %d in buffer %d offset %d\n", i, buffer->buffer_id, buffer->offset);
 		#endif
 	}
 
@@ -164,6 +225,10 @@ void trace_add_breadcrumb(AgentAddress breadcrumb){
 	// write to dictionary
 	int offset = dict_count * 32;
 	memcpy(dictionary+offset, breadcrumb, strlen(breadcrumb));
+	#if(DEBUG)
+		printf("[trace_add_breadcrumb]add at %d\n", dict_count);
+	#endif
+
 	if (header->breadcrumb_count < 8)
 		header->breadcrumbs[header->breadcrumb_count] = dict_count; 
 	header->breadcrumb_count++;

@@ -1,10 +1,11 @@
 package queue
 
 import (
-	"encoding/binary"
 	"fmt"
 	"os"
 	"syscall"
+
+	. "util"
 )
 
 const (
@@ -21,25 +22,9 @@ type Queue struct {
 	queue []byte
 }
 
-func Int32ToBytes(data int32) []byte {
-	bytebuf := make([]byte, 4)
-	binary.LittleEndian.PutUint32(bytebuf, uint32(data))
-	return bytebuf
-}
-
-func BytesToInt32(bys []byte) int32 {
-	return int32(binary.LittleEndian.Uint32(bys))
-}
-
-func Int64ToBytes(data int64) []byte {
-	bytebuf := make([]byte, 8)
-	binary.LittleEndian.PutUint64(bytebuf, uint64(data))
-	return bytebuf
-}
-
-func BytesToInt64(bys []byte) int64 {
-	return int64(binary.LittleEndian.Uint64(bys))
-}
+var Complete Queue
+var Available Queue
+var Triggers Queue
 
 func header_idx(index int) int {
 	return LEN * index
@@ -109,6 +94,8 @@ func get_head(queue Queue) int {
 
 func QueuePut(queue Queue, data int) {
 	head := get_head(queue)
+	fmt.Println("[queue_put] head:", head, " tail:", get_val(queue, header_idx(TAIL)))
+
 	set_val(queue, val_idx(head), data)
 	set_val(queue, avl_idx(head), 2)
 	count := get_val(queue, header_idx(COUNT))
@@ -134,28 +121,42 @@ func get_tail(queue Queue) int {
 
 func QueueGet(queue Queue) int {
 	tail := get_tail(queue)
-	fmt.Println("queueget", tail)
+	fmt.Println("[queue_get] head:", get_val(queue, header_idx(HEAD)), " tail:", tail)
 	data := get_val(queue, val_idx(tail))
 	set_val(queue, avl_idx(tail), 0)
 	return data
 }
 
-func QueueTest(queue Queue) {
+func QueueInitTest() {
+	fmt.Println(get_val(Complete, header_idx(CAP)))
+	fmt.Println(get_val(Available, header_idx(CAP)))
+	fmt.Println(get_val(Triggers, header_idx(CAP)))
+
 	// fmt.Println(get_val(queue, header_idx(HEAD)))
-	fmt.Println(get_val(queue, header_idx(HEAD)))
-	fmt.Println(get_val(queue, header_idx(TAIL)))
-	fmt.Println(get_val(queue, header_idx(CAP)))
-	fmt.Println(get_val(queue, header_idx(COUNT)))
-	for i := 0; i < 10; i++ {
-		fmt.Println(get_val(queue, val_idx(i)), get_val(queue, avl_idx(i)))
-		fmt.Println(queue.queue[16+i*8 : 24+i*8])
-	}
-	// fmt.Println(queue.queue[0:16])
-	// fmt.Println(BytesToInt32(queue.queue[0:4]))
-	// fmt.Println(BytesToInt32(queue.queue[4:8]))
-	// fmt.Println(BytesToInt32(queue.queue[8:12]))
-	// fmt.Println(BytesToInt32(queue.queue[12:16]))
-	// fmt.Println(Int32ToBytes(10))
-	// fmt.Println(Int32ToBytes(-90))
+	// fmt.Println(get_val(queue, header_idx(TAIL)))
+	// fmt.Println(get_val(queue, header_idx(CAP)))
+	// fmt.Println(get_val(queue, header_idx(COUNT)))
+	// for i := 0; i < 10; i++ {
+	// 	fmt.Println(get_val(queue, val_idx(i)), get_val(queue, avl_idx(i)))
+	// 	fmt.Println(queue.queue[16+i*8 : 24+i*8])
+	// }
+
 	return
+}
+
+func AvailableInit(cap int) {
+	for i := 0; i < cap; i++ {
+		QueuePut(Available, i)
+	}
+}
+
+func print_stat(queue Queue) {
+	fmt.Println(get_val(queue, header_idx(HEAD)), get_val(queue, header_idx(TAIL)), get_val(queue, header_idx(CAP)), get_val(queue, header_idx(COUNT)))
+}
+
+func PrintQueueStat() {
+	fmt.Println("[queue_stat] available:")
+	print_stat(Available)
+	fmt.Println("[queue_stat] complete:")
+	print_stat(Complete)
 }

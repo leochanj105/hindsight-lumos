@@ -4,11 +4,22 @@ import (
 	"fmt"
 	"os"
 	"syscall"
+
+	. "util"
 )
 
-func MemInit(fname string, size int) []byte {
-	// queue_size := CONST_NUM*LEN + size*LEN*2
+type Pool struct {
+	Pool []byte
+}
 
+type Dict struct {
+	Dict []byte
+}
+
+var SharedPool Pool
+var SharedDict Dict
+
+func MemInit(fname string, size int) []byte {
 	f, err := os.OpenFile(fname, os.O_RDWR|os.O_CREATE, 0666)
 	if err != nil {
 		fmt.Println("open file failed:", err)
@@ -21,5 +32,13 @@ func MemInit(fname string, size int) []byte {
 	if err != nil {
 		fmt.Println("mmap failed:", err)
 	}
+
 	return mem
+}
+
+func GetBufMetadata(buffer_id int) (int64, int64) {
+	offset := buffer_id * 50 * 4
+	request_id := BytesToInt64(SharedPool.Pool[offset : offset+8])
+	timestamp := BytesToInt64(SharedPool.Pool[offset+8 : offset+16])
+	return request_id, timestamp
 }

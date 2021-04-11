@@ -15,15 +15,15 @@ CFLAGS = -Wall -rdynamic -O3 -pedantic
 STATIC_LDFLAGS = -fPIC
 LDFLAGS = $(STATIC_LDFLAGS) -shared
 
-SRCFILES = $(SRCDIR)/tracer.c $(SRCDIR)/queue.c \
-			$(SRCDIR)/memory.c
+SRCFILES = $(SRCDIR)/tracer.c $(SRCDIR)/queue.c
+
 DEPFILES := $(SRCFILES:%.c=$(DEPDIR)/%.d)
 DEPFLAGS = -MT $@ -MMD -MP -MF $(DEPDIR)/$*.d
 OBJFILES = ${SRCFILES:.c=.o}
 INCLUDEFLAGS = -I $(SRCDIR)
 PTHREADFLAGS = -lpthread
 
-TARGET = dirs bin/tracer_test bin/queue_test bin/memory_test
+TARGET = dirs bin/tracer_test bin/queue_test bin/client_test
 .PHONY: all debug
 
 all: $(TARGET)

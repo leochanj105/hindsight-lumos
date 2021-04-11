@@ -10,18 +10,14 @@
 #include "queue.h"
 #include "memory.h"
 
-
-Queue queue_init(int cap){
+Queue queue_init(const char* fname, int cap){
 	Queue queue;
-
 	size_t fsize = 4*sizeof(int)+cap*sizeof(int)*2;
-
-	const char* fname = "/dev/shm/queue_test";
 
 	int fd = open(fname, O_RDWR | O_CREAT, 0666);
 	assert(fd >= 0);
 
-	printf("%d\n", fd);
+	// int isExist = isFileExist(fname);
 
 	int i = ftruncate(fd, fsize);
 	assert(i == 0);
@@ -30,14 +26,12 @@ Queue queue_init(int cap){
 	assert(queue != MAP_FAILED);	
 	close(fd);
 
-	if (!isFileExist(fname)) {
-		memset(queue, 0, fsize);
+	memset(queue, 0, fsize);
 
-		queue[HEAD] = 0;
-		queue[TAIL] = 0;
-		queue[CAP] = cap;
-		queue[COUNT] = 0;
-	}
+	queue[HEAD] = 0;
+	queue[TAIL] = 0;
+	queue[CAP] = cap;
+	queue[COUNT] = 0;
 
 	return queue;
 }
@@ -60,9 +54,11 @@ int get_head(Queue queue) {
 	int head = __sync_fetch_and_add(queue+HEAD, 1);
 
 	if (head == queue[CAP]) {
-		int new_head = __sync_sub_and_fetch(queue+HEAD, queue[CAP]);
 		#if(DEBUG)
+			int new_head = __sync_sub_and_fetch(queue+HEAD, queue[CAP]);
 			printf("mod head to %d\n", new_head);
+		#else
+			__sync_sub_and_fetch(queue+HEAD, queue[CAP]);
 		#endif
 	}
 
@@ -92,10 +88,13 @@ int get_tail(Queue queue) {
 	int tail = __sync_fetch_and_add(queue+TAIL, 1);
 
 	if (tail == queue[CAP]) {
-		int new_head = __sync_sub_and_fetch(queue+TAIL, queue[CAP]);
 		#if(DEBUG)
-			printf("mod tail to %d\n", new_head);
+			int new_tail = __sync_sub_and_fetch(queue+TAIL, queue[CAP]);
+			printf("mod tail to %d\n", new_tail);
+		#else
+			__sync_sub_and_fetch(queue+TAIL, queue[CAP]);
 		#endif
+
 	}
 
 	return tail % queue[CAP];
