@@ -4,12 +4,18 @@
 #include <stdlib.h>
 #include <inttypes.h>
 #include <stdbool.h>
+#include <time.h>
+#include <x86intrin.h>
 
 #ifndef DEBUG
 #define DEBUG 0
 #endif
 
 #include "queue.h"
+
+#define TRACEBEGIN(x,y,z) trace_begin(x,y,z)
+#define TRACEPOINT(x,y) tracepoint(x,y)
+#define TRACEEND() trace_end()
 
 // Trace Data Structures
 
@@ -87,8 +93,20 @@ extern int dict_count;
 // Thread Local Variables
 extern __thread bool active;
 extern __thread bool first_buf;
-extern __thread Header *header;
-extern __thread Buffer *buffer;
+// extern __thread Header* header;
+// extern __thread Buffer* buffer;
+
+extern __thread int buffer_id;
+extern __thread int buffer_offset;
+extern __thread int buffer_ptr[50];
+
+extern __thread uint64_t request_id;
+extern __thread uint64_t timestamp;
+extern __thread uint64_t span_id;
+extern __thread uint64_t parent_span_id;
+extern __thread int breadcrumbs[8];
+extern __thread int breadcrumb_count;
+
 
 // Queue handler APIs
 
@@ -110,7 +128,7 @@ time_t get_time();
 
 void trace_init(int cap);
 
-void trace_begin(uint64_t request_id, uint64_t span_id, uint64_t parent_span_id);
+void trace_begin(uint64_t request_id_, uint64_t span_id_, uint64_t parent_span_id_);
 
 void trace_end();
 
@@ -118,16 +136,18 @@ void tracepoint(int id, int payload);
 
 void trace_add_breadcrumb(AgentAddress breadcrumb);
 
-Metadata* trace_get_metadata();
+// Metadata* trace_get_metadata();
 
 uint64_t trace_get_request_id();
 
 uint64_t trace_get_span_id();
 
-void trace_set_span_id(uint64_t span_id);
+void trace_set_span_id(uint64_t span_id_);
 
-void trace_set_parent_span_id(uint64_t parent_span_id);
+void trace_set_parent_span_id(uint64_t parent_span_id_);
 
 // Rate Limiters
+
+void trace_test(uint64_t temp);
 
 #endif

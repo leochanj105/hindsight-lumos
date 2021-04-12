@@ -46,9 +46,9 @@ void queue_print(Queue queue) {
 
 int get_head(Queue queue) {
 	while(__sync_val_compare_and_swap(queue+AVL_IDX(queue[HEAD]%queue[CAP]), 0, 1) != 0) {
-		#if(DEBUG)
-			printf("yielding for head %d %d %d %d %d %d\n", queue[HEAD], queue[TAIL], queue[CAP], queue[COUNT], queue[AVL_IDX(queue[HEAD]%queue[CAP])], queue[AVL_IDX(queue[TAIL]%queue[CAP])]);
-		#endif
+		// #if(DEBUG)
+		// 	printf("yielding for head %d %d %d %d %d %d\n", queue[HEAD], queue[TAIL], queue[CAP], queue[COUNT], queue[AVL_IDX(queue[HEAD]%queue[CAP])], queue[AVL_IDX(queue[TAIL]%queue[CAP])]);
+		// #endif
 		sched_yield();
 	}
 	int head = __sync_fetch_and_add(queue+HEAD, 1);
@@ -80,9 +80,9 @@ void queue_put(Queue queue, int data){
 
 int get_tail(Queue queue) {
 	while(__sync_val_compare_and_swap(queue + AVL_IDX(queue[TAIL] % queue[CAP]), 2, 3) != 2) {
-		#if(DEBUG)
-			printf("yielding for tail %d %d %d %d %d %d\n", queue[HEAD], queue[TAIL], queue[CAP], queue[COUNT], queue[AVL_IDX(queue[HEAD]%queue[CAP])], queue[AVL_IDX(queue[TAIL]%queue[CAP])]);
-		#endif
+		// #if(DEBUG)
+		// 	printf("yielding for tail %d %d %d %d %d %d\n", queue[HEAD], queue[TAIL], queue[CAP], queue[COUNT], queue[AVL_IDX(queue[HEAD]%queue[CAP])], queue[AVL_IDX(queue[TAIL]%queue[CAP])]);
+		// #endif
 		sched_yield();
 	}
 	int tail = __sync_fetch_and_add(queue+TAIL, 1);

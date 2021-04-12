@@ -15,15 +15,6 @@ int main(int argc, char const *argv[])
 		trace_end();
 		// sleep(1);	
 	}
-	// while(true) {
-	// 	trace_begin(1000,1001,1002);
-	// 	tracepoint(1,100);
-	// 	trace_add_breadcrumb("test");
-	// 	trace_end();
-	// 	sleep(1);
-	// }
-
-
 
 	return 0;
 }
