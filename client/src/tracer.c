@@ -5,6 +5,7 @@
 #include <fcntl.h>
 #include <assert.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <unistd.h>
 #include <sys/types.h>
 
@@ -14,7 +15,7 @@
 
 // Global Structures
 Pool pool;
-int pool_size;
+int pool_cap;
 int pool_buffer_length;
 SendQueue* complete;
 RecvQueue* available;
@@ -114,12 +115,59 @@ time_t get_time() {
 	return ts.tv_sec * 1000000000 + ts.tv_nsec;	
 }
 
+void load_config(const char* fname) {
+	// load default value first
+	pool_cap = 1;
+	pool_buffer_length = 1;
+
+	FILE* config_file = fopen(fname,"r");
+	char* line = NULL;
+	// if (infile == NULL) {
+	// 	infile = fopen("/etc/hindsight.conf", "r");
+	// }
+
+	ssize_t read;
+	size_t len = 0;
+	
+	while((read = getline(&line, &len, config_file)) != -1) {
+		char* temp = strchr(line, '\n');
+		int index = (int)(temp - line);
+
+		char* new_line = malloc(sizeof(char)*20);
+		if (index == strlen(line)-1) {
+			strncpy(new_line, line, index);
+		} else {
+			strncpy(new_line, line, strlen(line));
+		}
+
+		char* var = malloc(sizeof(char)*20);
+		char* value = malloc(sizeof(char)*20);
+		sscanf(new_line, "%s %s", var, value);
+
+		if (!strcmp(var, "cap")) {
+			pool_cap = atoi(value);
+		}
+
+		if (!strcmp(var, "buf_length")) {
+			pool_buffer_length = atoi(value);
+		}		
+	}
+	fclose(config_file);
+
+	if (line) free(line);
+
+	printf("config file load cap=%d buffer_length=%d\n", pool_cap, pool_buffer_length);
+
+	return;
+
+}
+
 void trace_init(int cap){
 	pool = (int*)mem_init("/dev/shm/pool", cap*50*sizeof(int));
-	pool_size = cap;
-	pool_buffer_length = 50;
-	// pool[pool_size] = pool_size; // pool->size
-	// pool[pool_size+1] = pool_buffer_length; // pool->buffer_length, header takes 17, must more than it
+	load_config("../conf/default.conf");
+	// pool_cap = cap;
+	// pool_buffer_length = 50;
+	
 
 	complete = malloc(sizeof(SendQueue));
 	available = malloc(sizeof(RecvQueue));

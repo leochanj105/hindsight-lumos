@@ -25,8 +25,6 @@
 // 	int* ptr;
 // } Pool;
 
-typedef int* Pool;
-
 /*
 	Each buffer data entry structure in pool
 	variable 		type 		size
@@ -43,28 +41,30 @@ typedef int* Pool;
 	payload(n) 		int*n 		4*n
 */
 
-typedef struct Medadata {
-	uint64_t request_id;
-	uint64_t timestamp;
-	uint64_t span_id;
-	uint64_t parent_span_id;
-} Metadata;
+// typedef struct Medadata {
+// 	uint64_t request_id;
+// 	uint64_t timestamp;
+// 	uint64_t span_id;
+// 	uint64_t parent_span_id;
+// } Metadata;
 
-typedef struct Header {
-	Metadata* trace_md;
-	int* breadcrumbs;
-	int breadcrumb_count;
-} Header;
+// typedef struct Header {
+// 	Metadata* trace_md;
+// 	int* breadcrumbs;
+// 	int breadcrumb_count;
+// } Header;
 
-typedef struct Buffer {
-	int buffer_id;
-	int offset;
-	int* ptr;
-} Buffer;
+// typedef struct Buffer {
+// 	int buffer_id;
+// 	int offset;
+// 	int* ptr;
+// } Buffer;
 
-/*
-	char*, 32*100
-*/
+typedef int* Pool;
+
+
+// char*, 32*100
+
 typedef char* Dictionary;
 
 typedef const char* AgentAddress;
@@ -81,7 +81,7 @@ typedef struct RecvQueue {
 // Global Structures
 
 extern Pool pool;
-extern int pool_size;
+extern int pool_cap;
 extern int pool_buffer_length;
 extern SendQueue* complete;
 extern RecvQueue* available;
@@ -125,6 +125,8 @@ bool isFileExist(const char* fname);
 void flush();
 
 time_t get_time();
+
+void load_config();
 
 void trace_init(int cap);
 

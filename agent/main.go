@@ -1,7 +1,11 @@
 package main
 
 import (
-	// "fmt"
+	"bufio"
+	"fmt"
+	"os"
+	"strconv"
+	"strings"
 	"sync"
 
 	. "cache"
@@ -10,16 +14,67 @@ import (
 	. "server"
 )
 
-func hindsight_init(cap int) {
-	SharedPool.Pool = MemInit("/dev/shm/pool", cap*50*4)
-	SharedDict.Dict = MemInit("/dev/shm/dict", 3200)
-	Complete = QueueInit("/dev/shm/complete_queue", cap)
-	Available = QueueInit("/dev/shm/available_queue", cap)
-	Triggers = QueueInit("/dev/shm/triggers_queue", cap)
+func hindsight_init() {
+	isConfig := conf_init()
+	if !isConfig {
+		fmt.Println("Failed to load config file")
+		return
+	}
 
-	CacheInit(cap)
-	AvailableInit(cap)
+	SharedPool.Pool = MemInit("/dev/shm/pool", Cap*Buf_length*4)
+	SharedDict.Dict = MemInit("/dev/shm/dict", 3200)
+	Complete = QueueInit("/dev/shm/complete_queue", Cap)
+	Available = QueueInit("/dev/shm/available_queue", Cap)
+	Triggers = QueueInit("/dev/shm/triggers_queue", Cap)
+
+	CacheInit(Cap)
+	AvailableInit(Cap)
 	// QueueInitTest()
+}
+
+func conf_init() bool {
+	conf_file, _ := os.Open("../conf/default.conf")
+	// if err != nil {
+	// 	conf_file, err = os.Open("/etc/hindsight.conf")
+	// 	if err != nil {
+	// 		fmt.Println("Please check conf file")
+	// 		return false
+	// 	}
+	// }
+	defer conf_file.Close()
+
+	// Service_name = serv_name
+
+	scanner := bufio.NewScanner(conf_file)
+	scanner.Split(bufio.ScanLines)
+
+	for scanner.Scan() {
+		if strings.Contains(scanner.Text(), "cap") {
+			Cap, _ = strconv.Atoi(strings.Split(scanner.Text(), " ")[1])
+		}
+		if strings.Contains(scanner.Text(), "buf_length") {
+			Buf_length, _ = strconv.Atoi(strings.Split(scanner.Text(), " ")[1])
+		}
+		if strings.Contains(scanner.Text(), "addr") && !strings.Contains(scanner.Text(), "lc") {
+			Server_addr = strings.Split(scanner.Text(), " ")[1]
+		}
+		if strings.Contains(scanner.Text(), "port") && !strings.Contains(scanner.Text(), "lc") {
+			Server_port, _ = strconv.Atoi(strings.Split(scanner.Text(), " ")[1])
+		}
+		if strings.Contains(scanner.Text(), "lc_addr") {
+			LC_addr = strings.Split(scanner.Text(), " ")[1]
+		}
+		if strings.Contains(scanner.Text(), "lc_port") {
+			LC_port, _ = strconv.Atoi(strings.Split(scanner.Text(), " ")[1])
+		}
+	}
+
+	if Server_addr == "" || Server_port == 0 {
+		fmt.Println("Please declare agent addr and port")
+		return false
+	}
+
+	return true
 }
 
 func run() {
@@ -44,7 +99,7 @@ func stat() {
 }
 
 func main() {
-	hindsight_init(100)
+	hindsight_init()
 
 	run()
 	// stat()

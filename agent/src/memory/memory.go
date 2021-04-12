@@ -19,6 +19,9 @@ type Dict struct {
 var SharedPool Pool
 var SharedDict Dict
 
+var Cap int
+var Buf_length int
+
 func MemInit(fname string, size int) []byte {
 	f, err := os.OpenFile(fname, os.O_RDWR|os.O_CREATE, 0666)
 	if err != nil {
@@ -37,7 +40,7 @@ func MemInit(fname string, size int) []byte {
 }
 
 func GetBufMetadata(buffer_id int) (int64, int64) {
-	offset := buffer_id * 50 * 4
+	offset := buffer_id * Buf_length * 4
 	request_id := BytesToInt64(SharedPool.Pool[offset : offset+8])
 	timestamp := BytesToInt64(SharedPool.Pool[offset+8 : offset+16])
 	return request_id, timestamp

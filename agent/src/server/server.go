@@ -8,6 +8,11 @@ import (
 	. "queue"
 )
 
+var Server_addr string
+var Server_port int
+var LC_addr string
+var LC_port int
+
 /*
 	QueueServer: keep pooling from queues
 	- acquire written buffer from complete
