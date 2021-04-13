@@ -5,8 +5,8 @@
 
 #include "tracer.h"
 
-#define num_threads 4
-#define req_per_thread 100
+#define num_threads 8
+#define req_per_thread 10000
 
 pthread_barrier_t barrier;
 
@@ -23,7 +23,7 @@ void* client(void* arg) {
 		trigger(i);
 		TRACEEND();
 
-		// sleep(1);
+		sleep(0.1);
 	}
 
 	return NULL;
@@ -34,7 +34,7 @@ int main(int argc, char const *argv[])
 	pthread_t threads[num_threads];
 	pthread_barrier_init(&barrier, NULL, num_threads+1);
 
-	trace_init(100);
+	trace_init();
 
 	for (int i=0; i<num_threads; i++) {
 		pthread_create(&threads[i], NULL, &client, (void*)i);

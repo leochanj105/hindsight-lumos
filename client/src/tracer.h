@@ -129,7 +129,7 @@ time_t get_time();
 
 void load_config();
 
-void trace_init(int cap);
+void trace_init();
 
 void trace_begin(uint64_t request_id_, uint64_t span_id_, uint64_t parent_span_id_);
 

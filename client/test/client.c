@@ -6,7 +6,7 @@
 
 int main(int argc, char const *argv[])
 {
-	trace_init(100);
+	trace_init();
 	// for (int i=0; i<200; i++) {
 		int i=1;
 		printf("client request %d\n", i);

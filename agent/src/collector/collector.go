@@ -48,7 +48,7 @@ func newCollector() *collectorServer {
 */
 func (*collectorServer) Report(ctx context.Context, in *Trace) (*CallRet, error) {
 	request_id := in.RequestId
-	fmt.Println("receiving", request_id)
+	fmt.Println("[Log Collector] receiving", request_id)
 	if _, ok := trace_pool[request_id]; !ok {
 		var temp []trace
 		trace_pool[request_id] = temp
@@ -67,15 +67,20 @@ func (*collectorServer) Report(ctx context.Context, in *Trace) (*CallRet, error)
 	LCServer: listen to agents
 */
 func RunLCResponseServer() {
-	lis, err := net.Listen("tcp", ":"+LC_port)
-	if err != nil {
-		log.Fatalf("failed to listen: %v", err)
+	for true {
+		lis, err := net.Listen("tcp", ":"+LC_port)
+		if err != nil {
+			log.Fatalf("failed to listen: %v", err)
+			fmt.Println("failed to listen:", err)
+		}
+		s := grpc.NewServer()
+		RegisterCollectorServer(s, newCollector())
+		if err := s.Serve(lis); err != nil {
+			log.Fatalf("failed to serve: %v", err)
+			fmt.Println("failed to serve:", err)
+		}
 	}
-	s := grpc.NewServer()
-	RegisterCollectorServer(s, newCollector())
-	if err := s.Serve(lis); err != nil {
-		log.Fatalf("failed to serve: %v", err)
-	}
+
 }
 
 /*
@@ -139,8 +144,14 @@ func RunRetrievalHandler() {
 	Collector: pool collection_queue, send retrieval request to agents
 */
 func RunCollector() {
+	var time_counter int = 0
 	// poll from collection queue, send request
 	for true {
+		time_counter += 1
+		if time_counter == 10000000 {
+			fmt.Println("[log collector] have collected", len(retrieval_pool), "requests")
+			time_counter = 0
+		}
 		pending := make(map[string]map[int64]int)
 		collection_queue.Mutex.Lock()
 		for request_id, _ := range collection_queue.Req {
@@ -160,15 +171,16 @@ func RunCollector() {
 				request_ids = append(request_ids, request_id)
 			}
 
-			conn, err := grpc.Dial(addr, grpc.WithInsecure(), grpc.WithBlock(), grpc.WithTimeout(100000000*time.Nanosecond))
+			conn, err := grpc.Dial(addr, grpc.WithInsecure(), grpc.WithBlock(), grpc.WithTimeout(1000000000*time.Nanosecond))
 			if err != nil {
 				fmt.Println("dial", addr, err)
-				return
+				// return
+				continue
 			}
 			defer conn.Close()
 			c := NewAgentClient(conn)
 
-			ctx, cancel := context.WithTimeout(context.Background(), 100000000*time.Nanosecond)
+			ctx, cancel := context.WithTimeout(context.Background(), 1000000000*time.Nanosecond)
 			defer cancel()
 
 			_, err = c.Request(ctx, &RequestID{
@@ -176,7 +188,8 @@ func RunCollector() {
 
 			if err != nil {
 				fmt.Println("request", err)
-				return
+				// return
+				continue
 			}
 		}
 	}

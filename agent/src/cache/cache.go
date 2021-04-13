@@ -100,7 +100,7 @@ func Evict() (int64, map[int]int64) {
 	request_id := e.Value.(Node).request_id
 	delete(cache.hash_table, request_id)
 	cache.lru.Remove(e)
-	cache.size -= 1
+	cache.size -= len(res)
 
 	return request_id, res
 }

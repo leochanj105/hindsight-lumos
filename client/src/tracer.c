@@ -92,6 +92,9 @@ bool isFileExist(const char* fname) {
 
 void flush() {
 	if (active == true) {
+		#if(DEBUG)
+			printf("[tracer] flush to buffer %d\n", buffer_id);
+		#endif
 		int offset = buffer_id * pool_buffer_length;
 		pool[offset+1] = (int)(request_id >> 32);
 		pool[offset] = (int)(request_id & 0xffffffff);
@@ -103,14 +106,14 @@ void flush() {
 			pool[offset+7] = (int)(parent_span_id >> 32);
 			pool[offset+6] = (int)(parent_span_id & 0xffffffff);
 		}
-		pool[offset+8] = breadcrumb_count;
-		for (int i=0; i<8; i++) {
-			pool[offset+9+i] = breadcrumbs[i];
-		}
-		pool[offset+17] = buffer_offset;
-		for (int i=18; i<pool_buffer_length; i++) {
-			pool[offset+i] = buffer_ptr[i];
-		}
+		// pool[offset+8] = breadcrumb_count;
+		// for (int i=0; i<8; i++) {
+		// 	pool[offset+9+i] = breadcrumbs[i];
+		// }
+		// pool[offset+17] = buffer_offset;
+		// for (int i=18; i<pool_buffer_length; i++) {
+		// 	pool[offset+i] = buffer_ptr[i];
+		// }
 	}
 	release(buffer_id);
 	active = false;
@@ -170,9 +173,10 @@ void load_config(const char* fname) {
 
 }
 
-void trace_init(int cap){
-	pool = (int*)mem_init("/dev/shm/pool", cap*50*sizeof(int));
+void trace_init(){
 	load_config("../conf/default.conf");
+	pool = (int*)mem_init("/dev/shm/pool", pool_cap*pool_buffer_length*sizeof(int));
+	
 	// pool_cap = cap;
 	// pool_buffer_length = 50;
 	
@@ -181,9 +185,9 @@ void trace_init(int cap){
 	available = malloc(sizeof(RecvQueue));
 	triggers = malloc(sizeof(SendQueue));
 
-	available->queue = (Queue)queue_init("/dev/shm/available_queue", cap);
-	complete->queue = (Queue)queue_init("/dev/shm/complete_queue", cap);
-	triggers->queue = (Queue)queue_init("/dev/shm/triggers_queue", cap);
+	available->queue = (Queue)queue_init("/dev/shm/available_queue", pool_cap);
+	complete->queue = (Queue)queue_init("/dev/shm/complete_queue", pool_cap);
+	triggers->queue = (Queue)queue_init("/dev/shm/triggers_queue", pool_cap);
 	trigger_lock = (char*)malloc(sizeof(char));
 	memset(trigger_lock, '0', sizeof(char));
 

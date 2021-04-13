@@ -96,7 +96,7 @@ func (*agentServer) Request(ctx context.Context, in *RequestID) (*CallRet, error
 	report_queue.Mutex.Lock()
 	for _, request_id := range request_ids {
 		report_queue.Req[request_id] = 0
-		fmt.Println("receiving", request_id)
+		fmt.Println("[agent server] receiving", request_id)
 	}
 	report_queue.Mutex.Unlock()
 
@@ -107,15 +107,18 @@ func (*agentServer) Request(ctx context.Context, in *RequestID) (*CallRet, error
 	ResponseServer: listen to log collector
 */
 func RunResponseServer() {
-	lis, err := net.Listen("tcp", ":"+Server_port)
-	if err != nil {
-		log.Fatalf("failed to listen: %v", err)
+	for true {
+		lis, err := net.Listen("tcp", ":"+Server_port)
+		if err != nil {
+			log.Fatalf("failed to listen: %v", err)
+		}
+		s := grpc.NewServer()
+		RegisterAgentServer(s, newAgent())
+		if err := s.Serve(lis); err != nil {
+			log.Fatalf("failed to serve: %v", err)
+		}
 	}
-	s := grpc.NewServer()
-	RegisterAgentServer(s, newAgent())
-	if err := s.Serve(lis); err != nil {
-		log.Fatalf("failed to serve: %v", err)
-	}
+
 }
 
 /*
@@ -123,12 +126,20 @@ func RunResponseServer() {
 */
 func RunAgent() {
 	pending := make(map[int64]int)
+	conn, err := grpc.Dial(LC_addr+":"+LC_port, grpc.WithInsecure(), grpc.WithTimeout(1000000000*time.Nanosecond))
+	if err != nil {
+		fmt.Println("dial", LC_addr+":"+LC_port, err)
+		return
+	}
+	defer conn.Close()
+	c := NewCollectorClient(conn)
+
 	for true {
 		reported := make(map[int64]bool)
 		report_queue.Mutex.Lock()
 		for request_id, counter := range report_queue.Req {
 			if _, ok := pending[request_id]; ok {
-				if counter >= 10 {
+				if counter >= 5 {
 					reported[request_id] = true
 				} else {
 					pending[request_id] += 1
@@ -144,8 +155,11 @@ func RunAgent() {
 		for request_id, _ := range pending {
 			buffer_ids := CacheGetBuffers(request_id)
 			if buffer_ids == nil {
+				pending[request_id] += 1
+				// fmt.Println("[agent]", request_id, "no longer exist")
 				continue
 			}
+			fmt.Println("[agent] retrieving", request_id)
 			var entry []int32
 			var trace_data []byte
 			var addrs []string
@@ -160,15 +174,19 @@ func RunAgent() {
 				}
 			}
 
-			conn, err := grpc.Dial(LC_addr+":"+LC_port, grpc.WithInsecure(), grpc.WithBlock(), grpc.WithTimeout(100000000*time.Nanosecond))
-			if err != nil {
-				fmt.Println("dial", LC_addr+":"+LC_port, err)
-				return
-			}
-			defer conn.Close()
-			c := NewCollectorClient(conn)
+			// conn, err := grpc.Dial(LC_addr+":"+LC_port, grpc.WithInsecure(), grpc.WithTimeout(1000000000*time.Nanosecond))
+			// if err != nil {
+			// 	fmt.Println("dial", LC_addr+":"+LC_port, err)
+			// 	// return
+			// 	continue
+			// }
+			// defer conn.Close()
+			// c := NewCollectorClient(conn)
 
-			ctx, cancel := context.WithTimeout(context.Background(), 100000000*time.Nanosecond)
+			// ctx, cancel := context.WithTimeout(context.Background(), 1000000000*time.Nanosecond)
+			// defer cancel()
+
+			ctx, cancel := context.WithTimeout(context.Background(), 1000000000*time.Nanosecond)
 			defer cancel()
 
 			_, err = c.Report(ctx, &Trace{
@@ -179,8 +197,11 @@ func RunAgent() {
 
 			if err != nil {
 				fmt.Println("report", err)
-				return
+				// return
+				continue
 			}
+
+			fmt.Println("[agent] report", request_id, "done")
 
 			reported[request_id] = true
 		}
