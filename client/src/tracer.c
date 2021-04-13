@@ -8,6 +8,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <sys/types.h>
+#include <sched.h>
 
 
 #include "tracer.h"
@@ -20,6 +21,7 @@ int pool_buffer_length;
 SendQueue* complete;
 RecvQueue* available;
 SendQueue* triggers;
+char* trigger_lock;
 
 Dictionary dictionary;
 int dict_count;
@@ -43,7 +45,12 @@ __thread int breadcrumb_count;
 
 
 // Queue Handler APIs
-void trigger(uint64_t trigger_id){
+void trigger(uint64_t request_id_){
+	// trigger needs to write an int64 to queue as two entries
+	Lock(trigger_lock);
+	queue_put(triggers->queue, (int)(request_id_ >> 32));
+	queue_put(triggers->queue, (int)(request_id_ & 0xffffffff));
+	Unlock(trigger_lock);
 	return;
 }
 
@@ -100,7 +107,8 @@ void flush() {
 		for (int i=0; i<8; i++) {
 			pool[offset+9+i] = breadcrumbs[i];
 		}
-		for (int i=17; i<pool_buffer_length; i++) {
+		pool[offset+17] = buffer_offset;
+		for (int i=18; i<pool_buffer_length; i++) {
 			pool[offset+i] = buffer_ptr[i];
 		}
 	}
@@ -176,6 +184,8 @@ void trace_init(int cap){
 	available->queue = (Queue)queue_init("/dev/shm/available_queue", cap);
 	complete->queue = (Queue)queue_init("/dev/shm/complete_queue", cap);
 	triggers->queue = (Queue)queue_init("/dev/shm/triggers_queue", cap);
+	trigger_lock = (char*)malloc(sizeof(char));
+	memset(trigger_lock, '0', sizeof(char));
 
 	dictionary = (char*)mem_init("/dev/shm/dict", 3200);
 	dict_count = 0;
@@ -227,7 +237,7 @@ void trace_begin(uint64_t request_id_, uint64_t span_id_, uint64_t parent_span_i
 	#endif
 
 	buffer_id = buf;
-	buffer_offset = 17;
+	buffer_offset = 18;
 
 	request_id = request_id_;
 	timestamp = get_time();
@@ -266,8 +276,8 @@ void tracepoint(int id, int payload){
 			
 			active = true;
 			buffer_id = buf;
-			buffer_offset = 17;
-			for (int j=17; j<pool_buffer_length; j++) {
+			buffer_offset = 18;
+			for (int j=18; j<pool_buffer_length; j++) {
 				buffer_ptr[j] = 0;
 			}
 		}
@@ -293,6 +303,7 @@ void trace_add_breadcrumb(AgentAddress breadcrumb){
 	// write to dictionary
 	int offset = dict_count * 32;
 	memcpy(dictionary+offset, breadcrumb, strlen(breadcrumb));
+
 	#if(DEBUG)
 		printf("[trace_add_breadcrumb]add at %d\n", dict_count);
 	#endif
@@ -340,5 +351,17 @@ void trace_test(uint64_t temp) {
 		breadcrumbs[i] = 0;
 	}
 	breadcrumb_count = 0;
+	return;
+}
+
+void Lock(char* l) {
+	while(!__sync_bool_compare_and_swap(l, '0', '1')) {
+		sched_yield();
+	}
+	return;
+}
+
+void Unlock(char* l) {
+	__sync_bool_compare_and_swap(l, '1', '0');
 	return;
 }

@@ -1,0 +1,28 @@
+syntax = "proto3";
+
+option go_package = "/datapb";
+
+package datapb;
+
+service Agent {
+	rpc Request (RequestID) returns (CallRet) {}
+}
+
+service Collector {
+	rpc Report (Trace) returns (CallRet) {}
+}
+
+message RequestID {
+	repeated int64 rid = 1;
+}
+
+message Trace {
+	int64 request_id  = 1;
+	repeated int32 entry = 2;
+	bytes trace = 3;
+	repeated string addrs = 4;
+}
+
+message CallRet {
+	bool callret = 1;
+}

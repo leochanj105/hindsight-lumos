@@ -45,3 +45,27 @@ func GetBufMetadata(buffer_id int) (int64, int64) {
 	timestamp := BytesToInt64(SharedPool.Pool[offset+8 : offset+16])
 	return request_id, timestamp
 }
+
+func GetRequestID(buffer_id int) int64 {
+	offset := buffer_id * Buf_length * 4
+	request_id := BytesToInt64(SharedPool.Pool[offset : offset+8])
+	return request_id
+}
+
+func GetRawRequestID(buffer_id int) []byte {
+	offset := buffer_id * Buf_length * 4
+	return SharedPool.Pool[offset : offset+8]
+}
+
+func GetBreadcrumbs(buffer_id int) []int {
+	offset := buffer_id * Buf_length * 4
+	breadcrumb_count := BytesToInt32(SharedPool.Pool[offset+32 : offset+36])
+	if breadcrumb_count == 0 {
+		return nil
+	}
+	var res []int
+	for i := 0; i < int(breadcrumb_count); i++ {
+		res = append(res, int(BytesToInt32(SharedPool.Pool[offset+36+i*4:offset+40+i*4])))
+	}
+	return res
+}

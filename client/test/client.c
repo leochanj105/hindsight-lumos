@@ -7,14 +7,16 @@
 int main(int argc, char const *argv[])
 {
 	trace_init(100);
-	for (int i=0; i<200; i++) {
+	// for (int i=0; i<200; i++) {
+		int i=1;
 		printf("client request %d\n", i);
 		trace_begin(i,1001,1002);
 		tracepoint(1,100);
-		trace_add_breadcrumb("test");
+		trace_add_breadcrumb("127.0.0.1:5050");
+		trigger(i);
 		trace_end();
 		// sleep(1);	
-	}
+	// }
 
 	return 0;
 }

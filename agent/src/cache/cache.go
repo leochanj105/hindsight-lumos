@@ -3,6 +3,7 @@ package cache
 import (
 	"container/list"
 	"fmt"
+	"sync"
 
 	. "queue"
 )
@@ -17,9 +18,18 @@ type LRU struct {
 	hash_table map[int64]*list.Element // e.Value.(Node)
 	cap        int
 	size       int
+	mutex      sync.RWMutex
 }
 
 var cache LRU
+
+func CacheLock() {
+	cache.mutex.Lock()
+}
+
+func CacheUnlock() {
+	cache.mutex.Unlock()
+}
 
 func CacheInit(cap int) {
 	cache.lru = list.New()
@@ -31,18 +41,36 @@ func CacheInit(cap int) {
 }
 
 func CacheGet(request_id int64) map[int]int64 {
+	CacheLock()
 	if e, ok := cache.hash_table[request_id]; ok {
 		cache.lru.MoveToFront(e)
-		return e.Value.(Node).buffers
+		res := e.Value.(Node).buffers
+
+		CacheUnlock()
+		return res
 	}
 
+	CacheUnlock()
+	return nil
+}
+
+func CacheGetBuffers(request_id int64) map[int]int64 {
+	CacheLock()
+	if e, ok := cache.hash_table[request_id]; ok {
+		res := e.Value.(Node).buffers
+
+		CacheUnlock()
+		return res
+	}
+
+	CacheUnlock()
 	return nil
 }
 
 func CacheSet(request_id int64, buffer_id int, timestamp int64) map[int]int64 {
 	var res map[int]int64
-	fmt.Println("[cache_set]", request_id, buffer_id)
-
+	// fmt.Println("[cache_set]", request_id, buffer_id)
+	CacheLock()
 	if e, ok := cache.hash_table[request_id]; ok {
 		if cache.size == cache.cap {
 			_, res = Evict()
@@ -60,6 +88,7 @@ func CacheSet(request_id int64, buffer_id int, timestamp int64) map[int]int64 {
 		cache.hash_table[request_id] = e
 		cache.size += 1
 	}
+	CacheUnlock()
 
 	return res
 }
@@ -77,19 +106,23 @@ func Evict() (int64, map[int]int64) {
 }
 
 func CacheManager() {
-	fmt.Println("[cache mngr stat] size=", cache.size)
+	// fmt.Println("[cache mngr stat] size=", cache.size)
 	for true {
 		// TODO: cache manager strategy here
 		if cache.cap-cache.size >= 5 {
 			break
 		}
-		fmt.Println("[cache mngr] cap", cache.cap, "- size", cache.size, "< 5")
-		request_id, evicted := Evict()
-		fmt.Println("[cache mngr] evict", request_id, len(evicted))
+		// fmt.Println("[cache mngr] cap", cache.cap, "- size", cache.size, "< 5")
+		// request_id, evicted := Evict()
+		// fmt.Println("[cache mngr] evict", request_id, len(evicted))
+		CacheLock()
+		_, evicted := Evict()
 		for buffer_id, _ := range evicted {
-			fmt.Println("[cache mngr] put buffer", buffer_id, "to available")
+			// fmt.Println("[cache mngr] put buffer", buffer_id, "to available")
 			QueuePut(Available, buffer_id)
 		}
+		CacheUnlock()
+
 	}
 }
 

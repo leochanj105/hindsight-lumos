@@ -86,6 +86,7 @@ extern int pool_buffer_length;
 extern SendQueue* complete;
 extern RecvQueue* available;
 extern SendQueue* triggers;
+extern char* trigger_lock;
 
 extern Dictionary dictionary;
 extern int dict_count;
@@ -110,7 +111,7 @@ extern __thread int breadcrumb_count;
 
 // Queue handler APIs
 
-void trigger(uint64_t trigger_id);
+void trigger(uint64_t request_id_);
 
 int acquire();
 
@@ -151,5 +152,9 @@ void trace_set_parent_span_id(uint64_t parent_span_id_);
 // Rate Limiters
 
 void trace_test(uint64_t temp);
+
+void Lock(char* l);
+
+void Unlock(char* l);
 
 #endif

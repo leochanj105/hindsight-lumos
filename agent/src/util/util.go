@@ -2,7 +2,28 @@ package util
 
 import (
 	"encoding/binary"
+	"sync"
 )
+
+var DEBUG int
+
+// addresses and message queues, for server and log collector
+var Server_addr string
+var Server_port string
+var LC_addr string
+var LC_port string
+
+type MessageQueue struct {
+	Req   map[int64]int
+	Mutex sync.RWMutex
+}
+
+type RetrievalQueue struct {
+	Req   map[int64]map[string]int
+	Mutex sync.RWMutex
+}
+
+// tools
 
 func Int32ToBytes(data int32) []byte {
 	bytebuf := make([]byte, 4)

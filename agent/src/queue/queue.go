@@ -94,7 +94,9 @@ func get_head(queue Queue) int {
 
 func QueuePut(queue Queue, data int) {
 	head := get_head(queue)
-	fmt.Println("[queue_put] head:", head, " tail:", get_val(queue, header_idx(TAIL)))
+	if DEBUG == 1 {
+		fmt.Println("[queue_put] head:", head, " tail:", get_val(queue, header_idx(TAIL)))
+	}
 
 	set_val(queue, val_idx(head), data)
 	set_val(queue, avl_idx(head), 2)
@@ -107,9 +109,14 @@ func get_tail(queue Queue) int {
 	cap := get_val(queue, header_idx(CAP))
 	curr_tail := get_val(queue, header_idx(TAIL))
 
+	counter := 0
 	for {
 		if get_val(queue, avl_idx(curr_tail)) == 2 {
 			break
+		}
+		counter += 1
+		if counter == 1000 {
+			return -1
 		}
 	}
 
@@ -121,7 +128,12 @@ func get_tail(queue Queue) int {
 
 func QueueGet(queue Queue) int {
 	tail := get_tail(queue)
-	fmt.Println("[queue_get] head:", get_val(queue, header_idx(HEAD)), " tail:", tail)
+	if tail == -1 {
+		return -1
+	}
+	if DEBUG == 1 {
+		fmt.Println("[queue_get] head:", get_val(queue, header_idx(HEAD)), " tail:", tail)
+	}
 	data := get_val(queue, val_idx(tail))
 	set_val(queue, avl_idx(tail), 0)
 	return data

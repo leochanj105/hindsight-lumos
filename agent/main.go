@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"flag"
 	"fmt"
 	"os"
 	"strconv"
@@ -9,18 +10,14 @@ import (
 	"sync"
 
 	. "cache"
+	. "collector"
 	. "memory"
 	. "queue"
 	. "server"
+	. "util"
 )
 
 func hindsight_init() {
-	isConfig := conf_init()
-	if !isConfig {
-		fmt.Println("Failed to load config file")
-		return
-	}
-
 	SharedPool.Pool = MemInit("/dev/shm/pool", Cap*Buf_length*4)
 	SharedDict.Dict = MemInit("/dev/shm/dict", 3200)
 	Complete = QueueInit("/dev/shm/complete_queue", Cap)
@@ -59,17 +56,17 @@ func conf_init() bool {
 			Server_addr = strings.Split(scanner.Text(), " ")[1]
 		}
 		if strings.Contains(scanner.Text(), "port") && !strings.Contains(scanner.Text(), "lc") {
-			Server_port, _ = strconv.Atoi(strings.Split(scanner.Text(), " ")[1])
+			Server_port = strings.Split(scanner.Text(), " ")[1]
 		}
 		if strings.Contains(scanner.Text(), "lc_addr") {
 			LC_addr = strings.Split(scanner.Text(), " ")[1]
 		}
 		if strings.Contains(scanner.Text(), "lc_port") {
-			LC_port, _ = strconv.Atoi(strings.Split(scanner.Text(), " ")[1])
+			LC_port = strings.Split(scanner.Text(), " ")[1]
 		}
 	}
 
-	if Server_addr == "" || Server_port == 0 {
+	if Server_addr == "" || Server_port == "0" {
 		fmt.Println("Please declare agent addr and port")
 		return false
 	}
@@ -78,8 +75,9 @@ func conf_init() bool {
 }
 
 func run() {
+	ServerInit()
 	wg := new(sync.WaitGroup)
-	wg.Add(2)
+	wg.Add(4)
 
 	go func() {
 		RunQueueServer()
@@ -91,6 +89,39 @@ func run() {
 		wg.Done()
 	}()
 
+	go func() {
+		RunResponseServer()
+		wg.Done()
+	}()
+
+	go func() {
+		RunAgent()
+		wg.Done()
+	}()
+
+	wg.Wait()
+}
+
+func run_lc() {
+	CollectorInit()
+	wg := new(sync.WaitGroup)
+	wg.Add(3)
+
+	go func() {
+		RunLCResponseServer()
+		wg.Done()
+	}()
+
+	go func() {
+		RunRetrievalHandler()
+		wg.Done()
+	}()
+
+	go func() {
+		RunCollector()
+		wg.Done()
+	}()
+
 	wg.Wait()
 }
 
@@ -99,9 +130,26 @@ func stat() {
 }
 
 func main() {
-	hindsight_init()
+	DEBUG = 0
+	isConfig := conf_init()
+	if !isConfig {
+		fmt.Println("Failed to load config file")
+		return
+	}
 
-	run()
+	isLC := flag.Bool("lc", false, "Log Collector")
+
+	flag.Parse()
+
+	if *isLC == true {
+		fmt.Println("running lc")
+		run_lc()
+	} else {
+		fmt.Println("running server")
+		hindsight_init()
+		run()
+	}
+
 	// stat()
 
 	// queue := QueueInit("/dev/shm/queue_test", 200)

@@ -20,6 +20,7 @@ void* client(void* arg) {
 
 		TRACEBEGIN(i, 100*i, 200*i);
 		TRACEPOINT(1, 100);
+		trigger(i);
 		TRACEEND();
 
 		// sleep(1);
