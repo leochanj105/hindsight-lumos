@@ -34,7 +34,7 @@ int main(int argc, char const *argv[])
 	pthread_t threads[num_threads];
 	pthread_barrier_init(&barrier, NULL, num_threads+1);
 
-	trace_init();
+	trace_init("multi_client");
 
 	for (int i=0; i<num_threads; i++) {
 		pthread_create(&threads[i], NULL, &client, (void*)i);

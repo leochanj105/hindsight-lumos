@@ -83,6 +83,9 @@ typedef struct RecvQueue {
 extern Pool pool;
 extern int pool_cap;
 extern int pool_buffer_length;
+extern char* service_addr;
+extern char* service_port;
+
 extern SendQueue* complete;
 extern RecvQueue* available;
 extern SendQueue* triggers;
@@ -129,7 +132,9 @@ time_t get_time();
 
 void load_config();
 
-void trace_init();
+char* get_fname(char* dst1, char* dst2);
+
+void trace_init(const char* service_name);
 
 void trace_begin(uint64_t request_id_, uint64_t span_id_, uint64_t parent_span_id_);
 
@@ -153,8 +158,14 @@ void trace_set_parent_span_id(uint64_t parent_span_id_);
 
 void trace_test(uint64_t temp);
 
+char* serialize();
+
+void deserialize(char* baggage);
+
 void Lock(char* l);
 
 void Unlock(char* l);
+
+char* whole_ip(char* addr_, char* port);
 
 #endif

@@ -18,6 +18,8 @@
 Pool pool;
 int pool_cap;
 int pool_buffer_length;
+char* service_addr;
+char* service_port;
 SendQueue* complete;
 RecvQueue* available;
 SendQueue* triggers;
@@ -130,8 +132,17 @@ void load_config(const char* fname) {
 	// load default value first
 	pool_cap = 1;
 	pool_buffer_length = 1;
+	service_addr = malloc(32*sizeof(char));
+	service_port = malloc(32*sizeof(char));
+	memset(service_addr, 0, 32*sizeof(char));
+	memset(service_port, 0, 32*sizeof(char));
+	
+	FILE* config_file;
+	config_file = fopen(fname,"r");
+	if (config_file == NULL) {
+		config_file = fopen("/etc/hindsight_conf/default.conf","r");
+	}
 
-	FILE* config_file = fopen(fname,"r");
 	char* line = NULL;
 	// if (infile == NULL) {
 	// 	infile = fopen("/etc/hindsight.conf", "r");
@@ -139,7 +150,7 @@ void load_config(const char* fname) {
 
 	ssize_t read;
 	size_t len = 0;
-	
+
 	while((read = getline(&line, &len, config_file)) != -1) {
 		char* temp = strchr(line, '\n');
 		int index = (int)(temp - line);
@@ -161,21 +172,43 @@ void load_config(const char* fname) {
 
 		if (!strcmp(var, "buf_length")) {
 			pool_buffer_length = atoi(value);
+		}
+
+		if (!strcmp(var, "addr")) {
+			service_addr = value;
+		}
+
+		if (!strcmp(var, "port")) {
+			service_port = value;
 		}		
 	}
 	fclose(config_file);
 
 	if (line) free(line);
 
-	printf("config file load cap=%d buffer_length=%d\n", pool_cap, pool_buffer_length);
+	printf("config file load cap=%d buffer_length=%d service_addr=%s, service_port=%s\n", pool_cap, pool_buffer_length, service_addr, service_port);
 
 	return;
 
 }
 
-void trace_init(){
-	load_config("../conf/default.conf");
-	pool = (int*)mem_init("/dev/shm/pool", pool_cap*pool_buffer_length*sizeof(int));
+char* get_fname(char* dst1, char* dst2) {
+	char* name = malloc(sizeof(char)*64);
+	memset(name, 0, sizeof(char)*64);
+	strcpy(name, dst1);
+	strcat(name, dst2);
+	return name;
+}
+
+void trace_init(const char* service_name){
+	char config_fname[64];
+	strcpy(config_fname, "/etc/hindsight_conf/");
+	strcat(config_fname, service_name);
+	strcat(config_fname, ".conf");
+
+	load_config(config_fname);
+
+	pool = (int*)mem_init(get_fname("/dev/shm/pool_", service_name), pool_cap*pool_buffer_length*sizeof(int));
 	
 	// pool_cap = cap;
 	// pool_buffer_length = 50;
@@ -185,13 +218,13 @@ void trace_init(){
 	available = malloc(sizeof(RecvQueue));
 	triggers = malloc(sizeof(SendQueue));
 
-	available->queue = (Queue)queue_init("/dev/shm/available_queue", pool_cap);
-	complete->queue = (Queue)queue_init("/dev/shm/complete_queue", pool_cap);
-	triggers->queue = (Queue)queue_init("/dev/shm/triggers_queue", pool_cap);
+	available->queue = (Queue)queue_init(get_fname("/dev/shm/available_queue_", service_name), pool_cap);
+	complete->queue = (Queue)queue_init(get_fname("/dev/shm/complete_queue_", service_name), pool_cap);
+	triggers->queue = (Queue)queue_init(get_fname("/dev/shm/triggers_queue_", service_name), pool_cap);
 	trigger_lock = (char*)malloc(sizeof(char));
 	memset(trigger_lock, '0', sizeof(char));
 
-	dictionary = (char*)mem_init("/dev/shm/dict", 3200);
+	dictionary = (char*)mem_init(get_fname("/dev/shm/dict_", service_name), 3200);
 	dict_count = 0;
 
 	active = false;	
@@ -304,10 +337,20 @@ void tracepoint(int id, int payload){
 }
 
 void trace_add_breadcrumb(AgentAddress breadcrumb){
+	// check if coming address is already known
+	for (int i=0; i<dict_count; i++) {
+		int offset = i * 32;
+		if (strncmp(dictionary+offset, breadcrumb, strlen(breadcrumb)) == 0) {
+			if (breadcrumb_count < 8)
+				breadcrumbs[breadcrumb_count] = i; 
+			breadcrumb_count++;
+			return;
+		}
+	}
+
 	// write to dictionary
 	int offset = dict_count * 32;
-	memcpy(dictionary+offset, breadcrumb, strlen(breadcrumb));
-
+	strncpy(dictionary+offset, breadcrumb, strlen(breadcrumb));
 	#if(DEBUG)
 		printf("[trace_add_breadcrumb]add at %d\n", dict_count);
 	#endif
@@ -358,6 +401,32 @@ void trace_test(uint64_t temp) {
 	return;
 }
 
+
+char* serialize() {
+	char* baggage = malloc(64*sizeof(char));
+
+	#define COPY(src, offset, len) {for(int i=0; i<len; i++) {baggage[i+offset] = src[i];} }
+	COPY(service_addr, 0, 32);
+	COPY(service_port, 32, 32);
+	
+	return (char*)baggage;
+}
+
+void deserialize(char* baggage) {
+	// printf("pre-deser %d %d %u %d %u %d\n", parent_node_id, parent_span_id, parent_addr, parent_port, root_addr, root_port);
+	
+	// printf("%s\n", baggage);
+	#define decode(dst, offset, len) { for(int i=0; i<len; i++) {dst[i] = baggage[i + offset];} }
+	char* parent_addr;
+	char* parent_port;
+	decode(parent_addr, 0, 32);
+	decode(parent_port, 32, 32);
+
+	// trace_add_breadcrumb((AgentAddress*)whole_ip(parent_addr, parent_port));
+
+	return;
+}
+
 void Lock(char* l) {
 	while(!__sync_bool_compare_and_swap(l, '0', '1')) {
 		sched_yield();
@@ -368,4 +437,13 @@ void Lock(char* l) {
 void Unlock(char* l) {
 	__sync_bool_compare_and_swap(l, '1', '0');
 	return;
+}
+
+char* whole_ip(char* addr_, char* port_) {
+	char* res = malloc(sizeof(char)*32);
+	memset(res, 0, sizeof(char)*32);
+	strcpy(res, addr_);
+	strcat(res, ":");
+	strcat(res, port_);
+	return res;
 }

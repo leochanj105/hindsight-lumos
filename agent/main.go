@@ -17,12 +17,14 @@ import (
 	. "util"
 )
 
+var service_name string
+
 func hindsight_init() {
-	SharedPool.Pool = MemInit("/dev/shm/pool", Cap*Buf_length*4)
-	SharedDict.Dict = MemInit("/dev/shm/dict", 3200)
-	Complete = QueueInit("/dev/shm/complete_queue", Cap)
-	Available = QueueInit("/dev/shm/available_queue", Cap)
-	Triggers = QueueInit("/dev/shm/triggers_queue", Cap)
+	SharedPool.Pool = MemInit("/dev/shm/pool_"+service_name, Cap*Buf_length*4)
+	SharedDict.Dict = MemInit("/dev/shm/dict_"+service_name, 3200)
+	Complete = QueueInit("/dev/shm/complete_queue_"+service_name, Cap)
+	Available = QueueInit("/dev/shm/available_queue_"+service_name, Cap)
+	Triggers = QueueInit("/dev/shm/triggers_queue_"+service_name, Cap)
 
 	CacheInit(Cap)
 	AvailableInit(Cap)
@@ -30,14 +32,16 @@ func hindsight_init() {
 }
 
 func conf_init() bool {
-	conf_file, _ := os.Open("../conf/default.conf")
-	// if err != nil {
-	// 	conf_file, err = os.Open("/etc/hindsight.conf")
-	// 	if err != nil {
-	// 		fmt.Println("Please check conf file")
-	// 		return false
-	// 	}
-	// }
+	conf_file, err := os.Open("/etc/hindsight_conf/" + service_name + ".conf")
+	if err != nil {
+		conf_file, err = os.Open("/etc/hindsight_conf/default.conf")
+		if err != nil {
+			fmt.Println("Please check conf file")
+			return false
+		}
+		// fmt.Println("Please check conf file", "/etc/hindsight_conf/"+service_name+".conf")
+		// return false
+	}
 	defer conf_file.Close()
 
 	// Service_name = serv_name
@@ -65,6 +69,8 @@ func conf_init() bool {
 			LC_port = strings.Split(scanner.Text(), " ")[1]
 		}
 	}
+
+	fmt.Println("config file loaded, cap=", Cap, "addr=", Server_addr, "port=", Server_port)
 
 	if Server_addr == "" || Server_port == "0" {
 		fmt.Println("Please declare agent addr and port")
@@ -131,21 +137,23 @@ func stat() {
 
 func main() {
 	DEBUG = 0
-	isConfig := conf_init()
-	if !isConfig {
-		fmt.Println("Failed to load config file")
-		return
-	}
 
 	isLC := flag.Bool("lc", false, "Log Collector")
+	serv_temp := flag.String("serv", "", "Service name")
 
 	flag.Parse()
+	service_name = *serv_temp
 
 	if *isLC == true {
 		fmt.Println("running lc")
 		run_lc()
 	} else {
 		fmt.Println("running server")
+		isConfig := conf_init()
+		if !isConfig {
+			fmt.Println("Failed to load config file")
+			return
+		}
 		hindsight_init()
 		run()
 	}
