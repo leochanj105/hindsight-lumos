@@ -80,32 +80,37 @@ func conf_init() bool {
 	return true
 }
 
-func run() {
+func run(isReport bool) {
 	ServerInit()
-	wg := new(sync.WaitGroup)
-	wg.Add(4)
+	if isReport {
+		wg := new(sync.WaitGroup)
+		wg.Add(4)
 
-	go func() {
+		go func() {
+			RunQueueServer()
+			wg.Done()
+		}()
+
+		go func() {
+			RunTriggerServer()
+			wg.Done()
+		}()
+
+		go func() {
+			RunResponseServer()
+			wg.Done()
+		}()
+
+		go func() {
+			RunAgent()
+			wg.Done()
+		}()
+
+		wg.Wait()
+	} else {
 		RunQueueServer()
-		wg.Done()
-	}()
+	}
 
-	go func() {
-		RunTriggerServer()
-		wg.Done()
-	}()
-
-	go func() {
-		RunResponseServer()
-		wg.Done()
-	}()
-
-	go func() {
-		RunAgent()
-		wg.Done()
-	}()
-
-	wg.Wait()
 }
 
 func run_lc() {
@@ -140,6 +145,7 @@ func main() {
 
 	isLC := flag.Bool("lc", false, "Log Collector")
 	serv_temp := flag.String("serv", "", "Service name")
+	isReport := flag.Bool("report", true, "If report to LC (or local mode)")
 
 	flag.Parse()
 	service_name = *serv_temp
@@ -155,25 +161,6 @@ func main() {
 			return
 		}
 		hindsight_init()
-		run()
+		run(*isReport)
 	}
-
-	// stat()
-
-	// queue := QueueInit("/dev/shm/queue_test", 200)
-
-	// for {
-	// 	data := QueueGet(queue)
-	// 	fmt.Println("get data", data)
-	// }
-
-	// QueueTest(queue)
-	// mem := MemInit("/dev/shm/pool_test", 1008)
-
-	// fmt.Println(mem[0:8], BytesToInt64(mem[0:8]))
-	// fmt.Println(mem[8:12], BytesToInt32(mem[8:12]))
-	// for i := 0; i < 250; i++ {
-	// 	fmt.Println(mem[12+i*4:16+i*4], BytesToInt32(mem[12+i*4:16+i*4]))
-	// }
-
 }

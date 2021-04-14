@@ -13,9 +13,16 @@
 
 #include "queue.h"
 
-#define TRACEBEGIN(x,y,z) trace_begin(x,y,z)
-#define TRACEPOINT(x,y) tracepoint(x,y)
-#define TRACEEND() trace_end()
+#define TRACEINIT(x) 		trace_init(x)
+
+#define TRACEBEGIN(x) 	trace_begin(x,0,0)
+#define TRACEEND()  		trace_end()
+#define TRACEPOINT(x,y) 	tracepoint(x,y)
+#define TRIGGER(x) 			trigger(x)
+#define TRACEBREADCRUMB(x) 	trace_add_breadcrumb(x)
+
+#define SERIALIZE() 		serialize()
+#define DESERIALIZE() 		deserialize()
 
 // Trace Data Structures
 
