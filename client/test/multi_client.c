@@ -18,7 +18,7 @@ void* client(void* arg) {
 	for (int i=thread_num*req_per_thread; i<(thread_num+1)*req_per_thread; i++) {
 		printf("client request %d from thread %d\n", i, thread_num);
 
-		TRACEBEGIN(i, 100*i, 200*i);
+		TRACEBEGIN(i);
 		TRACEPOINT(1, 100);
 		trigger(i);
 		TRACEEND();
