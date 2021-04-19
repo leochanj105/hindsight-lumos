@@ -57,6 +57,7 @@ install:
 	rm -rf /usr/local/include/tracer /usr/local/lib/libtracer.so
 	cp lib/libtracer.so /usr/local/lib
 	cp -r src /usr/local/include/tracer
+	mkdir -p /etc/hindsight_conf
 	cp ../conf/* /etc/hindsight_conf/
 
 clean:
