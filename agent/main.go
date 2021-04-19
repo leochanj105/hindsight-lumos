@@ -150,16 +150,17 @@ func main() {
 	flag.Parse()
 	service_name = *serv_temp
 
+	isConfig := conf_init()
+	if !isConfig {
+		fmt.Println("Failed to load config file")
+		return
+	}
+
 	if *isLC == true {
 		fmt.Println("running lc")
 		run_lc()
 	} else {
 		fmt.Println("running server")
-		isConfig := conf_init()
-		if !isConfig {
-			fmt.Println("Failed to load config file")
-			return
-		}
 		hindsight_init()
 		run(*isReport)
 	}

@@ -35,6 +35,7 @@ __thread bool first_buf;
 // __thread Buffer* buffer;
 
 __thread int buffer_id;
+__thread int pool_offset;
 __thread int buffer_offset;
 __thread int buffer_ptr[50];
 
@@ -47,23 +48,6 @@ __thread int breadcrumb_count;
 
 
 // Queue Handler APIs
-void trigger(uint64_t request_id_){
-	// trigger needs to write an int64 to queue as two entries
-	Lock(trigger_lock);
-	queue_put(triggers->queue, (int)(request_id_ >> 32));
-	queue_put(triggers->queue, (int)(request_id_ & 0xffffffff));
-	Unlock(trigger_lock);
-	return;
-}
-
-int acquire(){
-	return queue_get(available->queue);
-}
-
-void release(int buffer_id){
-	queue_put(complete->queue, buffer_id);
-	return;
-}
 
 void* mem_init(const char* fname, size_t fsize) {
 	void* shm;
@@ -89,8 +73,64 @@ bool isFileExist(const char* fname) {
 	return (access(fname, F_OK) != -1);
 }
 
+void trigger(uint64_t request_id_){
+	// trigger needs to write an int64 to queue as two entries
+	Lock(trigger_lock);
+	queue_put(triggers->queue, (int)(request_id_ >> 32));
+	queue_put(triggers->queue, (int)(request_id_ & 0xffffffff));
+	Unlock(trigger_lock);
+	return;
+}
+
+void acquire(){
+	// int acquire_threshold = 5;
+	// for (int i=0; i<acquire_threshold; i++) {
+	// 	int buf_id = queue_get(available->queue);
+	// 	if (buf_id != -1) return buf_id;
+	// }
+	// int buf_id;
+	while (1) {
+		buffer_id = queue_get(available->queue);
+		if (buffer_id != -1) {
+			buffer_reset();
+			pool_offset = buffer_id * pool_buffer_length;
+			buffer_offset = 18;
+			breadcrumb_count = 0;
+			return;
+		}
+	}
+
+	return -1;
+}
+
+void buffer_reset() {
+	for (int i = 18; i < pool_buffer_length; i++) {
+		pool[pool_offset+i] = 0;
+	}
+	return;
+}
+
+void release(){
+	queue_put(complete->queue, buffer_id);
+	return;
+}
 
 // Tracer APIs
+
+void write_header() {
+	int offset = buffer_id * pool_buffer_length;
+	pool[offset+1] = (int)(request_id >> 32);
+	pool[offset] = (int)(request_id & 0xffffffff);
+	if (first_buf) {
+		pool[offset+3] = (int)(timestamp >> 32);
+		pool[offset+2] = (int)(timestamp & 0xffffffff);
+		pool[offset+5] = (int)(span_id >> 32);
+		pool[offset+4] = (int)(span_id & 0xffffffff);
+		pool[offset+7] = (int)(parent_span_id >> 32);
+		pool[offset+6] = (int)(parent_span_id & 0xffffffff);
+	}
+	return;
+}
 
 void flush() {
 	if (active == true) {
@@ -98,24 +138,24 @@ void flush() {
 			printf("[tracer] flush to buffer %d\n", buffer_id);
 		#endif
 		int offset = buffer_id * pool_buffer_length;
-		pool[offset+1] = (int)(request_id >> 32);
-		pool[offset] = (int)(request_id & 0xffffffff);
-		if (first_buf) {
-			pool[offset+3] = (int)(timestamp >> 32);
-			pool[offset+2] = (int)(timestamp & 0xffffffff);
-			pool[offset+5] = (int)(span_id >> 32);
-			pool[offset+4] = (int)(span_id & 0xffffffff);
-			pool[offset+7] = (int)(parent_span_id >> 32);
-			pool[offset+6] = (int)(parent_span_id & 0xffffffff);
+		// pool[offset+1] = (int)(request_id >> 32);
+		// pool[offset] = (int)(request_id & 0xffffffff);
+		// if (first_buf) {
+		// 	pool[offset+3] = (int)(timestamp >> 32);
+		// 	pool[offset+2] = (int)(timestamp & 0xffffffff);
+		// 	pool[offset+5] = (int)(span_id >> 32);
+		// 	pool[offset+4] = (int)(span_id & 0xffffffff);
+		// 	pool[offset+7] = (int)(parent_span_id >> 32);
+		// 	pool[offset+6] = (int)(parent_span_id & 0xffffffff);
+		// }
+		pool[offset+8] = breadcrumb_count;
+		for (int i=0; i<8; i++) {
+			pool[offset+9+i] = breadcrumbs[i];
 		}
-		// pool[offset+8] = breadcrumb_count;
-		// for (int i=0; i<8; i++) {
-		// 	pool[offset+9+i] = breadcrumbs[i];
-		// }
-		// pool[offset+17] = buffer_offset;
-		// for (int i=18; i<pool_buffer_length; i++) {
-		// 	pool[offset+i] = buffer_ptr[i];
-		// }
+		pool[offset+17] = buffer_offset;
+		for (int i=18; i<pool_buffer_length; i++) {
+			pool[offset+i] = buffer_ptr[i];
+		}
 	}
 	release(buffer_id);
 	active = false;
@@ -240,15 +280,15 @@ void trace_init(const char* service_name){
 	// header->breadcrumbs = (int*)malloc(sizeof(int)*8);
 	// header->breadcrumb_count = 0;
 
-	buffer_id = 0;
+	buffer_id = -1;
+	pool_offset = 0;
 	buffer_offset = 0;
-	// buffer_ptr = (int*)malloc(sizeof(int)*50);
-
+	// buffer_ptr = {0};
 	request_id = (uint64_t)0;
 	timestamp = (uint64_t)0;
 	span_id = (uint64_t)0;
 	parent_span_id = (uint64_t)0;
-	// breadcrumbs = (int*)malloc(sizeof(int)*8);
+	// breadcrumbs = {0};
 	breadcrumb_count = 0;
 
 	return;
@@ -258,33 +298,36 @@ void trace_begin(uint64_t request_id_, uint64_t span_id_, uint64_t parent_span_i
 	if (active) {
 		flush();
 	}
-	int buf = acquire();
-	first_buf = true;
-	if (buf == -1) {
+	acquire();
+	if (buffer_id == -1) {
 		active = false;
 		#if(DEBUG)
 			printf("no buffer acquired\n");
 		#endif
 		return;
 	}	
+	first_buf = true;
 	active = true;
 	
 	#if(DEBUG)
-		printf("[trace_begin] buffer %d\n", buf);
+		printf("[trace_begin] buffer %d\n", buffer_id);
 	#endif
 
-	buffer_id = buf;
-	buffer_offset = 18;
+	// buffer_id = buf;
+	// pool_offset = buffer_id * pool_buffer_length;
+	// buffer_offset = 18;
 
 	request_id = request_id_;
 	timestamp = get_time();
 	span_id = span_id_;
 	parent_span_id = parent_span_id_;
 
+	write_header();
+
 	// for (int i=0; i<8; i++) {
 	// 	breadcrumbs[i] = 0;
 	// }
-	breadcrumb_count = 0;
+	// breadcrumb_count = 0;
 
 	return;
 }
@@ -308,23 +351,37 @@ void tracepoint(int id, int payload){
 				printf("[tracepoint]acquire new buffer when offset %d >= buffer length %d\n", buffer_offset, pool_buffer_length);
 			#endif
 			flush();
-			int buf = acquire();
+			acquire();
+			// int buf = acquire();
 			first_buf = false;
+			if (buffer_id == -1) {
+				active = false;
+				// buffer_id = -1;
+				continue;
+			}
 			
 			active = true;
-			buffer_id = buf;
-			buffer_offset = 18;
-			for (int j=18; j<pool_buffer_length; j++) {
-				buffer_ptr[j] = 0;
-			}
+			buffer_reset();
+			write_header();
+			// buffer_id = buf;
+			// buffer_offset = 18;
+			// for (int j=18; j<pool_buffer_length; j++) {
+			// 	buffer_ptr[j] = 0;
+			// }
 		}
 
+		if(active == false) return;
+
 		if(i==0){
-			buffer_ptr[buffer_offset] = id;
+			// buffer_ptr[buffer_offset] = id;
+			// buffer_offset++;
+			pool[pool_offset + buffer_offset] = id;
 			buffer_offset++;
 		}
 		else {
-			buffer_ptr[buffer_offset] = i;
+			// buffer_ptr[buffer_offset] = i;
+			// buffer_offset++;
+			pool[pool_offset + buffer_offset] = i;
 			buffer_offset++;
 		}
 
@@ -342,23 +399,41 @@ void trace_add_breadcrumb(AgentAddress breadcrumb){
 		int offset = i * 32;
 		if (strncmp(dictionary+offset, breadcrumb, strlen(breadcrumb)) == 0) {
 			if (breadcrumb_count < 8)
-				breadcrumbs[breadcrumb_count] = i; 
+				//breadcrumbs[breadcrumb_count] = i; 
+				pool[pool_offset + 9 + breadcrumb_count] = i;
 			breadcrumb_count++;
+			#if(DEBUG)
+				printf("[trace_add_breadcrumb]found at %d\n", i);
+			#endif
 			return;
 		}
 	}
 
 	// write to dictionary
 	int offset = dict_count * 32;
-	strncpy(dictionary+offset, breadcrumb, strlen(breadcrumb));
+
+	printf("here\n");
+	printf("%s\n", dictionary[offset]);
+	for (int i=0; i<strlen(breadcrumb); i++) {
+		dictionary[offset+i] = breadcrumb[i];
+		printf("%d %ld\n", i, strlen(breadcrumb));
+	}
+
+	// strncpy(dictionary+offset, breadcrumb, strlen(breadcrumb));
 	#if(DEBUG)
 		printf("[trace_add_breadcrumb]add at %d\n", dict_count);
 	#endif
 
+	printf("here\n");
+
 	if (breadcrumb_count < 8)
-		breadcrumbs[breadcrumb_count] = dict_count; 
+		pool[pool_offset + 9 + breadcrumb_count] = dict_count;
+		// breadcrumbs[breadcrumb_count] = dict_count; 
+
 	breadcrumb_count++;
 	dict_count++;
+
+	printf("done\n");
 
 	return;
 }

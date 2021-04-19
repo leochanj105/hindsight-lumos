@@ -2,6 +2,7 @@ package util
 
 import (
 	"encoding/binary"
+	"os"
 	"sync"
 )
 
@@ -43,4 +44,9 @@ func Int64ToBytes(data int64) []byte {
 
 func BytesToInt64(bys []byte) int64 {
 	return int64(binary.LittleEndian.Uint64(bys))
+}
+
+func IsFileExists(path string) bool {
+	_, err := os.Stat(path)
+	return !os.IsNotExist(err)
 }

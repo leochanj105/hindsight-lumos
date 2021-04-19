@@ -108,6 +108,7 @@ extern __thread bool first_buf;
 // extern __thread Buffer* buffer;
 
 extern __thread int buffer_id;
+extern __thread int pool_offset;
 extern __thread int buffer_offset;
 extern __thread int buffer_ptr[50];
 
@@ -121,17 +122,21 @@ extern __thread int breadcrumb_count;
 
 // Queue handler APIs
 
-void trigger(uint64_t request_id_);
-
-int acquire();
-
-void release(int buffer_id);
-
 void* mem_init(const char* fname, size_t fsize);
 
 bool isFileExist(const char* fname);
 
+void trigger(uint64_t request_id_);
+
+void acquire();
+
+void buffer_reset();
+
+void release();
+
 // Tracer APIs
+
+void write_header();
 
 void flush();
 

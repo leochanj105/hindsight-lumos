@@ -23,6 +23,11 @@ var Cap int
 var Buf_length int
 
 func MemInit(fname string, size int) []byte {
+	for {
+		if IsFileExists(fname) == true {
+			break
+		}
+	}
 	f, err := os.OpenFile(fname, os.O_RDWR|os.O_CREATE, 0666)
 	if err != nil {
 		fmt.Println("open file failed:", err)

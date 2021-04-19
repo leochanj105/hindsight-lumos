@@ -7,12 +7,12 @@
 int main(int argc, char const *argv[])
 {
 	trace_init("client");
-	for (int i=0; i<200; i++) {
+	for (int i=0; i<1; i++) {
 		int i=1;
 		printf("client request %d\n", i);
 		trace_begin(i,1001,1002);
 		tracepoint(1,100);
-		trace_add_breadcrumb("127.0.0.1:5050");
+		trace_add_breadcrumb("localhost:5050");
 		trigger(i);
 		trace_end();
 		// sleep(1);	
