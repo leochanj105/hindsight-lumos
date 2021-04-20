@@ -4,6 +4,23 @@
 #include <stddef.h>
 #include <stdbool.h>
 
+#include "queue.h"
+
+// Manages shared memory buffers
+typedef struct BufManager {
+    const char* name; // Name of this service
+
+    char* pool; // Pointer to shared-memory region used for buffers
+    size_t capacity; // Number of buffers in the pool
+    size_t buffer_size; // Size in bytes of each buffer
+
+    Queue available; // Used for receiving fresh buffers
+    Queue complete; // Used for sending completed buffers.  
+                    // TODO: queue impl will need to be updated to send both (traceid, bufid)
+
+    char* null_buffer; // Used if unable to acquire a buffer from available queue
+} BufManager;
+
 // Points to a buffer allocated in shared memory
 // Includes some metadata not stored in shared memory
 typedef struct Buffer {
@@ -12,23 +29,31 @@ typedef struct Buffer {
 	char* ptr; // Pointer to next available byte in buffer
 } Buffer;
 
-// Initializes a buffer with ID -1, nullptr, and 0 remaining
-Buffer buffer_create_empty();
+BufManager bufmanager_init(const char* name,
+                           size_t capacity,
+                           size_t buffer_size);
 
-// Initializes a buffer with the provided ID, ptr, and remaining
-Buffer buffer_create(int id, char* ptr, size_t size);
+// Acquires a buffer from the queue, setting it in dst.
+// Doesn't block -- will set the null buffer if nothing can be acquired
+void bufmanager_acquire(BufManager* mgr, Buffer* dst);
+
+// Returns the current buffer and clears it
+void bufmanager_return(BufManager* mgr, Buffer* dst);
+
+// Initializes a buffer with ID -1, nullptr, and 0 remaining
+Buffer buffer_create();
 
 // Sets a buffer to ID -1, nullptr, and 0 remaining
 void buffer_clear(Buffer* b);
 
-// Sets the ID, ptr, and remaining size of a buffer
-void buffer_update(Buffer* b, int id, char* ptr, size_t size);
-
 // True if remaining is 0, false otherwise
-bool buffer_isempty(Buffer* b);
+bool buffer_is_full(Buffer* b);
 
 // Returns remaining space in buffer
 bool buffer_remaining(Buffer* b);
+
+// True if buffer ID is >= 0, which is set whenever buffer_clear is called
+bool buffer_is_valid(Buffer* b);
 
 // Requests to write `size`-much data to the buffer.  The caller
 // will receive a pointer in `dst` and will be responsible for actually
@@ -39,5 +64,6 @@ bool buffer_remaining(Buffer* b);
 // then `dst_size` will only be the remaining capacity, and the caller
 // must acquire a new buffer to write the remaining data.
 void buffer_write(Buffer* b, size_t size, char** dst, size_t* dst_size);
+
 
 #endif // _HINDSIGHT_CLIENT_BUFFER_H_

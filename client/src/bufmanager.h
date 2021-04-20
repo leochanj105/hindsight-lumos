@@ -1,5 +1,0 @@
-#ifndef _HINDSIGHT_MANAGER_H_
-#define _HINDSIGHT_MANAGER_H_
-
-
-#endif // _HINDSIGHT_MANAGER_H_

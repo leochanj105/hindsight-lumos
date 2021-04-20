@@ -7,20 +7,10 @@
 #include "buffer.h"
 
 void test_buffer_simple() {
-	int buf_id = 5;
-	size_t buf_size = 21;
-	char buf[buf_size];
-
-	Buffer b = buffer_create_empty();
+	Buffer b = buffer_create();
 	assert(b.id == -1);
 	assert(b.remaining == 0);
 	assert(b.ptr == 0);
-
-	buffer_update(&b, buf_id, buf, buf_size);
-
-	assert(b.id == buf_id);
-	assert(b.remaining == 21);
-	assert(b.ptr == buf);
 
 	printf("test_buffer_simple passed\n");
 }
@@ -30,10 +20,10 @@ void test_buffer_write() {
 	size_t buf_size = 21;
 	char buf[buf_size];
 
-	Buffer b = buffer_create(buf_id, buf, buf_size);
-	assert(b.id == buf_id);
-	assert(b.remaining == 21);
-	assert(b.ptr == buf);
+	Buffer b = buffer_create();
+	b.id = buf_id;
+	b.ptr = buf;
+	b.remaining = buf_size;
 
 	char* dst;
 	size_t dst_size;
@@ -44,7 +34,7 @@ void test_buffer_write() {
 	assert(b.id == buf_id);
 	assert(b.remaining == 16);
 	assert(b.ptr == (buf + 5));
-	assert(!buffer_isempty(&b));
+	assert(!buffer_is_full(&b));
 
 	buffer_write(&b, 5, &dst, &dst_size);
 
@@ -53,7 +43,7 @@ void test_buffer_write() {
 	assert(b.id == buf_id);
 	assert(b.remaining == 11);
 	assert(b.ptr == (buf + 10));
-	assert(!buffer_isempty(&b));
+	assert(!buffer_is_full(&b));
 
 	buffer_write(&b, 5, &dst, &dst_size);
 
@@ -62,7 +52,7 @@ void test_buffer_write() {
 	assert(b.id == buf_id);
 	assert(b.remaining == 6);
 	assert(b.ptr == (buf + 15));
-	assert(!buffer_isempty(&b));
+	assert(!buffer_is_full(&b));
 
 	buffer_write(&b, 5, &dst, &dst_size);
 
@@ -71,7 +61,7 @@ void test_buffer_write() {
 	assert(b.id == buf_id);
 	assert(b.remaining == 1);
 	assert(b.ptr == (buf + 20));
-	assert(!buffer_isempty(&b));
+	assert(!buffer_is_full(&b));
 
 	buffer_write(&b, 5, &dst, &dst_size);
 
@@ -80,7 +70,7 @@ void test_buffer_write() {
 	assert(b.id == buf_id);
 	assert(b.remaining == 0);
 	assert(b.ptr == (buf + 21));
-	assert(buffer_isempty(&b));
+	assert(buffer_is_full(&b));
 
 	buffer_write(&b, 5, &dst, &dst_size);
 
@@ -89,7 +79,7 @@ void test_buffer_write() {
 	assert(b.id == buf_id);
 	assert(b.remaining == 0);
 	assert(b.ptr == (buf + 21));
-	assert(buffer_isempty(&b));
+	assert(buffer_is_full(&b));
 
 	printf("test_buffer_write passed\n");	
 }
