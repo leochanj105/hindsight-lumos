@@ -39,6 +39,7 @@ BufManager bufmanager_init(const char* name,
     m.complete = queue_init(get_fname("/dev/shm/complete_queue_", name), capacity);
 
     m.null_buffer = (char*) malloc(buffer_size);
+    return m;
 }
 
 void bufmanager_acquire(BufManager* mgr, Buffer* dst) {
