@@ -1,6 +1,9 @@
 #ifndef _HINDSIGHT_CLIENT_BUFFER_H_
 #define _HINDSIGHT_CLIENT_BUFFER_H_
 
+#include <stddef.h>
+#include <stdbool.h>
+
 // Points to a buffer allocated in shared memory
 // Includes some metadata not stored in shared memory
 typedef struct Buffer {
@@ -22,10 +25,10 @@ void buffer_clear(Buffer* b);
 void buffer_update(Buffer* b, int id, char* ptr, size_t size);
 
 // True if remaining is 0, false otherwise
-int buffer_isempty(Buffer* b);
+bool buffer_isempty(Buffer* b);
 
 // Returns remaining space in buffer
-int buffer_remaining(Buffer* b);
+bool buffer_remaining(Buffer* b);
 
 // Requests to write `size`-much data to the buffer.  The caller
 // will receive a pointer in `dst` and will be responsible for actually

@@ -24,11 +24,11 @@ void buffer_update(Buffer* b, int id, char* ptr, size_t remaining) {
 	b->remaining = remaining;
 }
 
-int buffer_isempty(Buffer* b) {
+bool buffer_isempty(Buffer* b) {
 	return b->remaining == 0;
 }
 
-int buffer_remaining(Buffer* b) {
+bool buffer_remaining(Buffer* b) {
 	return b->remaining;
 }
 
