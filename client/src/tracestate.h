@@ -5,12 +5,18 @@
 
 #include "buffer.h"
 
+// TraceHeader represents the header data that Hindsight inserts at the start of every buffer
+// It could include stuff like span IDs, but I'm not sure that's necessary in the header
+typedef struct TraceHeader {
+  long long trace_id;
+  short buffer_number;
+} TraceHeader;
+
 // TraceState represents an active, ongoing trace in the current process
 typedef struct TraceState {
-    bool active;
-    int buf_count;
-    long long trace_id;
-    Buffer buffer;
+  bool active;
+  TraceHeader header; // The current trace header. Gets written to every buffer.
+  Buffer buffer; // The current active buffer.
 } TraceState;
 
 // Called when initializing the thread local tracestate
