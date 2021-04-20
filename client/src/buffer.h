@@ -24,6 +24,9 @@ void buffer_update(Buffer* b, int id, char* ptr, size_t size);
 // True if remaining is 0, false otherwise
 int buffer_isempty(Buffer* b);
 
+// Returns remaining space in buffer
+int buffer_remaining(Buffer* b);
+
 // Requests to write `size`-much data to the buffer.  The caller
 // will receive a pointer in `dst` and will be responsible for actually
 // writing the data to `dst`.  The caller can write up to `dst_size`

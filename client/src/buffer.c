@@ -28,6 +28,10 @@ int buffer_isempty(Buffer* b) {
 	return b->remaining == 0;
 }
 
+int buffer_remaining(Buffer* b) {
+	return b->remaining;
+}
+
 void buffer_write(Buffer* b, size_t size, char** dst, size_t* dst_size) {
 	if (b->remaining < size) size = b->remaining;
 
