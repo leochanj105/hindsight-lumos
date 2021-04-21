@@ -9,8 +9,8 @@
 // It could include stuff like span IDs, but I'm not sure that's necessary in the header
 typedef struct TraceHeader {
   uint64_t trace_id;
-  short buffer_number;
   uint64_t timestamp;
+  short buffer_number;
 } TraceHeader;
 
 // TraceState represents an active, ongoing trace in the current process
@@ -20,8 +20,8 @@ typedef struct TraceState {
   Buffer buffer; // The current active buffer.
 } TraceState;
 
-// Called when initializing the thread local tracestate
-TraceState tracestate_init(BufManager* mgr);
+// TraceState can also be initialized to {false}
+TraceState tracestate_create();
 
 // Starts a new trace state for the specified trace ID
 // I think currently traceID is the only thing Hindsight should need

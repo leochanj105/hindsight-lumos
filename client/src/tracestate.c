@@ -4,6 +4,11 @@
 #include <string.h>
 #include <time.h>
 
+TraceState tracestate_create() {
+	TraceState trace = {false};
+	return trace;
+}
+
 // Write the header to the current buffer
 void tracestate_write_header(TraceState* trace) {
 	char* dst;
@@ -28,6 +33,7 @@ void tracestate_begin(TraceState* trace, BufManager* mgr, uint64_t trace_id) {
 	if (trace->active) {
 		bufmanager_return(mgr, &trace->buffer);
 	}
+	buffer_clear(&trace->buffer);
 	trace->active = true;
 
 	// Set the new header
