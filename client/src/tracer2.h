@@ -3,6 +3,7 @@
 
 #include <stdbool.h>
 #include <inttypes.h>
+#include <stdio.h>
 
 // Initialize Hindsight.  Must be called before other APIs are used.
 void hindsight_init(const char* service_name);

@@ -86,10 +86,60 @@ void test_buffer_write() {
 	printf("test_buffer_write passed\n");	
 }
 
+void test_bufmanager() {
+	BufManager mgr = bufmanager_init("test_bufmanager", 10, 100);
+
+
+	queue_put(mgr.available, 7);
+
+	Buffer buf = buffer_create();
+	bufmanager_acquire(&mgr, &buf);
+	assert(buf.id == 7);
+	buffer_clear(&buf);
+
+
+	queue_put(mgr.available, 11);
+	bufmanager_acquire(&mgr, &buf);
+	assert(buf.id == 11);
+	buffer_clear(&buf);
+
+	for (unsigned i = 0; i < 100; i++) {
+		queue_put(mgr.available, i);
+		bufmanager_acquire(&mgr, &buf);
+		assert(buf.id == i);
+		buffer_clear(&buf);
+	}
+
+	for (unsigned i = 0; i < 100; i+=2) {
+		queue_put(mgr.available, i);
+		queue_put(mgr.available, i+1);
+		bufmanager_acquire(&mgr, &buf);
+		assert(buf.id == i);
+		buffer_clear(&buf);
+		bufmanager_acquire(&mgr, &buf);
+		assert(buf.id == i+1);
+		buffer_clear(&buf);
+	}
+
+	for (unsigned i = 0; i < 100; i+=2) {
+		queue_put(mgr.available, i+1);
+		queue_put(mgr.available, i);
+		bufmanager_acquire(&mgr, &buf);
+		assert(buf.id == i+1);
+		buffer_clear(&buf);
+		bufmanager_acquire(&mgr, &buf);
+		assert(buf.id == i);
+		buffer_clear(&buf);
+	}
+
+	printf("test_bufmanager passed\n");	
+}
+
 int main(int argc, char const *argv[])
 {
 	printf("Hello world!\n");
 	test_buffer_simple();
 	test_buffer_write();
+	test_bufmanager();
 	return 0;
 }

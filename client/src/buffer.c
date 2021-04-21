@@ -5,6 +5,14 @@
 #include <sys/mman.h>
 #include <assert.h>
 
+char* bufmanager_get_fname(char* dst1, char* dst2) {
+	char* name = malloc(sizeof(char)*64);
+	memset(name, 0, sizeof(char)*64);
+	strcpy(name, dst1);
+	strcat(name, dst2);
+	return name;
+}
+
 char* bufmanager_pool_init(const char* fname, size_t fsize) {
 	void* shm;
 	
@@ -30,13 +38,13 @@ BufManager bufmanager_init(const char* name,
     m.name = name;
 
     size_t pool_size = capacity * buffer_size; // not *sizeof(int) we are storing bytes not ints...
-    m.pool = bufmanager_pool_init(get_fname("/dev/shm/pool_", name), pool_size);
+    m.pool = bufmanager_pool_init(bufmanager_get_fname("/dev/shm/pool_", name), pool_size);
     m.capacity = capacity;
     m.buffer_size = buffer_size;
 
 
-    m.available = queue_init(get_fname("/dev/shm/available_queue_", name), capacity);
-    m.complete = queue_init(get_fname("/dev/shm/complete_queue_", name), capacity);
+    m.available = queue_init(bufmanager_get_fname("/dev/shm/available_queue_", name), capacity);
+    m.complete = queue_init(bufmanager_get_fname("/dev/shm/complete_queue_", name), capacity);
 
     m.null_buffer = (char*) malloc(buffer_size);
     return m;
