@@ -8,8 +8,9 @@
 // TraceHeader represents the header data that Hindsight inserts at the start of every buffer
 // It could include stuff like span IDs, but I'm not sure that's necessary in the header
 typedef struct TraceHeader {
-  long long trace_id;
+  uint64_t trace_id;
   short buffer_number;
+  uint64_t timestamp;
 } TraceHeader;
 
 // TraceState represents an active, ongoing trace in the current process
@@ -24,7 +25,7 @@ TraceState tracestate_init(BufManager* mgr);
 
 // Starts a new trace state for the specified trace ID
 // I think currently traceID is the only thing Hindsight should need
-void tracestate_begin(TraceState* trace, BufManager* mgr, long long trace_id);
+void tracestate_begin(TraceState* trace, BufManager* mgr, uint64_t trace_id);
 
 // Ends the current trace state, flushes the buffer
 void tracestate_end(TraceState* trace, BufManager* mgr);

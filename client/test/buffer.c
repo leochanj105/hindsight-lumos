@@ -5,6 +5,8 @@
 #include "assert.h"
 
 #include "buffer.h"
+#include "tracer2.h"
+#include <pthread.h>
 
 void test_buffer_simple() {
 	Buffer b = buffer_create();
