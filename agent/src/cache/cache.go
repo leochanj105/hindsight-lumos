@@ -69,7 +69,7 @@ func CacheGetBuffers(request_id int64) map[int]int64 {
 
 func CacheSet(request_id int64, buffer_id int, timestamp int64) map[int]int64 {
 	var res map[int]int64
-	// fmt.Println("[cache_set]", request_id, buffer_id)
+	fmt.Println("[cache_set]", request_id, buffer_id)
 	CacheLock()
 	if e, ok := cache.hash_table[request_id]; ok {
 		if cache.size == cache.cap {

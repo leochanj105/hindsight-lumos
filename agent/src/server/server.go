@@ -72,6 +72,7 @@ func RunTriggerServer() {
 			report_queue.Mutex.Lock()
 			// if same request is added again, reset counter to 0
 			report_queue.Req[request_id] = 0
+			fmt.Println("[agent server] find trigger", request_id)
 			report_queue.Mutex.Unlock()
 			if DEBUG == 1 {
 				fmt.Println("[trigger server] find trigger of request", request_id)
@@ -138,6 +139,7 @@ func RunAgent() {
 		reported := make(map[int64]bool)
 		report_queue.Mutex.Lock()
 		for request_id, counter := range report_queue.Req {
+			fmt.Println("[agent] find", request_id)
 			if _, ok := pending[request_id]; ok {
 				if counter >= 5 {
 					reported[request_id] = true
@@ -153,9 +155,13 @@ func RunAgent() {
 		report_queue.Mutex.Unlock()
 
 		for request_id, _ := range pending {
+			// fmt.Println("[agent] find", request_id, "from pending", pending[request_id])
 			buffer_ids := CacheGetBuffers(request_id)
 			if buffer_ids == nil {
 				pending[request_id] += 1
+				if pending[request_id] >= 100 {
+					reported[request_id] = true
+				}
 				// fmt.Println("[agent]", request_id, "no longer exist")
 				continue
 			}
@@ -173,18 +179,6 @@ func RunAgent() {
 					addrs = append(addrs, string(SharedDict.Dict[breadcrumb*32:(breadcrumb+1)*32]))
 				}
 			}
-
-			// conn, err := grpc.Dial(LC_addr+":"+LC_port, grpc.WithInsecure(), grpc.WithTimeout(1000000000*time.Nanosecond))
-			// if err != nil {
-			// 	fmt.Println("dial", LC_addr+":"+LC_port, err)
-			// 	// return
-			// 	continue
-			// }
-			// defer conn.Close()
-			// c := NewCollectorClient(conn)
-
-			// ctx, cancel := context.WithTimeout(context.Background(), 1000000000*time.Nanosecond)
-			// defer cancel()
 
 			ctx, cancel := context.WithTimeout(context.Background(), 1000000000*time.Nanosecond)
 			defer cancel()

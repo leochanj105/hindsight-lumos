@@ -48,7 +48,7 @@ func newCollector() *collectorServer {
 */
 func (*collectorServer) Report(ctx context.Context, in *Trace) (*CallRet, error) {
 	request_id := in.RequestId
-	fmt.Println("[Log Collector] receiving", request_id)
+	fmt.Println("[Log Collector] receiving", request_id, len(in.Trace))
 	if _, ok := trace_pool[request_id]; !ok {
 		var temp []trace
 		trace_pool[request_id] = temp
