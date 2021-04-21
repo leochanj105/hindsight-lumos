@@ -93,10 +93,13 @@ void acquire(){
 	while (1) {
 		buffer_id = queue_get(available->queue);
 		if (buffer_id != -1) {
-			buffer_reset();
 			pool_offset = buffer_id * pool_buffer_length;
 			buffer_offset = 18;
 			breadcrumb_count = 0;
+			buffer_reset();
+			#if(DEBUG)
+				printf("get buffer %d\n", buffer_id);
+			#endif
 			return;
 		}
 	}
@@ -113,6 +116,7 @@ void buffer_reset() {
 
 void release(){
 	queue_put(complete->queue, buffer_id);
+	buffer_id = -1;
 	return;
 }
 
@@ -206,7 +210,7 @@ void load_config(const char* fname) {
 	strcat(service_addr, ":");
 	strcat(service_addr, port_temp);
 
-	printf("config file load cap=%d buffer_length=%d service_addr=%s, service_port=%s\n", pool_cap, pool_buffer_length, service_addr, service_port);
+	printf("config file load cap=%d buffer_length=%d service_addr=%s\n", pool_cap, pool_buffer_length, service_addr);
 
 	return;
 
@@ -314,7 +318,6 @@ void tracepoint(int id, int payload){
 			}
 			
 			active = true;
-			buffer_reset();
 			write_header();
 		}
 
@@ -345,6 +348,7 @@ void trace_add_breadcrumb(AgentAddress breadcrumb){
 			if (breadcrumb_count < 8)
 				pool[pool_offset + 9 + breadcrumb_count] = i;
 			breadcrumb_count++;
+			pool[pool_offset + 8] = breadcrumb_count;
 			#if(DEBUG)
 				printf("[trace_add_breadcrumb]found at %d\n", i);
 			#endif
@@ -364,6 +368,7 @@ void trace_add_breadcrumb(AgentAddress breadcrumb){
 		pool[pool_offset + 9 + breadcrumb_count] = dict_count;
 
 	breadcrumb_count++;
+	pool[pool_offset + 8] = breadcrumb_count;
 	dict_count++;
 
 	return;

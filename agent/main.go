@@ -39,12 +39,8 @@ func conf_init() bool {
 			fmt.Println("Please check conf file")
 			return false
 		}
-		// fmt.Println("Please check conf file", "/etc/hindsight_conf/"+service_name+".conf")
-		// return false
 	}
 	defer conf_file.Close()
-
-	// Service_name = serv_name
 
 	scanner := bufio.NewScanner(conf_file)
 	scanner.Split(bufio.ScanLines)
@@ -70,7 +66,7 @@ func conf_init() bool {
 		}
 	}
 
-	fmt.Println("config file loaded, cap=", Cap, "addr=", Server_addr, "port=", Server_port)
+	fmt.Println("config file loaded, cap =", Cap, "addr =", Server_addr, "port =", Server_port)
 
 	if Server_addr == "" || Server_port == "0" {
 		fmt.Println("Please declare agent addr and port")
