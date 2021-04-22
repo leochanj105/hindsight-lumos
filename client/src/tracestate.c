@@ -31,7 +31,7 @@ time_t tracestate_get_time() {
 void tracestate_begin(TraceState* trace, BufManager* mgr, uint64_t trace_id) {
 	// If we were previously active, return the buffer
 	if (trace->active) {
-		bufmanager_return(mgr, &trace->buffer);
+		bufmanager_return(mgr, trace->header.trace_id, &trace->buffer);
 	}
 	buffer_clear(&trace->buffer);
 	trace->active = true;
@@ -50,7 +50,7 @@ void tracestate_end(TraceState* trace, BufManager* mgr) {
 	if (!trace->active) return;
 
 	// Return the current buffer
-	bufmanager_return(mgr, &trace->buffer);
+	bufmanager_return(mgr, trace->header.trace_id, &trace->buffer);
 	trace->active = false;
 
 	// Clear the header
@@ -70,7 +70,7 @@ void tracestate_write_data(TraceState* trace,
 	if (*dst_size != 0) return;
 
 	// Buffer is full, return old buffer
-	bufmanager_return(mgr, &trace->buffer);
+	bufmanager_return(mgr, trace->header.trace_id, &trace->buffer);
 
 	// Acquire new buffer and write header
 	bufmanager_acquire(mgr, &trace->buffer);

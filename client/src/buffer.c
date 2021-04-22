@@ -43,8 +43,8 @@ BufManager bufmanager_init(const char* name,
     m.buffer_size = buffer_size;
 
 
-    m.available = queue_init(bufmanager_get_fname("/dev/shm/available_queue_", name), capacity);
-    m.complete = queue_init(bufmanager_get_fname("/dev/shm/complete_queue_", name), capacity);
+    m.available = queue2_init(bufmanager_get_fname("/dev/shm/available_queue_", name), sizeof(AvailableBuffer), capacity);
+    m.complete = queue2_init(bufmanager_get_fname("/dev/shm/complete_queue_", name), sizeof(CompleteBuffer), capacity);
 
     m.null_buffer = (char*) malloc(buffer_size);
     return m;
@@ -54,11 +54,12 @@ void bufmanager_acquire(BufManager* mgr, Buffer* dst) {
     // Shouldn't be acquiring into a buffer that hasn't been released
     assert(!buffer_is_valid(dst));
 
-    int id = queue_get(mgr->available);
-    if (id >= 0) {
-    	dst->id = id;
+    AvailableBuffer av = {-1};
+    queue2_get_nonblocking(&mgr->available, &av);
+    if (av.buffer_id >= 0) {
+    	dst->id = av.buffer_id;
     	dst->remaining = mgr->buffer_size;
-        dst->ptr = mgr->pool + (id * mgr->buffer_size);
+        dst->ptr = mgr->pool + (av.buffer_id * mgr->buffer_size);
     } else {
     	dst->id = -2;
     	dst->remaining = mgr->buffer_size;
@@ -66,10 +67,11 @@ void bufmanager_acquire(BufManager* mgr, Buffer* dst) {
     }
 }
 
-void bufmanager_return(BufManager* mgr, Buffer* dst) {
+void bufmanager_return(BufManager* mgr, uint64_t trace_id, Buffer* dst) {
 	// No asserts; allowed to return an invalid buffer
 	if (dst->id >= 0) {
-		queue_put(mgr->complete, dst->id);		
+		CompleteBuffer b = {trace_id, dst->id};
+		queue2_put_blocking(&mgr->complete, &b);
 	}
 	buffer_clear(dst);
 }

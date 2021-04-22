@@ -14,8 +14,8 @@ typedef struct BufManager {
     size_t capacity; // Number of buffers in the pool
     size_t buffer_size; // Size in bytes of each buffer
 
-    Queue available; // Used for receiving fresh buffers
-    Queue complete; // Used for sending completed buffers.  
+    Queue2 available; // Used for receiving fresh buffers
+    Queue2 complete; // Used for sending completed buffers.  
                     // TODO: queue impl will need to be updated to send both (traceid, bufid)
 
     char* null_buffer; // Used if unable to acquire a buffer from available queue
@@ -29,6 +29,17 @@ typedef struct Buffer {
 	char* ptr; // Pointer to next available byte in buffer
 } Buffer;
 
+// This struct is read from the available queue
+typedef struct AvailableBuffer {
+    int buffer_id; // The ID of the available buffer
+} AvailableBuffer;
+
+// This struct is written to the complete queue
+typedef struct CompleteBuffer {
+    uint64_t trace_id; // The trace ID that used this buffer
+    int buffer_id;
+} CompleteBuffer;
+
 BufManager bufmanager_init(const char* name,
                            size_t capacity,
                            size_t buffer_size);
@@ -38,7 +49,7 @@ BufManager bufmanager_init(const char* name,
 void bufmanager_acquire(BufManager* mgr, Buffer* dst);
 
 // Returns the current buffer and clears it
-void bufmanager_return(BufManager* mgr, Buffer* dst);
+void bufmanager_return(BufManager* mgr, uint64_t trace_id, Buffer* dst);
 
 // Initializes a buffer with ID -1, nullptr, and 0 remaining
 Buffer buffer_create();

@@ -87,11 +87,16 @@ void test_buffer_write() {
 	printf("test_buffer_write passed\n");	
 }
 
+void put_available(Queue2 q, int bufid) {
+	AvailableBuffer av = {bufid};
+	queue2_put_blocking(&q, &av);
+}
+
 void test_bufmanager() {
 	BufManager mgr = bufmanager_init("test_bufmanager", 10, 100);
 
 
-	queue_put(mgr.available, 7);
+	put_available(mgr.available, 7);
 
 	Buffer buf = buffer_create();
 	bufmanager_acquire(&mgr, &buf);
@@ -99,21 +104,21 @@ void test_bufmanager() {
 	buffer_clear(&buf);
 
 
-	queue_put(mgr.available, 11);
+	put_available(mgr.available, 11);
 	bufmanager_acquire(&mgr, &buf);
 	assert(buf.id == 11);
 	buffer_clear(&buf);
 
 	for (unsigned i = 0; i < 100; i++) {
-		queue_put(mgr.available, i);
+		put_available(mgr.available, i);
 		bufmanager_acquire(&mgr, &buf);
 		assert(buf.id == i);
 		buffer_clear(&buf);
 	}
 
 	for (unsigned i = 0; i < 100; i+=2) {
-		queue_put(mgr.available, i);
-		queue_put(mgr.available, i+1);
+		put_available(mgr.available, i);
+		put_available(mgr.available, i+1);
 		bufmanager_acquire(&mgr, &buf);
 		assert(buf.id == i);
 		buffer_clear(&buf);
@@ -123,8 +128,8 @@ void test_bufmanager() {
 	}
 
 	for (unsigned i = 0; i < 100; i+=2) {
-		queue_put(mgr.available, i+1);
-		queue_put(mgr.available, i);
+		put_available(mgr.available, i+1);
+		put_available(mgr.available, i);
 		bufmanager_acquire(&mgr, &buf);
 		assert(buf.id == i+1);
 		buffer_clear(&buf);
@@ -151,7 +156,7 @@ void test_tracestate() {
 	TraceState trace = tracestate_create();
 
 	for (unsigned i = 0; i < buffer_count; i++) {
-		queue_put(mgr.available, i);
+		put_available(mgr.available, i);
 	}
 
 	tracestate_begin(&trace, &mgr, 3000);
