@@ -89,7 +89,7 @@ void test_buffer_write() {
 
 void put_available(Queue2 q, int bufid) {
 	AvailableBuffer av = {bufid};
-	queue2_put_blocking(&q, &av);
+	queue2_put_blocking(&q, (char*) &av);
 }
 
 void test_bufmanager() {
@@ -190,12 +190,68 @@ void test_tracestate() {
 	printf("test_tracestate passed\n");	
 }
 
+void test_tracestate_nullbuffer() {
+	int buffer_count = 10;
+	size_t buffer_size = 100;
+	BufManager mgr = bufmanager_init("test_tracestate_nullbuffer", buffer_count, buffer_size);
+	TraceState trace = tracestate_create();
+
+	for (unsigned i = 0; i < 2; i++) {
+		put_available(mgr.available, i);
+	}
+
+	tracestate_begin(&trace, &mgr, 3000);
+	assert(sizeof(TraceHeader) == 24);
+	assert(trace.buffer.id == 0);
+
+	char* data = make_data(50);
+
+	tracestate_write(&trace, &mgr, data, 50);
+	assert(trace.buffer.id == 0);
+
+	char* data2 = make_data(60);
+	tracestate_write(&trace, &mgr, data2, 60);
+	assert(trace.buffer.id == 1);
+	
+
+	char* data3 = make_data(100);
+	tracestate_write(&trace, &mgr, data3, 82);
+	assert(trace.buffer.id == -2);
+
+	tracestate_write(&trace, &mgr, data3, 82);
+	assert(trace.buffer.id == -2);
+
+	put_available(mgr.available, 7);
+
+	tracestate_write(&trace, &mgr, data3, 82);
+	assert(trace.buffer.id == 7);
+
+	tracestate_write(&trace, &mgr, data3, 82);
+	assert(trace.buffer.id == -2);
+
+	CompleteBuffer cb;
+	assert(queue2_get_nonblocking(&mgr.complete, &cb));
+	assert(cb.trace_id == 3000);
+	assert(cb.buffer_id == 0);
+	assert(queue2_get_nonblocking(&mgr.complete, &cb));
+	assert(cb.trace_id == 3000);
+	assert(cb.buffer_id == 1);
+	assert(queue2_get_nonblocking(&mgr.complete, &cb));
+	assert(cb.trace_id == 3000);
+	assert(cb.buffer_id == 7);
+	assert(!queue2_get_nonblocking(&mgr.complete, &cb));
+
+	
+	printf("test_tracestate_nullbuffer passed\n");	
+}
+
 int main(int argc, char const *argv[])
 {
-	printf("Hello world!\n");
+	printf("Testing buffer!\n");
 	test_buffer_simple();
 	test_buffer_write();
 	test_bufmanager();
 	test_tracestate();
+	test_tracestate_nullbuffer();
 	return 0;
 }
