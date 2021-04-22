@@ -24,7 +24,7 @@ OBJFILES = ${SRCFILES:.c=.o}
 INCLUDEFLAGS = -I $(SRCDIR)
 PTHREADFLAGS = -lpthread
 
-TARGET = dirs bin/buffer_test bin/tracer_test bin/queue_test bin/client_test bin/multi_client_test $(LIBRARY) $(STATIC_LIBRARY)
+TARGET = dirs bin/buffer_test bin/queue2_test bin/tracer_test bin/queue_test bin/client_test bin/multi_client_test $(LIBRARY) $(STATIC_LIBRARY)
 .PHONY: all debug
 
 all: $(TARGET)

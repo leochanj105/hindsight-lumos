@@ -110,3 +110,171 @@ int queue_get(Queue queue){
 
 	return data;
 }
+
+
+
+Queue2 queue2_init(const char* fname, size_t element_size, size_t capacity) {
+	Queue2 q;
+
+	size_t element_metadata_size = sizeof(QueueElementMetadata);
+	size_t element_total_size = element_size + element_metadata_size;
+
+	size_t shmem_size = sizeof(QueueMetadata) + capacity * element_total_size;
+
+	int fd = open(fname, O_RDWR | O_CREAT, 0666);
+	assert(fd >= 0);
+
+	// int isExist = isFileExist(fname);
+
+	int i = ftruncate(fd, shmem_size);
+	assert(i == 0);
+
+	void* shm = mmap(NULL, shmem_size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+	assert(shm != MAP_FAILED);	
+	close(fd);
+
+	memset(shm, 0, shmem_size);
+
+	q.meta = (QueueMetadata*) shm;
+	q.baseptr = (char*) shm;
+	q.queue = q.baseptr + sizeof(QueueMetadata);
+
+	q.meta->head = 0;
+	q.meta->tail = 0;
+	q.meta->capacity = capacity;
+	q.meta->element_metadata_size = element_metadata_size;
+	q.meta->element_size = element_size;
+	q.meta->element_total_size = element_total_size;
+	q.meta->initialized = true;
+
+	return q;
+}
+
+char* queue2_ptr(Queue2* q, size_t index) {
+	index = index % q->meta->capacity;
+	return q->queue + (q->meta->element_total_size * index);
+}
+
+bool queue2_get_nonblocking(Queue2* q, char* element) {
+	while (true) {
+		// First, read the current head and tail values of the queue
+		__sync_synchronize();
+		size_t head = q->meta->head;
+		size_t tail = q->meta->tail;
+
+		// If the queue is currently empty, we can return
+		int64_t delta = tail-head;
+		if (delta <= 0) {
+			return false;
+		}
+
+		// Try updating the head pointer; somebody else might have taken it
+		if (!__sync_bool_compare_and_swap(&q->meta->head, head, head+1)) {
+			continue;
+		}
+
+		// We got the slot.  Grab its pointer
+		char* e_ptr = queue2_ptr(q, head);
+		QueueElementMetadata* e_md = (QueueElementMetadata*) e_ptr;
+
+		// It's possible a writer is still writing this element
+		// Even though this should be a non-blocking call, we will block here :(
+		int max_backoff = 100000; // 100ms
+		int backoff = 10;
+		while (!__sync_bool_compare_and_swap(&e_md->status, 2, 3)) {
+			usleep(backoff);
+			backoff *= 2;
+			if (backoff > max_backoff) {
+				backoff = max_backoff;
+			}
+		}
+
+		// Read the element
+		char* e_content = e_ptr + sizeof(QueueElementMetadata);
+		memcpy(element, e_content, q->meta->element_size);
+
+		// Update status, fail if somebody else touched it
+		assert(__sync_bool_compare_and_swap(&e_md->status, 3, 0));
+
+		return true;
+	}
+}
+
+void queue2_get_blocking(Queue2* q, char* element) {
+	// Only allowed to put if (tail-head) < capacity
+	int max_backoff = 100000; // 100ms
+	int backoff = 10;
+
+	// Call non-blocking impl and backoff
+	while (!queue2_get_nonblocking(q, element)) {
+		usleep(backoff);
+		backoff *= 2;
+		if (backoff > max_backoff) {
+			backoff = max_backoff;
+		}
+	}
+}
+
+bool queue2_put_nonblocking(Queue2* q, char* element) {
+	while (true) {
+		// First, read the current head and tail values of the queue
+		__sync_synchronize();
+		size_t tail = q->meta->tail;
+		size_t head = q->meta->head;
+
+		// If the queue is currently full, we can simply return
+		int64_t delta = tail-head;
+		if (delta >= q->meta->capacity) {
+			return false;
+		}
+
+		// Try updating the tail pointer; somebody else might have taken it
+		if (!__sync_bool_compare_and_swap(&q->meta->tail, tail, tail+1)) {
+			continue;
+		}
+
+		// We got the slot.  Grab its pointer
+		char* e_ptr = queue2_ptr(q, tail);
+		QueueElementMetadata* e_md = (QueueElementMetadata*) e_ptr;
+
+		// It's possible a reader is still reading this element
+		// Even though this should be a non-blocking call, we will block here :(
+		int max_backoff = 100000; // 100ms
+		int backoff = 10;
+		while (!__sync_bool_compare_and_swap(&e_md->status, 0, 1)) {
+			usleep(backoff);
+			backoff *= 2;
+			if (backoff > max_backoff) {
+				backoff = max_backoff;
+			}
+		}
+
+		// Write the element
+		char* e_content = e_ptr + sizeof(QueueElementMetadata);
+		memcpy(e_content, element, q->meta->element_size);
+
+		// Update status, fail if somebody else touched it
+		assert(__sync_bool_compare_and_swap(&e_md->status, 1, 2));
+
+		return true;
+	}
+
+}
+
+void queue2_put_blocking(Queue2* q, char* element) {
+	// Only allowed to put if (tail-head) < capacity
+	int max_backoff = 100000; // 100ms
+	int backoff = 10;
+
+	// Call non-blocking impl and backoff
+	while (!queue2_put_nonblocking(q, element)) {
+		usleep(backoff);
+		backoff *= 2;
+		if (backoff > max_backoff) {
+			backoff = max_backoff;
+		}
+	}
+}
+
+
+
