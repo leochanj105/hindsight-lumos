@@ -55,8 +55,7 @@ void bufmanager_acquire(BufManager* mgr, Buffer* dst) {
     assert(!buffer_is_valid(dst));
 
     AvailableBuffer av = {-1};
-    queue2_get_nonblocking(&mgr->available, &av);
-    if (av.buffer_id >= 0) {
+    if (queue2_get_nonblocking(&mgr->available, &av)) {
     	dst->id = av.buffer_id;
     	dst->remaining = mgr->buffer_size;
         dst->ptr = mgr->pool + (av.buffer_id * mgr->buffer_size);
