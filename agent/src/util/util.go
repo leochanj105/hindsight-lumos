@@ -4,6 +4,7 @@ import (
 	"encoding/binary"
 	"os"
 	"sync"
+	"time"
 )
 
 var DEBUG int
@@ -49,4 +50,10 @@ func BytesToInt64(bys []byte) int64 {
 func IsFileExists(path string) bool {
 	_, err := os.Stat(path)
 	return !os.IsNotExist(err)
+}
+
+func GetTime() int64 {
+	now := time.Now()      // current local time
+	nsec := now.UnixNano() // number of nanoseconds since January 1, 1970 UTC
+	return nsec
 }

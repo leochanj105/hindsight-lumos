@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"sync"
 	"time"
 
 	. "datapb"
@@ -21,6 +22,7 @@ type trace struct {
 }
 
 // trace might overlap (like different stage of same agent buffer)
+var trace_pool_mutex sync.RWMutex
 var trace_pool map[int64][]trace
 
 // if an address is called 5 times without response, don't try again
@@ -48,12 +50,15 @@ func newCollector() *collectorServer {
 */
 func (*collectorServer) Report(ctx context.Context, in *Trace) (*CallRet, error) {
 	request_id := in.RequestId
-	fmt.Println("[Log Collector] receiving", request_id, len(in.Trace))
+	trace_pool_mutex.Lock()
 	if _, ok := trace_pool[request_id]; !ok {
 		var temp []trace
 		trace_pool[request_id] = temp
 	}
 	trace_pool[request_id] = append(trace_pool[request_id], trace{entry: in.Entry, trace_data: in.Trace, addrs: in.Addrs})
+	fmt.Println("[Log Collector] receiving", request_id, len(trace_pool[request_id]), GetTime())
+	trace_pool_mutex.Unlock()
+	// fmt.Println("[Log Collector] receiving", request_id, GetTime())
 
 	// notify collector
 	retrieval_queue.Mutex.Lock()
@@ -71,13 +76,13 @@ func RunLCResponseServer() {
 		lis, err := net.Listen("tcp", ":"+LC_port)
 		if err != nil {
 			log.Fatalf("failed to listen: %v", err)
-			fmt.Println("failed to listen:", err)
+			// fmt.Println("failed to listen:", err)
 		}
 		s := grpc.NewServer()
 		RegisterCollectorServer(s, newCollector())
 		if err := s.Serve(lis); err != nil {
 			log.Fatalf("failed to serve: %v", err)
-			fmt.Println("failed to serve:", err)
+			// fmt.Println("failed to serve:", err)
 		}
 	}
 
@@ -105,6 +110,7 @@ func RunRetrievalHandler() {
 			}
 			offset := retrieval_pool[request_id]["offset"]
 
+			trace_pool_mutex.Lock()
 			for i, trace := range trace_pool[request_id] {
 				if i < offset {
 					continue
@@ -122,6 +128,7 @@ func RunRetrievalHandler() {
 				}
 				retrieval_pool[request_id]["offset"] += 1
 			}
+			trace_pool_mutex.Unlock()
 		}
 
 		collection_queue.Mutex.Lock()

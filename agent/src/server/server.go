@@ -72,7 +72,7 @@ func RunTriggerServer() {
 			report_queue.Mutex.Lock()
 			// if same request is added again, reset counter to 0
 			report_queue.Req[request_id] = 0
-			fmt.Println("[agent server] find trigger", request_id)
+			// fmt.Println("[agent server] find trigger", request_id)
 			report_queue.Mutex.Unlock()
 			if DEBUG == 1 {
 				fmt.Println("[trigger server] find trigger of request", request_id)
@@ -97,7 +97,7 @@ func (*agentServer) Request(ctx context.Context, in *RequestID) (*CallRet, error
 	report_queue.Mutex.Lock()
 	for _, request_id := range request_ids {
 		report_queue.Req[request_id] = 0
-		fmt.Println("[agent server] receiving", request_id)
+		// fmt.Println("[agent server] receiving", request_id)
 	}
 	report_queue.Mutex.Unlock()
 
@@ -139,7 +139,7 @@ func RunAgent() {
 		reported := make(map[int64]bool)
 		report_queue.Mutex.Lock()
 		for request_id, counter := range report_queue.Req {
-			fmt.Println("[agent] find", request_id)
+			// fmt.Println("[agent] find", request_id)
 			if _, ok := pending[request_id]; ok {
 				if counter >= 5 {
 					reported[request_id] = true
@@ -165,12 +165,13 @@ func RunAgent() {
 				// fmt.Println("[agent]", request_id, "no longer exist")
 				continue
 			}
-			fmt.Println("[agent] retrieving", request_id)
+			// fmt.Println("[agent] retrieving", request_id)
 			var entry []int32
 			var trace_data []byte
 			var addrs []string
 			addrs = append(addrs, Server_addr+":"+Server_port)
-			for buf, _ := range buffer_ids {
+
+			for _, buf := range buffer_ids {
 				offset := buf * Buf_length * 4
 				entry = append(entry, int32(buf))
 				trace_data = append(trace_data, SharedPool.Pool[offset:offset+Buf_length*4]...)
@@ -190,12 +191,12 @@ func RunAgent() {
 				Addrs:     addrs})
 
 			if err != nil {
-				fmt.Println("report", err)
+				// fmt.Println("report", err)
 				// return
 				continue
 			}
 
-			fmt.Println("[agent] report", request_id, "done")
+			// fmt.Println("[agent] report", request_id, "done")
 
 			reported[request_id] = true
 		}
