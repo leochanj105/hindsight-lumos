@@ -10,7 +10,9 @@
 char* bufmanager_get_fname(char* dst1, char* dst2) {
 	char* name = malloc(sizeof(char)*64);
 	memset(name, 0, sizeof(char)*64);
-	strcpy(name, dst1);
+	strcpy(name, "/dev/shm/");
+	strcat(name, dst1);
+	strcat(name, "__");
 	strcat(name, dst2);
 	return name;
 }
@@ -64,16 +66,22 @@ BufManager bufmanager_init(const char* name,
     BufManager m;
     m.name = name;
 
+    const char* fname = bufmanager_get_fname(name, "pool");
     size_t pool_size = sizeof(PoolMetadata) + capacity * buffer_size;
-    m.baseptr = bufmanager_pool_init(bufmanager_get_fname("/dev/shm/pool_", name), pool_size);
+    m.baseptr = bufmanager_pool_init(fname, pool_size);
     m.meta = (PoolMetadata*) m.baseptr;
     m.meta->capacity = capacity;
     m.meta->buffer_size = buffer_size;
     m.meta->initialized = true;
     m.pool = m.baseptr + sizeof(PoolMetadata);
 
-    m.available = queue2_init(bufmanager_get_fname("/dev/shm/available_queue_", name), sizeof(AvailableBuffer), capacity);
-    m.complete = queue2_init(bufmanager_get_fname("/dev/shm/complete_queue_", name), sizeof(CompleteBuffer), capacity);
+    printf("Created buffer pool, ");
+    printf("capacity=%ld ", m.meta->capacity);
+    printf("buffer_size=%ld ", m.meta->buffer_size);
+    printf("at %s\n", fname);
+
+    m.available = queue2_init(bufmanager_get_fname(name, "available_queue"), sizeof(AvailableBuffer), capacity);
+    m.complete = queue2_init(bufmanager_get_fname(name, "complete_queue"), sizeof(CompleteBuffer), capacity);
 
     m.null_buffer = (char*) malloc(m.meta->buffer_size);
     return m;
@@ -83,7 +91,8 @@ BufManager bufmanager_init_existing(const char* name) {
     BufManager m;
     m.name = name;
 
-    m.baseptr = bufmanager_pool_init_existing(bufmanager_get_fname("/dev/shm/pool_", name));
+    const char* fname = bufmanager_get_fname(name, "pool");
+    m.baseptr = bufmanager_pool_init_existing(fname);
     m.meta = (PoolMetadata*) m.baseptr;
     m.pool = m.baseptr + sizeof(PoolMetadata);
 
@@ -92,8 +101,13 @@ BufManager bufmanager_init_existing(const char* name) {
     	usleep(1000000);
     }
 
-    m.available = queue2_init_existing(bufmanager_get_fname("/dev/shm/available_queue_", name));
-    m.complete = queue2_init_existing(bufmanager_get_fname("/dev/shm/complete_queue_", name));
+    printf("Loaded existing buffer pool, ");
+    printf("capacity=%ld ", m.meta->capacity);
+    printf("buffer_size=%ld ", m.meta->buffer_size);
+    printf("at %s\n", fname);
+
+    m.available = queue2_init_existing(bufmanager_get_fname(name, "available_queue"));
+    m.complete = queue2_init_existing(bufmanager_get_fname(name, "complete_queue"));
 
     m.null_buffer = (char*) malloc(m.meta->buffer_size);
     return m;	

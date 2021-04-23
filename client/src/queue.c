@@ -124,8 +124,6 @@ Queue2 queue2_init(const char* fname, size_t element_size, size_t capacity) {
 	int fd = open(fname, O_RDWR | O_CREAT, 0666);
 	assert(fd >= 0);
 
-	// int isExist = isFileExist(fname);
-
 	int i = ftruncate(fd, shmem_size);
 	assert(i == 0);
 
@@ -147,12 +145,50 @@ Queue2 queue2_init(const char* fname, size_t element_size, size_t capacity) {
 	q.meta->element_total_size = element_total_size;
 	q.meta->initialized = true;
 
+    printf("Created queue ");
+    printf("capacity=%ld ", q.meta->capacity);
+    printf("element_size=%ld ", q.meta->element_size);
+    printf("element_total_size=%ld ", q.meta->element_total_size);
+    printf("at %s\n", fname);
+
 	return q;
 }
 
 Queue2 queue2_init_existing(const char* fname) {
 	Queue2 q;
 
+	// Wait until the file exists
+	while (access(fname, F_OK) != 0) {
+		printf("%s does not exist, waiting...\n", fname);
+		usleep(1000000);
+	}
+	
+	// Open the file, get its length
+	int fd = open(fname, O_RDWR, 0666);
+	assert(fd >= 0);
+
+	struct stat st;
+	fstat(fd, &st);
+	size_t shmem_size = st.st_size;
+
+	void* shm = mmap(NULL, shmem_size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+	assert(shm != MAP_FAILED);	
+	close(fd);
+
+	q.meta = (QueueMetadata*) shm;
+	q.baseptr = (char*) shm;
+	q.queue = q.baseptr + sizeof(QueueMetadata);
+
+    while (!q.meta->initialized) {
+    	printf("Waiting for initialization of %s...\n", fname);
+    	usleep(1000000);
+    }
+
+    printf("Loaded existing queue ");
+    printf("capacity=%ld ", q.meta->capacity);
+    printf("element_size=%ld ", q.meta->element_size);
+    printf("element_total_size=%ld ", q.meta->element_total_size);
+    printf("at %s\n", fname);
 
 	return q;
 
