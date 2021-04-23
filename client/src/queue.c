@@ -150,6 +150,14 @@ Queue2 queue2_init(const char* fname, size_t element_size, size_t capacity) {
 	return q;
 }
 
+Queue2 queue2_init_existing(const char* fname) {
+	Queue2 q;
+
+
+	return q;
+
+}
+
 char* queue2_ptr(Queue2* q, size_t index) {
 	index = index % q->meta->capacity;
 	return q->queue + (q->meta->element_total_size * index);

@@ -54,7 +54,15 @@ typedef struct Queue2 {
 	char* queue; // Baseptr of the queue region, comes after the metadata
 } Queue2;
 
+// Return true if a shmem queue exists for the specified name
+bool queue2_exists(const char* fname);
+
+// Creates a new shm queue at the specified filename
 Queue2 queue2_init(const char* fname, size_t element_size, size_t capacity);
+
+// Uses an existing shm queue at the specified filename.
+// Blocks until the file exists
+Queue2 queue2_init_existing(const char* fname);
 
 void queue2_put_blocking(Queue2* q, char* element);
 bool queue2_put_nonblocking(Queue2* q, char* element);

@@ -4,6 +4,8 @@
 #include <fcntl.h>
 #include <sys/mman.h>
 #include <assert.h>
+#include <unistd.h>
+#include <sys/stat.h>
 
 char* bufmanager_get_fname(char* dst1, char* dst2) {
 	char* name = malloc(sizeof(char)*64);
@@ -31,23 +33,70 @@ char* bufmanager_pool_init(const char* fname, size_t fsize) {
 	return (char*) shm;
 }
 
+char* bufmanager_pool_init_existing(const char* fname) {
+	void* shm;
+
+	// Wait until the file exists
+	while (access(fname, F_OK) != 0) {
+		printf("%s does not exist, waiting...\n", fname);
+		usleep(1000000);
+	}
+	
+	// Open the file, get its length
+	int fd = open(fname, O_RDWR, 0666);
+	assert(fd >= 0);
+
+	struct stat st;
+	fstat(fd, &st);
+	size_t fsize = st.st_size;
+
+	// Map it
+	shm = mmap(NULL, fsize, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+	assert(shm != MAP_FAILED);
+	close(fd);
+
+	return (char*) shm;
+}
+
 BufManager bufmanager_init(const char* name,
                            size_t capacity,
                            size_t buffer_size) {
     BufManager m;
     m.name = name;
 
-    size_t pool_size = capacity * buffer_size; // not *sizeof(int) we are storing bytes not ints...
-    m.pool = bufmanager_pool_init(bufmanager_get_fname("/dev/shm/pool_", name), pool_size);
-    m.capacity = capacity;
-    m.buffer_size = buffer_size;
-
+    size_t pool_size = sizeof(PoolMetadata) + capacity * buffer_size;
+    m.baseptr = bufmanager_pool_init(bufmanager_get_fname("/dev/shm/pool_", name), pool_size);
+    m.meta = (PoolMetadata*) m.baseptr;
+    m.meta->capacity = capacity;
+    m.meta->buffer_size = buffer_size;
+    m.meta->initialized = true;
+    m.pool = m.baseptr + sizeof(PoolMetadata);
 
     m.available = queue2_init(bufmanager_get_fname("/dev/shm/available_queue_", name), sizeof(AvailableBuffer), capacity);
     m.complete = queue2_init(bufmanager_get_fname("/dev/shm/complete_queue_", name), sizeof(CompleteBuffer), capacity);
 
-    m.null_buffer = (char*) malloc(buffer_size);
+    m.null_buffer = (char*) malloc(m.meta->buffer_size);
     return m;
+}
+
+BufManager bufmanager_init_existing(const char* name) {
+    BufManager m;
+    m.name = name;
+
+    m.baseptr = bufmanager_pool_init_existing(bufmanager_get_fname("/dev/shm/pool_", name));
+    m.meta = (PoolMetadata*) m.baseptr;
+    m.pool = m.baseptr + sizeof(PoolMetadata);
+
+    while (!m.meta->initialized) {
+    	printf("Waiting for pool initialization...\n");
+    	usleep(1000000);
+    }
+
+    m.available = queue2_init_existing(bufmanager_get_fname("/dev/shm/available_queue_", name));
+    m.complete = queue2_init_existing(bufmanager_get_fname("/dev/shm/complete_queue_", name));
+
+    m.null_buffer = (char*) malloc(m.meta->buffer_size);
+    return m;	
 }
 
 void bufmanager_acquire(BufManager* mgr, Buffer* dst) {
@@ -57,11 +106,11 @@ void bufmanager_acquire(BufManager* mgr, Buffer* dst) {
     AvailableBuffer av = {-1};
     if (queue2_get_nonblocking(&mgr->available, (char*) &av)) {
     	dst->id = av.buffer_id;
-    	dst->remaining = mgr->buffer_size;
-        dst->ptr = mgr->pool + (av.buffer_id * mgr->buffer_size);
+    	dst->remaining = mgr->meta->buffer_size;
+        dst->ptr = mgr->pool + (av.buffer_id * mgr->meta->buffer_size);
     } else {
     	dst->id = -2;
-    	dst->remaining = mgr->buffer_size;
+    	dst->remaining = mgr->meta->buffer_size;
     	dst->ptr = mgr->null_buffer;
     }
 }

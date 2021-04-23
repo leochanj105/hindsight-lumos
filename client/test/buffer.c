@@ -94,7 +94,6 @@ void put_available(Queue2 q, int bufid) {
 void test_bufmanager() {
 	BufManager mgr = bufmanager_init("test_bufmanager", 10, 100);
 
-
 	put_available(mgr.available, 7);
 
 	Buffer buf = buffer_create();

@@ -6,13 +6,20 @@
 
 #include "queue.h"
 
+// Metadata stored at the head of the bufmanager shmem region
+typedef struct PoolMetadata {
+    bool initialized;
+    size_t capacity;
+    size_t buffer_size;
+} PoolMetadata;
+
 // Manages shared memory buffers
 typedef struct BufManager {
     const char* name; // Name of this service
 
+    char* baseptr; // Pointer to start of shared-memory region
+    PoolMetadata* meta; // Metadata to this pool; lives at start of shmem region
     char* pool; // Pointer to shared-memory region used for buffers
-    size_t capacity; // Number of buffers in the pool
-    size_t buffer_size; // Size in bytes of each buffer
 
     Queue2 available; // Used for receiving fresh buffers
     Queue2 complete; // Used for sending completed buffers.  
@@ -40,9 +47,13 @@ typedef struct CompleteBuffer {
     int buffer_id;
 } CompleteBuffer;
 
+// Initializes a bufmanager, creating shmem regions and queues
 BufManager bufmanager_init(const char* name,
                            size_t capacity,
                            size_t buffer_size);
+
+// Initializes a bufmanager with existing shm regions and queues
+BufManager bufmanager_init_existing(const char* name);
 
 // Acquires a buffer from the queue, setting it in dst.
 // Doesn't block -- will set the null buffer if nothing can be acquired
