@@ -5,7 +5,6 @@
 #include "assert.h"
 
 #include "buffer.h"
-#include "tracer2.h"
 #include "tracestate.h"
 #include <pthread.h>
 

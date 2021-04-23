@@ -55,7 +55,7 @@ void bufmanager_acquire(BufManager* mgr, Buffer* dst) {
     assert(!buffer_is_valid(dst));
 
     AvailableBuffer av = {-1};
-    if (queue2_get_nonblocking(&mgr->available, &av)) {
+    if (queue2_get_nonblocking(&mgr->available, (char*) &av)) {
     	dst->id = av.buffer_id;
     	dst->remaining = mgr->buffer_size;
         dst->ptr = mgr->pool + (av.buffer_id * mgr->buffer_size);
@@ -70,7 +70,7 @@ void bufmanager_return(BufManager* mgr, uint64_t trace_id, Buffer* dst) {
 	// No asserts; allowed to return an invalid buffer
 	if (dst->id >= 0) {
 		CompleteBuffer b = {trace_id, dst->id};
-		queue2_put_blocking(&mgr->complete, &b);
+		queue2_put_blocking(&mgr->complete, (char*) &b);
 	}
 	buffer_clear(dst);
 }

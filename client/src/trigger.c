@@ -1,22 +1,27 @@
+#include <stdio.h>
+#include <fcntl.h>
+#include <sys/mman.h>
+#include <assert.h>
+#include <string.h>
+
 #include "trigger.h"
 
-
-TriggerManager triggermanager_init(const char* name,
-                                   size_t capacity) {
-	TriggerManager mgr;
-	mgr.name = name;
-	mgr.triggers = queue_init(get_fname("/dev/shm/triggers_queue_", name), capacity);
-	return mgr;
+char* triggers_get_fname(char* dst1, char* dst2) {
+    char* name = malloc(sizeof(char)*64);
+    memset(name, 0, sizeof(char)*64);
+    strcpy(name, dst1);
+    strcat(name, dst2);
+    return name;
 }
 
+Triggers triggers_init(const char* name, size_t capacity) {
+	Triggers t;
+	t.name = name;
+    t.queue = queue2_init(triggers_get_fname("/dev/shm/triggers_queue_", name), sizeof(Trigger), capacity);
+	return t;
+}
 
-// For now, we are just sen
-void triggermanager_trigger(TriggerManager* mgr, Trigger trigger) {
-    // TODO: after queue refactor, enqueue into triggers
-
-    // Lock(trigger_lock);
-    // queue_put(triggers->queue, (int)(request_id_ >> 32));
-    // queue_put(triggers->queue, (int)(request_id_ & 0xffffffff));
-    // Unlock(trigger_lock);
-    
+void triggers_fire(Triggers* t, int trigger_id, uint64_t trace_id) {
+    Trigger trigger = {trigger_id, trace_id};
+    queue2_put_nonblocking(&t->queue, (char*) &trigger);
 }
