@@ -20,6 +20,11 @@ type MessageQueue struct {
 	Mutex sync.RWMutex
 }
 
+type ReportQueue struct {
+	Req   map[int64]int64
+	Mutex sync.RWMutex
+}
+
 type RetrievalQueue struct {
 	Req   map[int64]map[string]int
 	Mutex sync.RWMutex

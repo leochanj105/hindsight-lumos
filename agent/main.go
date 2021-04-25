@@ -142,9 +142,11 @@ func main() {
 	isLC := flag.Bool("lc", false, "Log Collector")
 	serv_temp := flag.String("serv", "", "Service name")
 	isReport := flag.Bool("report", true, "If report to LC (or local mode)")
+	delay := flag.Int("delay", 0, "Delayed trigger time")
 
 	flag.Parse()
 	service_name = *serv_temp
+	Delay = int64(1000000 * (*delay))
 
 	isConfig := conf_init()
 	if !isConfig {

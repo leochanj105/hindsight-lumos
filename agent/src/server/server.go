@@ -18,10 +18,11 @@ import (
 
 // TODO: potential data lost here: request_id might be registered, but data might be 1) not coming yet, 2) right there, and 3) flushed when sending to LC.
 // Possible solution: copy data to a secured pool once detected
-var report_queue MessageQueue
+var report_queue ReportQueue
+var Delay int64
 
 func ServerInit() {
-	report_queue.Req = make(map[int64]int)
+	report_queue.Req = make(map[int64]int64)
 }
 
 /*
@@ -71,8 +72,7 @@ func RunTriggerServer() {
 			}
 			report_queue.Mutex.Lock()
 			// if same request is added again, reset counter to 0
-			report_queue.Req[request_id] = 0
-			// fmt.Println("[agent server] find trigger", request_id)
+			report_queue.Req[request_id] = GetTime()
 			report_queue.Mutex.Unlock()
 			if DEBUG == 1 {
 				fmt.Println("[trigger server] find trigger of request", request_id)
@@ -126,7 +126,7 @@ func RunResponseServer() {
 	Agent: pool report_queue, send to log collector
 */
 func RunAgent() {
-	pending := make(map[int64]int)
+	pending := make(map[int64]int64)
 	conn, err := grpc.Dial(LC_addr+":"+LC_port, grpc.WithInsecure(), grpc.WithTimeout(1000000000*time.Nanosecond))
 	if err != nil {
 		fmt.Println("dial", LC_addr+":"+LC_port, err)
@@ -138,28 +138,38 @@ func RunAgent() {
 	for true {
 		reported := make(map[int64]bool)
 		report_queue.Mutex.Lock()
-		for request_id, counter := range report_queue.Req {
+		for request_id, reported_time := range report_queue.Req {
 			// fmt.Println("[agent] find", request_id)
-			if _, ok := pending[request_id]; ok {
-				if counter >= 5 {
-					reported[request_id] = true
-				} else {
-					pending[request_id] += 1
+			if counter, ok := pending[request_id]; ok {
+				if int(counter) >= 0 && int(counter) < 10 {
+					if int(counter) >= 5 {
+						reported[request_id] = true
+					} else {
+						pending[request_id] += 1
+					}
 				}
 			} else {
-				pending[request_id] = 0
+				pending[request_id] = reported_time
 			}
 
 		}
-		report_queue.Req = make(map[int64]int)
+		report_queue.Req = make(map[int64]int64)
 		report_queue.Mutex.Unlock()
 
-		for request_id, _ := range pending {
+		delayed_request := make(map[int64]int)
+		for request_id, counter := range pending {
+			if counter > 100 {
+				if GetTime()-counter > Delay {
+					delayed_request[request_id] = 0
+				} else {
+					continue
+				}
+			}
 			// fmt.Println("[agent] find", request_id, "from pending", pending[request_id])
 			buffer_ids := CacheGetBuffers(request_id)
 			if buffer_ids == nil {
 				pending[request_id] += 1
-				if pending[request_id] >= 100 {
+				if pending[request_id] >= 10 && pending[request_id] < 100 {
 					reported[request_id] = true
 				}
 				// fmt.Println("[agent]", request_id, "no longer exist")
@@ -199,10 +209,21 @@ func RunAgent() {
 			// fmt.Println("[agent] report", request_id, "done")
 
 			reported[request_id] = true
+			if counter > 100 {
+				delayed_request[request_id] = 1
+			}
 		}
 
 		for request_id, _ := range reported {
 			delete(pending, request_id)
+		}
+
+		for request_id, reported_flag := range delayed_request {
+			if reported_flag == 0 {
+				pending[request_id] = 0
+			} else {
+				delete(pending, request_id)
+			}
 		}
 	}
 }

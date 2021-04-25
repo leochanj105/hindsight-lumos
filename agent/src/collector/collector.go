@@ -180,7 +180,7 @@ func RunCollector() {
 
 			conn, err := grpc.Dial(addr, grpc.WithInsecure(), grpc.WithBlock(), grpc.WithTimeout(1000000000*time.Nanosecond))
 			if err != nil {
-				fmt.Println("dial", addr, err)
+				// fmt.Println("dial", addr, err)
 				// return
 				continue
 			}
@@ -194,7 +194,7 @@ func RunCollector() {
 				Rid: request_ids})
 
 			if err != nil {
-				fmt.Println("request", err)
+				// fmt.Println("request", err)
 				// return
 				continue
 			}
