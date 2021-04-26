@@ -11,6 +11,7 @@ typedef struct TraceHeader {
   uint64_t trace_id;
   uint64_t timestamp;
   short buffer_number;
+  short null_buffer_count;
 } TraceHeader;
 
 // TraceState represents an active, ongoing trace in the current process

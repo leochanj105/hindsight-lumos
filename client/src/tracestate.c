@@ -39,6 +39,7 @@ void tracestate_begin(TraceState* trace, BufManager* mgr, uint64_t trace_id) {
 	// Set the new header
 	trace->header.trace_id = trace_id;
 	trace->header.buffer_number = 0;
+	trace->header.null_buffer_count = 0;
 	trace->header.timestamp = tracestate_get_time();
 
 	// Acquire a fresh buffer and write the header
@@ -56,6 +57,7 @@ void tracestate_end(TraceState* trace, BufManager* mgr) {
 	// Clear the header
 	trace->header.buffer_number = 0;
 	trace->header.trace_id = 0;
+	trace->header.null_buffer_count = 0;
 }
 
 void tracestate_write_data(TraceState* trace, 
@@ -76,6 +78,10 @@ void tracestate_write_data(TraceState* trace,
 	bufmanager_acquire(mgr, &trace->buffer);
 	trace->header.buffer_number++;
 	trace->header.timestamp = tracestate_get_time();
+	if (trace->buffer.ptr == mgr->null_buffer) {
+		// TODO: probably shouldn't be implemented like this
+		trace->header.null_buffer_count++;
+	}
 	tracestate_write_header(trace);
 
 	// Retry the write
