@@ -21,8 +21,13 @@ typedef struct HindsightAgentAPI {
 	Triggers triggers;
 } HindsightAgentAPI;
 
-// Initialize the agent API 
+// Initialize the agent API for a service.
+// This call will block if the specified service doesn't exist,
+// waiting until it has started.
+// Configurations will be read from shared memory.
 HindsightAgentAPI hindsight_agentapi_init(const char* servicename);
+
+
 
 
 

@@ -109,6 +109,9 @@ BufManager bufmanager_init_existing(const char* name) {
     m.available = queue2_init_existing(bufmanager_get_fname(name, "available_queue"));
     m.complete = queue2_init_existing(bufmanager_get_fname(name, "complete_queue"));
 
+    assert(m.available.meta->element_size == sizeof(AvailableBuffer));
+    assert(m.complete.meta->element_size == sizeof(CompleteBuffer));
+
     m.null_buffer = (char*) malloc(m.meta->buffer_size);
     return m;	
 }
