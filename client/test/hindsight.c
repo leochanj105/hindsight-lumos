@@ -157,18 +157,43 @@ void drain_forever_client() {
 	uint64_t last_print = nanos();
 	uint64_t print_every = 1000000000UL;
 	uint64_t count = 0;
+	BufferStats stats = {0,0,0,0};
 	while (true) {
 		uint64_t now = nanos();
 		// printf("nanos %ld\n", now);
 		if ((now - last_print) > print_every) {
+			BufferStats current = hindsight.mgr.stats;
+			BufferStats delta = {
+				current.pool_acquired - stats.pool_acquired,
+				current.null_acquired - stats.null_acquired,
+				current.pool_released - stats.pool_released,
+				current.null_released - stats.null_released
+			};
+
+			// Calculate throughputs
 			uint64_t tput = (count * print_every) / (now - last_print);
-			printf("Throughput: %ld\n", tput);
+			delta.pool_acquired = (delta.pool_acquired * print_every) / (now - last_print);
+			delta.null_acquired = (delta.null_acquired * print_every) / (now - last_print);
+			delta.pool_released = (delta.pool_released * print_every) / (now - last_print);
+			delta.null_released = (delta.null_released * print_every) / (now - last_print);
+
+			printf("Tracepoints %ld - Pool: %ld %ld - NULL %ld %ld\n", tput, 
+				delta.pool_acquired, delta.pool_released, 
+				delta.null_acquired, delta.null_released);
 			last_print = now;
 			count = 0;
+			stats = current;
 		}
 
+
+//     size_t pool_acquired;
+//     size_t null_acquired;
+//     size_t pool_released;
+//     size_t null_released;
+// } BufferStats;
+
 		hindsight_tracepoint(buf, buf_size);
-		count += buf_size;
+		count ++;
 		// printf("Loop\n");
 		// usleep(10000);
 	}	
