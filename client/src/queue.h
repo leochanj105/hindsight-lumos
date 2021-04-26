@@ -69,5 +69,6 @@ bool queue2_put_nonblocking(Queue2* q, char* element);
 
 void queue2_get_blocking(Queue2* q, char* dst_element);
 bool queue2_get_nonblocking(Queue2* q, char* dst_element);
+size_t queue2_get_nonblocking_multi(Queue2* q, char* elements, size_t max_elements);
 
 #endif

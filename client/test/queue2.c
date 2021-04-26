@@ -129,6 +129,84 @@ void test_queue_nonblocking() {
 	printf("test_queue_nonblocking passed\n");
 }
 
+void test_queue_nonblocking_multi() {
+	Queue2 q = queue2_init("/dev/shm/test_queue_nonblocking_multi", sizeof(int), 10);
+
+	{
+		size_t max_elements = 10;
+		int nones[max_elements];
+		assert(queue2_get_nonblocking_multi(&q, nones, max_elements) == 0);
+	}
+
+	for (int i = 0; i < 10; i++) {
+		int y = i + 7;
+		assert(queue2_put_nonblocking(&q, (char*) &y));
+		assert(y == i+7);
+	}
+
+	{
+		size_t max_elements = 10;
+		int ys[max_elements];
+		size_t dequeued = queue2_get_nonblocking_multi(&q, ys, max_elements);
+		assert(dequeued == max_elements);
+	}
+
+	{
+		size_t max_elements = 10;
+		int nones[max_elements];
+		assert(queue2_get_nonblocking_multi(&q, nones, max_elements) == 0);
+	}
+
+	for (int i = 0; i < 5; i++) {
+		int y = i + 7;
+		assert(queue2_put_nonblocking(&q, (char*) &y));
+		assert(y == i+7);
+	}
+
+	{
+		size_t max_elements = 10;
+		int ys[max_elements];
+		size_t dequeued = queue2_get_nonblocking_multi(&q, ys, max_elements);
+		assert(dequeued == 5);
+	}
+
+	for (int i = 0; i < 10; i++) {
+		int y = i + 7;
+		assert(queue2_put_nonblocking(&q, (char*) &y));
+		assert(y == i+7);
+	}
+
+	{
+		size_t max_elements = 5;
+		int ys[max_elements];
+		size_t dequeued = queue2_get_nonblocking_multi(&q, ys, max_elements);
+		assert(dequeued == max_elements);
+	}
+
+	{
+		size_t max_elements = 3;
+		int ys[max_elements];
+		size_t dequeued = queue2_get_nonblocking_multi(&q, ys, max_elements);
+		assert(dequeued == max_elements);
+	}
+
+	{
+		size_t max_elements = 1;
+		int ys[max_elements];
+		size_t dequeued = queue2_get_nonblocking_multi(&q, ys, max_elements);
+		assert(dequeued == max_elements);
+	}
+
+	{
+		size_t max_elements = 10;
+		int ys[max_elements];
+		size_t dequeued = queue2_get_nonblocking_multi(&q, ys, max_elements);
+		assert(dequeued == 1);
+	}
+	
+	printf("test_queue_nonblocking_multi passed\n");
+}
+
 void test_queue_blocking() {
 	Queue2 q = queue2_init("/dev/shm/test_queue_blocking", sizeof(int), 10);
 
@@ -299,5 +377,6 @@ int main(int argc, char const *argv[])
 	test_tiny_queue();
 	test_queue_struct();
 	test_queue_blocking_multithread();
+	test_queue_nonblocking_multi();
 	return 0;
 }
