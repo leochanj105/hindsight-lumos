@@ -25,6 +25,8 @@ typedef struct Breadcrumb {
 // capacity is used to decide queue size
 Breadcrumbs breadcrumbs_init(const char* name, size_t capacity);
 
+Breadcrumbs breadcrumbs_init_existing(const char* name);
+
 // Add a regular (backwards) breadcrumb
 void breadcrumbs_add(Breadcrumbs* b, uint64_t trace_id, const char* addr);
 

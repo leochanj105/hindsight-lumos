@@ -22,6 +22,9 @@ typedef struct Trigger {
 // capacity is used to decide queue size
 Triggers triggers_init(const char* name, size_t capacity);
 
+// Initializes an existing file, waiting for it to exist
+Triggers triggers_init_existing(const char* name);
+
 // For now, we are just sen
 void triggers_fire(Triggers* t, int trigger_id, uint64_t trace_id);
 

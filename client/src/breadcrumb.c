@@ -15,10 +15,17 @@ char* breadcrumbs_get_fname(char* dst1, char* dst2) {
 }
 
 Breadcrumbs breadcrumbs_init(const char* name, size_t capacity) {
-	Breadcrumbs b;
-	b.name = name;
+    Breadcrumbs b;
+    b.name = name;
     b.queue = queue2_init(breadcrumbs_get_fname("/dev/shm/breadcrumbs_queue_", name), sizeof(Breadcrumb), capacity);
-	return b;
+    return b;
+}
+
+Breadcrumbs breadcrumbs_init_existing(const char* name) {
+    Breadcrumbs b;
+    b.name = name;
+    b.queue = queue2_init_existing(breadcrumbs_get_fname("/dev/shm/breadcrumbs_queue_", name));
+    return b;
 }
 
 void _breadcrumb_set_addr(Breadcrumb* crumb, const char* addr) {

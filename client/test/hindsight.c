@@ -3,6 +3,8 @@
 
 #include "buffer.h"
 #include "tracer.h"
+#include "hindsight.h"
+#include "agentapi.h"
 
 #define PROCESS_NAME "hs_integration_test"
 #define CAPACITY 1000
@@ -10,7 +12,8 @@
 
 
 void drain_forever() {
-	BufManager bm = bufmanager_init_existing(PROCESS_NAME);
+	HindsightAgentAPI* api = hindsight_agentapi_init(PROCESS_NAME);
+	// BufManager bm = bufmanager_init_existing(PROCESS_NAME);
 
 	printf("Inited existing bufmanager\n");
 
@@ -19,7 +22,8 @@ void drain_forever() {
 }
 
 void create_and_wait() {
-	BufManager bm = bufmanager_init(PROCESS_NAME, CAPACITY, BUFFERSIZE);
+	hindsight_init(PROCESS_NAME);
+	// BufManager bm = bufmanager_init(PROCESS_NAME, CAPACITY, BUFFERSIZE);
 
 	while (true)
 		usleep(1000000);

@@ -15,19 +15,16 @@ to Hindsight's shared-memory bits.  It's barebones --
 all it provides is an API to read data and queues.
 */
 typedef struct HindsightAgentAPI {
-	HindsightConfig config;
-	
-	Breadcrumbs breadcrumbs;
+	BufManager mgr;
 	Triggers triggers;
+	Breadcrumbs breadcrumbs;
 } HindsightAgentAPI;
 
 // Initialize the agent API for a service.
 // This call will block if the specified service doesn't exist,
 // waiting until it has started.
 // Configurations will be read from shared memory.
-HindsightAgentAPI hindsight_agentapi_init(const char* servicename);
-
-
+HindsightAgentAPI* hindsight_agentapi_init(const char* servicename);
 
 
 
