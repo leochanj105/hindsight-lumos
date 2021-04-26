@@ -139,10 +139,7 @@ void drain_forever_agent(HindsightAgentAPI* api) {
 			available.bufs[i].buffer_id = complete.bufs[i].buffer_id;
 		}
 
-		// printf("Putting %ld completed\n", available.count);
 		hindsight_agentapi_put_available_blocking(api, &available);
-		// printf("Loop\n");
-		// usleep(10000);
 	}
 }
 
@@ -185,17 +182,8 @@ void drain_forever_client() {
 			stats = current;
 		}
 
-
-//     size_t pool_acquired;
-//     size_t null_acquired;
-//     size_t pool_released;
-//     size_t null_released;
-// } BufferStats;
-
 		hindsight_tracepoint(buf, buf_size);
 		count ++;
-		// printf("Loop\n");
-		// usleep(10000);
 	}	
 }
 
