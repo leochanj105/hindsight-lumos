@@ -207,6 +207,100 @@ void test_queue_nonblocking_multi() {
 	printf("test_queue_nonblocking_multi passed\n");
 }
 
+void test_queue2_put_nonblocking_multi() {
+	Queue2 q = queue2_init("/dev/shm/test_queue_nonblocking_multi", sizeof(int), 10);
+
+	{
+		size_t max_elements = 10;
+		int nones[max_elements];
+		assert(queue2_get_nonblocking_multi(&q, nones, max_elements) == 0);
+	}
+
+	{
+		size_t num_writes = 10;
+		int ys[num_writes];
+		for (int i = 0; i < num_writes; i++) {
+			ys[i] = i + 7;
+		}
+		size_t num_written = queue2_put_nonblocking_multi(&q, ys, num_writes);
+		assert(num_written == num_writes);
+	}
+
+	{
+		size_t max_elements = 10;
+		int ys[max_elements];
+		size_t dequeued = queue2_get_nonblocking_multi(&q, ys, max_elements);
+		assert(dequeued == max_elements);
+
+		for (int i = 0; i < max_elements; i++) {
+			assert(ys[i] == (i+7));
+		}
+	}
+
+	{
+		size_t max_elements = 10;
+		int nones[max_elements];
+		assert(queue2_get_nonblocking_multi(&q, nones, max_elements) == 0);
+	}
+
+	{
+		size_t num_writes = 5;
+		int ys[num_writes];
+		for (int i = 0; i < num_writes; i++) {
+			ys[i] = i + 50;
+		}
+		size_t num_written = queue2_put_nonblocking_multi(&q, ys, num_writes);
+		assert(num_written == num_writes);
+	}
+
+	{
+		size_t max_elements = 10;
+		int ys[max_elements];
+		size_t dequeued = queue2_get_nonblocking_multi(&q, ys, max_elements);
+		assert(dequeued == 5);
+
+		for (int i = 0; i < 5; i++) {
+			assert(ys[i] == (i+50));
+		}
+	}
+
+	{
+		size_t num_writes = 5;
+		int ys[num_writes];
+		for (int i = 0; i < num_writes; i++) {
+			ys[i] = i + 50;
+		}
+		size_t num_written = queue2_put_nonblocking_multi(&q, ys, num_writes);
+		assert(num_written == num_writes);
+	}
+
+	{
+		size_t num_writes = 10;
+		int ys[num_writes];
+		for (int i = 0; i < num_writes; i++) {
+			ys[i] = i + 50;
+		}
+		size_t num_written = queue2_put_nonblocking_multi(&q, ys, num_writes);
+		assert(num_written == 5);
+	}
+
+	{
+		size_t max_elements = 20;
+		int ys[max_elements];
+		size_t dequeued = queue2_get_nonblocking_multi(&q, ys, max_elements);
+		assert(dequeued == 10);
+
+		for (int i = 0; i < 5; i++) {
+			assert(ys[i] == (i+50));
+		}
+		for (int i = 5; i < 10; i++) {
+			assert(ys[i] == (i+45));
+		}
+	}
+
+	printf("test_queue2_put_nonblocking_multi passed\n");
+}
+
 void test_queue_blocking() {
 	Queue2 q = queue2_init("/dev/shm/test_queue_blocking", sizeof(int), 10);
 
@@ -378,5 +472,6 @@ int main(int argc, char const *argv[])
 	test_queue_struct();
 	test_queue_blocking_multithread();
 	test_queue_nonblocking_multi();
+	test_queue2_put_nonblocking_multi();
 	return 0;
 }
