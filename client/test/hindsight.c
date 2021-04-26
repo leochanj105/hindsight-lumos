@@ -15,7 +15,7 @@
 
 HindsightConfig config() {
 	HindsightConfig conf;
-	conf.pool_capacity = 100000;
+	conf.pool_capacity = 10000;
 	conf.buffer_size = 4000;
 	conf.breadcrumbs_capacity = conf.pool_capacity;
 	conf.triggers_capacity = conf.pool_capacity;

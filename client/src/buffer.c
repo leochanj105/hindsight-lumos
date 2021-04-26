@@ -62,6 +62,12 @@ BufManager bufmanager_init(const char* name,
     BufManager m;
     m.name = name;
 
+    // Initialize the stats
+    m.stats.pool_acquired = 0;
+    m.stats.null_acquired = 0;
+    m.stats.pool_released = 0;
+    m.stats.null_released = 0;
+
     const char* fname = POOL_SHM_FILENAME(name);
     size_t pool_size = sizeof(PoolMetadata) + capacity * buffer_size;
     m.baseptr = bufmanager_pool_init(fname, pool_size);
@@ -86,6 +92,12 @@ BufManager bufmanager_init(const char* name,
 BufManager bufmanager_init_existing(const char* name) {
     BufManager m;
     m.name = name;
+
+    // Initialize the stats
+    m.stats.pool_acquired = 0;
+    m.stats.null_acquired = 0;
+    m.stats.pool_released = 0;
+    m.stats.null_released = 0;
 
     const char* fname = POOL_SHM_FILENAME(name);
     m.baseptr = bufmanager_pool_init_existing(fname);
@@ -121,10 +133,16 @@ void bufmanager_acquire(BufManager* mgr, Buffer* dst) {
     	dst->id = av.buffer_id;
     	dst->remaining = mgr->meta->buffer_size;
         dst->ptr = mgr->pool + (av.buffer_id * mgr->meta->buffer_size);
+
+    	// TODO: allow to #define away
+    	__sync_fetch_and_add(&mgr->stats.pool_acquired, 1);
     } else {
     	dst->id = -2;
     	dst->remaining = mgr->meta->buffer_size;
     	dst->ptr = mgr->null_buffer;
+
+    	// TODO: allow to #define away
+    	__sync_fetch_and_add(&mgr->stats.null_acquired, 1);
     }
 }
 
@@ -133,6 +151,12 @@ void bufmanager_return(BufManager* mgr, uint64_t trace_id, Buffer* dst) {
 	if (dst->id >= 0) {
 		CompleteBuffer b = {trace_id, dst->id};
 		queue2_put_blocking(&mgr->complete, (char*) &b);
+
+    	// TODO: allow to #define away
+    	__sync_fetch_and_add(&mgr->stats.pool_released, 1);
+	} else if (dst->id == -2) {
+    	// TODO: allow to #define away
+    	__sync_fetch_and_add(&mgr->stats.null_released, 1);
 	}
 	buffer_clear(dst);
 }

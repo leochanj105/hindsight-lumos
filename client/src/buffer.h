@@ -13,9 +13,19 @@ typedef struct PoolMetadata {
     size_t buffer_size;
 } PoolMetadata;
 
+// Some local stats just for convenience
+typedef struct BufferStats {
+    size_t pool_acquired;
+    size_t null_acquired;
+    size_t pool_released;
+    size_t null_released;
+} BufferStats;
+
 // Manages shared memory buffers
 typedef struct BufManager {
     const char* name; // Name of this service
+
+    BufferStats stats; // Client-side stats
 
     char* baseptr; // Pointer to start of shared-memory region
     PoolMetadata* meta; // Metadata to this pool; lives at start of shmem region
