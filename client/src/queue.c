@@ -339,22 +339,36 @@ bool queue2_put_nonblocking(Queue2* q, char* element) {
 }
 
 void queue2_put_blocking(Queue2* q, char* element) {
-	// Only allowed to put if (tail-head) < capacity
+	queue2_put_blocking_multi(q, element, 1);
+}
+
+void queue2_put_blocking_multi(Queue2* q, char* elements, size_t num_elements) {
+	assert(num_elements > 0);
+
 	int max_backoff = 100000; // 100ms
 	int backoff = 10;
 
-	// Call non-blocking impl and backoff
-	while (!queue2_put_nonblocking(q, element)) {
+	size_t element_size = q->meta->element_size;
+
+	while (true) {
+		size_t num_written = queue2_put_nonblocking_multi(q, elements, num_elements);
+
+		elements = elements + (num_written * element_size);
+		num_elements -= num_written;
+
+		if (num_elements == 0) {
+			return;
+		}
+
+		if (num_written > 0) {
+			backoff = 10;
+		}
 		usleep(backoff);
 		backoff *= 2;
 		if (backoff > max_backoff) {
 			backoff = max_backoff;
 		}
 	}
-}
-
-void queue2_put_blocking_multi(Queue2* q, char* elements, size_t num_elements) {
-	
 }
 
 
