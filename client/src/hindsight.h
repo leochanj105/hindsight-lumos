@@ -55,10 +55,17 @@ HindsightConfig hindsight_load_config(const char* fname);
 This method must be called before any other Hindsight API is used,
 to initialize Hindsight's global state
 
+It will load the HindsightConfig from /etc/hindsight_conf/{service_name}.conf
+
 If it is not called, Hindsight's shmem won't be set up, and you'll
 get a segfault.
 */
 void hindsight_init(const char* service_name);
+
+/*
+Same as hindsight_init, but uses the provided config.
+*/
+void hindsight_init_with_config(const char* service_name, HindsightConfig config);
 
 // The current thread is beginning execution of the specified trace_id
 void hindsight_begin(uint64_t trace_id);

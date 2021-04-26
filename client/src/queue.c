@@ -191,7 +191,13 @@ Queue2 queue2_init_existing(const char* fname) {
     printf("at %s\n", fname);
 
 	return q;
-
+}
+void queue2_print(Queue2* q) {
+	size_t head = q->meta->head;
+	size_t tail = q->meta->tail;
+	size_t occupancy = tail-head;
+	size_t remaining = q->meta->capacity - occupancy;
+	printf("occupancy=%ld remaining=%ld head=%ld tail=%ld\n", occupancy, remaining, head, tail);
 }
 
 char* queue2_ptr(Queue2* q, size_t index) {
@@ -210,6 +216,7 @@ size_t queue2_get_nonblocking_multi(Queue2* q, char* elements, size_t max_elemen
 		// If the queue is currently empty, we can return
 		int64_t delta = tail-head;
 		if (delta <= 0) {
+			// printf("Head=%ld Tail=%ld Delta=%ld\n", head, tail, delta);
 			return 0;
 		}
 

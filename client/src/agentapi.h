@@ -42,6 +42,8 @@ typedef struct CompleteBuffers {
 // Blocks until all buffers can be returned to the queue.
 void hindsight_agentapi_put_available_blocking(HindsightAgentAPI* api, AvailableBuffers* buffers);
 
+void hindsight_agentapi_get_available_nonblocking(HindsightAgentAPI* api, AvailableBuffers* buffers);
+
 // Retrieves a batch of up to BATCHSIZE buffers from the complete queue.
 // Returns between 0 and BATCHSIZE buffers
 void hindsight_agentapi_get_complete_nonblocking(HindsightAgentAPI* api, CompleteBuffers* buffers);

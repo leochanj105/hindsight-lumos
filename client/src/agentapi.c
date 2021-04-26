@@ -19,6 +19,10 @@ void hindsight_agentapi_put_available_blocking(HindsightAgentAPI* api, Available
 	queue2_put_blocking_multi(&api->mgr.available, (char*) buffers->bufs, buffers->count);
 }
 
+void hindsight_agentapi_get_available_nonblocking(HindsightAgentAPI* api, AvailableBuffers* buffers) {
+	buffers->count = queue2_get_nonblocking_multi(&api->mgr.available, (char*) buffers->bufs, BATCHSIZE);
+}
+
 // Retrieves a batch of up to BATCHSIZE buffers from the complete queue.
 // Returns between 0 and BATCHSIZE buffers
 void hindsight_agentapi_get_complete_nonblocking(HindsightAgentAPI* api, CompleteBuffers* buffers) {

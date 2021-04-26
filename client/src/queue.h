@@ -64,6 +64,8 @@ Queue2 queue2_init(const char* fname, size_t element_size, size_t capacity);
 // Blocks until the file exists
 Queue2 queue2_init_existing(const char* fname);
 
+void queue2_print(Queue2* q);
+
 void queue2_put_blocking(Queue2* q, char* element);
 void queue2_put_blocking_multi(Queue2* q, char* elements, size_t num_elements);
 bool queue2_put_nonblocking(Queue2* q, char* element);

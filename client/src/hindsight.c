@@ -96,7 +96,11 @@ void hindsight_init(const char* service_name) {
 	strcpy(config_fname, "/etc/hindsight_conf/");
 	strcat(config_fname, service_name);
 	strcat(config_fname, ".conf");
-	hindsight.config = hindsight_load_config(config_fname);
+	hindsight_init_with_config(service_name, hindsight_load_config(config_fname));
+}
+
+void hindsight_init_with_config(const char* service_name, HindsightConfig config) {
+	hindsight.config = config;
 	hindsight_print_config(&hindsight.config);
 
 	// Create pools and queues

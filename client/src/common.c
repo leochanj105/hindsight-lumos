@@ -6,6 +6,7 @@
 #include <assert.h>
 #include <unistd.h>
 #include <sys/stat.h>
+#include <time.h>
 
 char* get_shm_fname(char* dst1, char* dst2) {
 	char* name = malloc(sizeof(char)*64);
@@ -15,4 +16,11 @@ char* get_shm_fname(char* dst1, char* dst2) {
 	strcat(name, "__");
 	strcat(name, dst2);
 	return name;
+}
+
+uint64_t nanos() {
+	struct timespec t;
+	clock_gettime(CLOCK_MONOTONIC_RAW, &t);
+	uint64_t nanos = t.tv_sec * 1000000000UL + t.tv_nsec;
+	return nanos;
 }
