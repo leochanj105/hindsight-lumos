@@ -16,7 +16,7 @@ STATIC_LDFLAGS = -fPIC
 LDFLAGS = $(STATIC_LDFLAGS) -shared
 LIBRARY = $(LIBDIR)/libtracer.so
 STATIC_LIBRARY = $(LIBDIR)/libtracer.a
-SRCFILES = $(SRCDIR)/tracer.c $(SRCDIR)/queue.c $(SRCDIR)/buffer.c $(SRCDIR)/tracestate.c $(SRCDIR)/trigger.c $(SRCDIR)/breadcrumb.c $(SRCDIR)/hindsight.c $(SRCDIR)/agentapi.c
+SRCFILES = $(SRCDIR)/tracer.c $(SRCDIR)/queue.c $(SRCDIR)/buffer.c $(SRCDIR)/tracestate.c $(SRCDIR)/trigger.c $(SRCDIR)/breadcrumb.c $(SRCDIR)/hindsight.c $(SRCDIR)/agentapi.c $(SRCDIR)/common.c
 
 DEPFILES := $(SRCFILES:%.c=$(DEPDIR)/%.d)
 DEPFLAGS = -MT $@ -MMD -MP -MF $(DEPDIR)/$*.d

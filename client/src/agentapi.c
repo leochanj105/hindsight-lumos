@@ -1,5 +1,6 @@
 #include "agentapi.h"
 
+#include <assert.h>
 
 HindsightAgentAPI* hindsight_agentapi_init(const char* servicename) {
 	HindsightAgentAPI* api = malloc(sizeof(HindsightAgentAPI));
@@ -7,4 +8,19 @@ HindsightAgentAPI* hindsight_agentapi_init(const char* servicename) {
 	api->triggers = triggers_init_existing(servicename);
 	api->breadcrumbs = breadcrumbs_init_existing(servicename);
 	return api;
+}
+
+// Return a batch of `buffers->count` (<BATCHSIZE) buffers to the available queue.
+// Blocks until all buffers can be returned to the queue.
+void hindsight_agentapi_put_available_blocking(HindsightAgentAPI* api, AvailableBuffers* buffers) {
+	assert(buffers->count <= BATCHSIZE);
+	assert(buffers->count > 0);
+
+	queue2_put_blocking_multi(&api->mgr.available, (char*) buffers->bufs, buffers->count);
+}
+
+// Retrieves a batch of up to BATCHSIZE buffers from the complete queue.
+// Returns between 0 and BATCHSIZE buffers
+void hindsight_agentapi_get_complete_nonblocking(HindsightAgentAPI* api, CompleteBuffers* buffers) {
+	buffers->count = queue2_get_nonblocking_multi(&api->mgr.complete, (char*) buffers->bufs, BATCHSIZE);
 }

@@ -19,7 +19,7 @@ void hindsight_print_config(HindsightConfig* conf) {
 HindsightConfig hindsight_load_config(const char* fname) {
 	// Initialize config with defaults
 	HindsightConfig conf;
-	conf.pool_capacity = -1;
+	conf.pool_capacity = -1; // size_t doesn't have negatives but we won't use comparisons
 	conf.buffer_size = -1;
 	conf.breadcrumbs_capacity = -1;
 	conf.triggers_capacity = -1;
@@ -82,10 +82,10 @@ HindsightConfig hindsight_load_config(const char* fname) {
 
 	if (line) free(line);
 
-	if (conf.pool_capacity < 0) conf.pool_capacity = 1;
-	if (conf.buffer_size < 0) conf.buffer_size = 1;
-	if (conf.breadcrumbs_capacity < 0) conf.breadcrumbs_capacity = conf.pool_capacity;
-	if (conf.triggers_capacity < 0) conf.triggers_capacity = conf.pool_capacity;
+	if (conf.pool_capacity == -1) conf.pool_capacity = 1;
+	if (conf.buffer_size == -1) conf.buffer_size = 1;
+	if (conf.breadcrumbs_capacity == -1) conf.breadcrumbs_capacity = conf.pool_capacity;
+	if (conf.triggers_capacity == -1) conf.triggers_capacity = conf.pool_capacity;
 
 	return conf;
 }

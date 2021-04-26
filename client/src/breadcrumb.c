@@ -5,26 +5,21 @@
 #include <string.h>
 
 #include "breadcrumb.h"
+#include "common.h"
 
-char* breadcrumbs_get_fname(char* dst1, char* dst2) {
-    char* name = malloc(sizeof(char)*64);
-    memset(name, 0, sizeof(char)*64);
-    strcpy(name, dst1);
-    strcat(name, dst2);
-    return name;
-}
+#define BREADCRUMBS_SHM_FILENAME(name) get_shm_fname(name, "breadcrumbs_queue")
 
 Breadcrumbs breadcrumbs_init(const char* name, size_t capacity) {
     Breadcrumbs b;
     b.name = name;
-    b.queue = queue2_init(breadcrumbs_get_fname("/dev/shm/breadcrumbs_queue_", name), sizeof(Breadcrumb), capacity);
+    b.queue = queue2_init(BREADCRUMBS_SHM_FILENAME(name), sizeof(Breadcrumb), capacity);
     return b;
 }
 
 Breadcrumbs breadcrumbs_init_existing(const char* name) {
     Breadcrumbs b;
     b.name = name;
-    b.queue = queue2_init_existing(breadcrumbs_get_fname("/dev/shm/breadcrumbs_queue_", name));
+    b.queue = queue2_init_existing(BREADCRUMBS_SHM_FILENAME(name));
     return b;
 }
 

@@ -5,26 +5,21 @@
 #include <string.h>
 
 #include "trigger.h"
+#include "common.h"
 
-char* triggers_get_fname(char* dst1, char* dst2) {
-    char* name = malloc(sizeof(char)*64);
-    memset(name, 0, sizeof(char)*64);
-    strcpy(name, dst1);
-    strcat(name, dst2);
-    return name;
-}
+#define TRIGGERS_SHM_FILENAME(name) get_shm_fname(name, "triggers_queue")
 
 Triggers triggers_init(const char* name, size_t capacity) {
     Triggers t;
     t.name = name;
-    t.queue = queue2_init(triggers_get_fname("/dev/shm/triggers_queue_", name), sizeof(Trigger), capacity);
+    t.queue = queue2_init(TRIGGERS_SHM_FILENAME(name), sizeof(Trigger), capacity);
     return t;
 }
 
 Triggers triggers_init_existing(const char* name) {
     Triggers t;
     t.name = name;
-    t.queue = queue2_init_existing(triggers_get_fname("/dev/shm/triggers_queue_", name));
+    t.queue = queue2_init_existing(TRIGGERS_SHM_FILENAME(name));
     return t;
 }
 

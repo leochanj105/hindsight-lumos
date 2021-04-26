@@ -17,6 +17,8 @@ void drain_forever() {
 
 	printf("Inited existing bufmanager\n");
 
+	printf("Making %ld buffers available", api->mgr.meta->capacity);
+
 	while (true)
 		usleep(1000000);
 }

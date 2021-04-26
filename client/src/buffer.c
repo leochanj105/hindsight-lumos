@@ -1,5 +1,4 @@
 #include <stdio.h>
-#include "buffer.h"
 
 #include <fcntl.h>
 #include <sys/mman.h>
@@ -7,15 +6,12 @@
 #include <unistd.h>
 #include <sys/stat.h>
 
-char* bufmanager_get_fname(char* dst1, char* dst2) {
-	char* name = malloc(sizeof(char)*64);
-	memset(name, 0, sizeof(char)*64);
-	strcpy(name, "/dev/shm/");
-	strcat(name, dst1);
-	strcat(name, "__");
-	strcat(name, dst2);
-	return name;
-}
+#include "buffer.h"
+#include "common.h"
+
+#define POOL_SHM_FILENAME(name) get_shm_fname(name, "pool")
+#define AVAILABLE_SHM_FILENAME(name) get_shm_fname(name, "available_queue")
+#define COMPLETE_SHM_FILENAME(name) get_shm_fname(name, "complete_queue")
 
 char* bufmanager_pool_init(const char* fname, size_t fsize) {
 	void* shm;
@@ -66,7 +62,7 @@ BufManager bufmanager_init(const char* name,
     BufManager m;
     m.name = name;
 
-    const char* fname = bufmanager_get_fname(name, "pool");
+    const char* fname = POOL_SHM_FILENAME(name);
     size_t pool_size = sizeof(PoolMetadata) + capacity * buffer_size;
     m.baseptr = bufmanager_pool_init(fname, pool_size);
     m.meta = (PoolMetadata*) m.baseptr;
@@ -80,8 +76,8 @@ BufManager bufmanager_init(const char* name,
     printf("buffer_size=%ld ", m.meta->buffer_size);
     printf("at %s\n", fname);
 
-    m.available = queue2_init(bufmanager_get_fname(name, "available_queue"), sizeof(AvailableBuffer), capacity);
-    m.complete = queue2_init(bufmanager_get_fname(name, "complete_queue"), sizeof(CompleteBuffer), capacity);
+    m.available = queue2_init(AVAILABLE_SHM_FILENAME(name), sizeof(AvailableBuffer), capacity);
+    m.complete = queue2_init(COMPLETE_SHM_FILENAME(name), sizeof(CompleteBuffer), capacity);
 
     m.null_buffer = (char*) malloc(m.meta->buffer_size);
     return m;
@@ -91,7 +87,7 @@ BufManager bufmanager_init_existing(const char* name) {
     BufManager m;
     m.name = name;
 
-    const char* fname = bufmanager_get_fname(name, "pool");
+    const char* fname = POOL_SHM_FILENAME(name);
     m.baseptr = bufmanager_pool_init_existing(fname);
     m.meta = (PoolMetadata*) m.baseptr;
     m.pool = m.baseptr + sizeof(PoolMetadata);
@@ -106,8 +102,8 @@ BufManager bufmanager_init_existing(const char* name) {
     printf("buffer_size=%ld ", m.meta->buffer_size);
     printf("at %s\n", fname);
 
-    m.available = queue2_init_existing(bufmanager_get_fname(name, "available_queue"));
-    m.complete = queue2_init_existing(bufmanager_get_fname(name, "complete_queue"));
+    m.available = queue2_init_existing(AVAILABLE_SHM_FILENAME(name));
+    m.complete = queue2_init_existing(COMPLETE_SHM_FILENAME(name));
 
     assert(m.available.meta->element_size == sizeof(AvailableBuffer));
     assert(m.complete.meta->element_size == sizeof(CompleteBuffer));
