@@ -62,3 +62,4 @@ install:
 
 clean:
 	rm -rf $(TARGET)
+	rm -rf $(SRCDIR)/*.o
