@@ -100,11 +100,9 @@ CompleteBuffers await_complete(HindsightAgentAPI* api) {
 
 	int max_backoff = 100000; // 100ms
 	int backoff = 10;
-	int i = 0;
 
 	while (true) {
 		hindsight_agentapi_get_complete_nonblocking(api, &complete);
-		// printf("%d: Got %ld, sleep is %d\n", i++, complete.count, backoff);
 		if (complete.count > 0) {
 			return complete;
 		}

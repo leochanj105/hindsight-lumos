@@ -1,117 +1,165 @@
 package main
 
+// IMPORTANT: for the below to work, must do:
+//   export CGO_LDFLAGS_ALLOW=".*"
+
 /*
-#include <stdlib.h>
-#include <stdint.h>
-#include <stdbool.h>
-#include <stdio.h>
-#include <string.h>
-#include <unistd.h>
-#include <sys/mman.h>
-#include <sys/stat.h>
-#include <fcntl.h>
-#include <assert.h>
-#include <sched.h>
-typedef struct QueueMetadata {
-	bool initialized; // Set to true once everything is set up
-	size_t capacity; // Capacity in number of elements
-	size_t element_metadata_size; // Size of element metadata
-	size_t element_size; // Size of one element content
-	size_t element_total_size; // metadata + content
-	__attribute__((aligned(64))) size_t head; // Index (not ptr) of the head of the queue
-	__attribute__((aligned(64))) size_t tail; // Index (not ptr) of the tail of the queue
-} QueueMetadata;
+#cgo CFLAGS: -I../client/src
+#cgo LDFLAGS: ../client/lib/libtracer.a
 
-// Metadata at the start of each queue element
-typedef struct QueueElementMetadata {
-	int status; // 0=empty, 1=writing, 2=full, 3=reading
-} QueueElementMetadata;
+#include "agentapi.h"
 
-typedef struct Queue2 {
-	// shmem pointers:
-	QueueMetadata* meta; // Metadata of the queue, **within** the shmem region
-	char* baseptr; // Baseptr of the shmem region
-	char* queue; // Baseptr of the queue region, comes after the metadata
-} Queue2;
 
-Queue2 queue2_init_existing(const char* fname)  {
-	Queue2 q;
-
-	// Wait until the file exists
-	while (access(fname, F_OK) != 0) {
-		printf("%s does not exist, waiting...\n", fname);
-		usleep(1000000);
-	}
-	
-	// Open the file, get its length
-	int fd = open(fname, O_RDWR, 0666);
-	assert(fd >= 0);
-
-	struct stat st;
-	fstat(fd, &st);
-	size_t shmem_size = st.st_size;
-
-	void* shm = mmap(NULL, shmem_size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
-	assert(shm != MAP_FAILED);	
-	close(fd);
-
-	q.meta = (QueueMetadata*) shm;
-	q.baseptr = (char*) shm;
-	q.queue = q.baseptr + sizeof(QueueMetadata);
-
-    while (!q.meta->initialized) {
-    	printf("Waiting for initialization of %s...\n", fname);
-    	usleep(1000000);
-    }
-
-    printf("Loaded existing queue ");
-    printf("capacity=%ld ", q.meta->capacity);
-    printf("element_size=%ld ", q.meta->element_size);
-    printf("element_total_size=%ld ", q.meta->element_total_size);
-    printf("at %s\n", fname);
-
-	return q;
-
-}
 */
 import "C"
 
 import (
 	"fmt"
-	"os"
-	"syscall"
+	"time"
+	// "os"
+	// "syscall"
 )
 
+func reset_available_buffers(api *C.HindsightAgentAPI) {
+	davailable := 0
+	for {
+		var ab C.AvailableBuffers
+		C.hindsight_agentapi_get_available_nonblocking(api, &ab)
+
+		if (ab.count == 0) {
+			break
+		}
+
+		davailable += int(ab.count)
+	}
+
+	dcomplete := 0
+	for {
+		var cb C.CompleteBuffers
+		C.hindsight_agentapi_get_complete_nonblocking(api, &cb)
+
+		if (cb.count == 0) {
+			break
+		}
+
+		dcomplete += int(cb.count)
+	}
+
+	fmt.Println("Resetting buffers: drained", davailable, "available and", dcomplete, "complete")
+}
+
+func make_all_buffers_available(api *C.HindsightAgentAPI) {
+	fmt.Println("Initialize buffers: making", api.mgr.meta.capacity, "buffers available...")
+
+	next_buffer_id := 0
+	remaining := api.mgr.meta.capacity
+	for (remaining > 0) {
+		var av C.AvailableBuffers
+		av.count = 100
+		if (av.count > remaining) {
+			av.count = remaining
+		}
+		remaining -= av.count
+
+		for i:= 0; i < 100; i++ {
+			av.bufs[i].buffer_id = C.int(next_buffer_id)
+			next_buffer_id++
+		}
+
+		C.hindsight_agentapi_put_available_blocking(api, &av);
+	}
+
+	fmt.Println("Initialize buffers: done")
+	fmt.Println("Queue states:")
+	fmt.Print("  Available ")
+	C.queue2_print(&api.mgr.available)
+	fmt.Print("  Complete ")
+	C.queue2_print(&api.mgr.complete)
+}
+
+func init_agentapi(fname string) *C.HindsightAgentAPI {
+	agentapi := C.hindsight_agentapi_init(C.CString(fname))
+	fmt.Println("Inited existing bufmanager", fname)
+	reset_available_buffers(agentapi)
+	make_all_buffers_available(agentapi);
+	return agentapi
+}
 
 
+func drain_forever(api *C.HindsightAgentAPI) {
+	last_print := int(time.Now().UnixNano())
+	print_every := 1000000000
+	count := 0
+
+	var cb C.CompleteBuffers
+	for {
+		now := int(time.Now().UnixNano())
+		if ((now - last_print) > print_every) {
+			tput := (count * print_every) / (now - last_print)
+			fmt.Println("Throughput:", tput)
+			last_print = now
+			count = 0
+		}
+
+		max_backoff := 100000
+		backoff := int(10)
+		for {
+			C.hindsight_agentapi_get_complete_nonblocking(api, &cb)
+			if (int(cb.count) > 0) {
+				break
+			}
+
+			time.Sleep(time.Duration(backoff) * time.Nanosecond)
+			backoff *= 2
+			if (backoff > max_backoff) {
+				backoff = max_backoff
+			}
+		}
+
+		count += int(cb.count)
+
+		var ab C.AvailableBuffers
+		ab.count = cb.count
+
+		limit := int(cb.count)
+		for i := 1; i < limit; i++ {
+			ab.bufs[i].buffer_id = cb.bufs[i].buffer_id
+		}
+
+		C.hindsight_agentapi_put_available_blocking(api, &ab)
+	}
+}
 
 func main() {
 	fmt.Println("Hello world!")
 
-	fname := "/dev/shm/available_queue_test_tracestate"
+	fname := "hs_integration_test"
 
-	f, err := os.OpenFile(fname, os.O_RDWR|os.O_CREATE, 0666)
-	if err != nil {
-		fmt.Println("open file failed:", err)
-	}
-	fd := int(f.Fd())
-	fmt.Println("opened ", fd)
+	// f, err := os.OpenFile(fname, os.O_RDWR|os.O_CREATE, 0666)
+	// if err != nil {
+	// 	fmt.Println("open file failed:", err)
+	// }
+	// fd := int(f.Fd())
+	// fmt.Println("opened ", fd)
 
-	fi, err := f.Stat()
-	if err != nil {
-		fmt.Println("stat failed:",err)
-	}
-	fmt.Println("size is ", fi.Size())
+	// fi, err := f.Stat()
+	// if err != nil {
+	// 	fmt.Println("stat failed:",err)
+	// }
+	// fmt.Println("size is ", fi.Size())
 
-	p, err := syscall.Mmap(fd, 0, int(fi.Size()), syscall.PROT_READ|syscall.PROT_WRITE, syscall.MAP_SHARED)
+	// p, err := syscall.Mmap(fd, 0, int(fi.Size()), syscall.PROT_READ|syscall.PROT_WRITE, syscall.MAP_SHARED)
 
-	fmt.Printf("%T\n", p)
+	// fmt.Printf("%T\n", p)
 
-	q := C.queue2_init_existing(C.CString(fname))
+	agentapi := init_agentapi(fname)
+	drain_forever(agentapi)
 
-	fmt.Println(q)
 
-	fmt.Println(q.meta)
+
+	// fmt.Println(q)
+
+	// fmt.Println(q.meta)
 
 	// md := C.QueueMetadata(p)
 }
