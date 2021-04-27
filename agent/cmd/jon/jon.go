@@ -16,8 +16,6 @@ import "C"
 import (
 	"fmt"
 	"time"
-	// "os"
-	// "syscall"
 )
 
 func reset_available_buffers(api *C.HindsightAgentAPI) {

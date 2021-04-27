@@ -5,7 +5,7 @@ import (
 	"os"
 	"syscall"
 
-	. "util"
+	. "github.com/geraldleizhang/hindsight/agent/pkg/util"
 )
 
 const (

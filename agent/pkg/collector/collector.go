@@ -7,8 +7,8 @@ import (
 	"sync"
 	"time"
 
-	. "datapb"
-	. "util"
+	. "github.com/geraldleizhang/hindsight/agent/pkg/datapb"
+	. "github.com/geraldleizhang/hindsight/agent/pkg/util"
 
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"

@@ -9,12 +9,12 @@ import (
 	"strings"
 	"sync"
 
-	. "cache"
-	. "collector"
-	. "memory"
-	. "queue"
-	. "server"
-	. "util"
+	. "github.com/geraldleizhang/hindsight/agent/pkg/cache"
+	. "github.com/geraldleizhang/hindsight/agent/pkg/collector"
+	. "github.com/geraldleizhang/hindsight/agent/pkg/memory"
+	. "github.com/geraldleizhang/hindsight/agent/pkg/queue"
+	. "github.com/geraldleizhang/hindsight/agent/pkg/server"
+	. "github.com/geraldleizhang/hindsight/agent/pkg/util"
 )
 
 var service_name string

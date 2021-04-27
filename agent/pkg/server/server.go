@@ -6,11 +6,11 @@ import (
 	"net"
 	"time"
 
-	. "cache"
-	. "datapb"
-	. "memory"
-	. "queue"
-	. "util"
+	. "github.com/geraldleizhang/hindsight/agent/pkg/cache"
+	. "github.com/geraldleizhang/hindsight/agent/pkg/datapb"
+	. "github.com/geraldleizhang/hindsight/agent/pkg/memory"
+	. "github.com/geraldleizhang/hindsight/agent/pkg/queue"
+	. "github.com/geraldleizhang/hindsight/agent/pkg/util"
 
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"

@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"sync"
 
-	. "queue"
+	. "github.com/geraldleizhang/hindsight/agent/pkg/queue"
 )
 
 type Node struct {

@@ -3,7 +3,7 @@ package memory
 import (
 	"testing"
 
-	. "util"
+	. "github.com/geraldleizhang/hindsight/agent/pkg/util"
 )
 
 func TestDataReading(t *testing.T) {
