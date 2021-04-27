@@ -38,6 +38,16 @@ typedef struct CompleteBuffers {
     CompleteBuffer bufs[BATCHSIZE]; // hard-coded to BATCHSIZE for ease of use with go
 } CompleteBuffers;
 
+typedef struct TriggerBatch {
+	size_t count; // will return up to BATCHSIZE triggers at a time
+	Trigger triggers[BATCHSIZE];
+} TriggerBatch;
+
+typedef struct BreadcrumbBatch {
+	size_t count; // will return up to BATCHSIZE breadcrumbs at a time
+	Breadcrumb breadcrumbs[BATCHSIZE];
+} BreadcrumbBatch;
+
 // Return a batch of `buffers->count` (<BATCHSIZE) buffers to the available queue.
 // Blocks until all buffers can be returned to the queue.
 void hindsight_agentapi_put_available_blocking(HindsightAgentAPI* api, AvailableBuffers* buffers);
@@ -48,7 +58,8 @@ void hindsight_agentapi_get_available_nonblocking(HindsightAgentAPI* api, Availa
 // Returns between 0 and BATCHSIZE buffers
 void hindsight_agentapi_get_complete_nonblocking(HindsightAgentAPI* api, CompleteBuffers* buffers);
 
-
+void hindsight_agentapi_get_triggers_nonblocking(HindsightAgentAPI* api, TriggerBatch* triggers);
+void hindsight_agentapi_get_breadcrumbs_nonblocking(HindsightAgentAPI* api, BreadcrumbBatch* breadcrumbs);
 
 
 #endif // _HINDSIGHT_CLIENT_AGENTAPI_H_

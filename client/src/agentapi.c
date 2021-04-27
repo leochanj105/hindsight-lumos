@@ -28,3 +28,11 @@ void hindsight_agentapi_get_available_nonblocking(HindsightAgentAPI* api, Availa
 void hindsight_agentapi_get_complete_nonblocking(HindsightAgentAPI* api, CompleteBuffers* buffers) {
     buffers->count = queue_get_nonblocking_multi(&api->mgr.complete, (char*) buffers->bufs, BATCHSIZE);
 }
+
+void hindsight_agentapi_get_triggers_nonblocking(HindsightAgentAPI* api, TriggerBatch* triggers) {
+    triggers->count = queue_get_nonblocking_multi(&api->triggers, (char*) triggers->triggers, BATCHSIZE);
+}
+
+void hindsight_agentapi_get_breadcrumbs_nonblocking(HindsightAgentAPI* api, BreadcrumbBatch* breadcrumbs) {
+    breadcrumbs->count = queue_get_nonblocking_multi(&api->breadcrumbs, (char*) breadcrumbs->breadcrumbs, BATCHSIZE);
+}
