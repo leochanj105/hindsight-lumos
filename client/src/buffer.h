@@ -41,9 +41,9 @@ typedef struct BufManager {
 // Points to a buffer allocated in shared memory
 // Includes some metadata not stored in shared memory
 typedef struct Buffer {
-	int id; // Equivalent to the index of this buffer in the buffer pool
-	size_t remaining; // Space remaining in the underlying buffer
-	char* ptr; // Pointer to next available byte in buffer
+    int id; // Equivalent to the index of this buffer in the buffer pool
+    size_t remaining; // Space remaining in the underlying buffer
+    char* ptr; // Pointer to next available byte in buffer
 } Buffer;
 
 // This struct is read from the available queue

@@ -17,9 +17,9 @@ to Hindsight's shared-memory bits.  It's barebones --
 all it provides is an API to read data and queues.
 */
 typedef struct HindsightAgentAPI {
-	BufManager mgr;
-	Triggers triggers;
-	Breadcrumbs breadcrumbs;
+    BufManager mgr;
+    Triggers triggers;
+    Breadcrumbs breadcrumbs;
 } HindsightAgentAPI;
 
 // Initialize the agent API for a service.
@@ -29,13 +29,13 @@ typedef struct HindsightAgentAPI {
 HindsightAgentAPI* hindsight_agentapi_init(const char* servicename);
 
 typedef struct AvailableBuffers {
-	size_t count; // up to BATCHSIZE allowed at a time
-	AvailableBuffer bufs[BATCHSIZE]; // hard-coded to BATCHSIZE for ease of use with go
+    size_t count; // up to BATCHSIZE allowed at a time
+    AvailableBuffer bufs[BATCHSIZE]; // hard-coded to BATCHSIZE for ease of use with go
 } AvailableBuffers;
 
 typedef struct CompleteBuffers {
-	size_t count; // will return up to BATCHSIZE at a time
-	CompleteBuffer bufs[BATCHSIZE]; // hard-coded to BATCHSIZE for ease of use with go
+    size_t count; // will return up to BATCHSIZE at a time
+    CompleteBuffer bufs[BATCHSIZE]; // hard-coded to BATCHSIZE for ease of use with go
 } CompleteBuffers;
 
 // Return a batch of `buffers->count` (<BATCHSIZE) buffers to the available queue.

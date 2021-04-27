@@ -26,19 +26,19 @@ trace states, then you can create and use instances directly.
 */
 
 typedef struct HindsightConfig {
-	size_t pool_capacity;
-	size_t buffer_size;
-	size_t breadcrumbs_capacity;
-	size_t triggers_capacity;
-	char* address;
-	char* port;
+    size_t pool_capacity;
+    size_t buffer_size;
+    size_t breadcrumbs_capacity;
+    size_t triggers_capacity;
+    char* address;
+    char* port;
 } HindsightConfig;
 
 typedef struct Hindsight {
-	HindsightConfig config;
-	BufManager mgr;
-	Breadcrumbs breadcrumbs;
-	Triggers triggers;
+    HindsightConfig config;
+    BufManager mgr;
+    Breadcrumbs breadcrumbs;
+    Triggers triggers;
 } Hindsight;
 
 // Single global instance of Hindsight state

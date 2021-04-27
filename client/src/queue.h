@@ -7,25 +7,25 @@
 
 // Metadata at the start of the shared memory region of the queue
 typedef struct QueueMetadata {
-	bool initialized; // Set to true once everything is set up
-	size_t capacity; // Capacity in number of elements
-	size_t element_metadata_size; // Size of element metadata
-	size_t element_size; // Size of one element content
-	size_t element_total_size; // metadata + content
-	__attribute__((aligned(64))) size_t head; // Index (not ptr) of the head of the queue
-	__attribute__((aligned(64))) size_t tail; // Index (not ptr) of the tail of the queue
+    bool initialized; // Set to true once everything is set up
+    size_t capacity; // Capacity in number of elements
+    size_t element_metadata_size; // Size of element metadata
+    size_t element_size; // Size of one element content
+    size_t element_total_size; // metadata + content
+    __attribute__((aligned(64))) size_t head; // Index (not ptr) of the head of the queue
+    __attribute__((aligned(64))) size_t tail; // Index (not ptr) of the tail of the queue
 } QueueMetadata;
 
 // Metadata at the start of each queue element
 typedef struct QueueElementMetadata {
-	int status; // 0=empty, 1=writing, 2=full, 3=reading
+    int status; // 0=empty, 1=writing, 2=full, 3=reading
 } QueueElementMetadata;
 
 typedef struct Queue {
-	// shmem pointers:
-	QueueMetadata* meta; // Metadata of the queue, **within** the shmem region
-	char* baseptr; // Baseptr of the shmem region
-	char* queue; // Baseptr of the queue region, comes after the metadata
+    // shmem pointers:
+    QueueMetadata* meta; // Metadata of the queue, **within** the shmem region
+    char* baseptr; // Baseptr of the shmem region
+    char* queue; // Baseptr of the queue region, comes after the metadata
 } Queue;
 
 // Return true if a shmem queue exists for the specified name

@@ -7,16 +7,16 @@
 #include <time.h>
 #include <x86intrin.h>
 
-#define TRACEINIT(x) 		trace_init(x)
+#define TRACEINIT(x)        trace_init(x)
 
-#define TRACEBEGIN(x) 	trace_begin(x,0,0)
-#define TRACEEND()  		trace_end()
-#define TRACEPOINT(x,y) 	tracepoint(x,y)
-#define TRIGGER(x) 			trigger(x)
-#define TRACEBREADCRUMB(x) 	trace_add_breadcrumb(x)
+#define TRACEBEGIN(x)   trace_begin(x,0,0)
+#define TRACEEND()          trace_end()
+#define TRACEPOINT(x,y)     tracepoint(x,y)
+#define TRIGGER(x)          trigger(x)
+#define TRACEBREADCRUMB(x)  trace_add_breadcrumb(x)
 
-#define SERIALIZE() 		serialize()
-#define DESERIALIZE() 		deserialize()
+#define SERIALIZE()         serialize()
+#define DESERIALIZE()       deserialize()
 
 
 typedef const char* AgentAddress;

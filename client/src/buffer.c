@@ -14,46 +14,46 @@
 #define COMPLETE_SHM_FILENAME(name) get_shm_fname(name, "complete_queue")
 
 char* bufmanager_pool_init(const char* fname, size_t fsize) {
-	void* shm;
-	
-	int fd = open(fname, O_RDWR | O_CREAT, 0666);
-	assert(fd >= 0);
+    void* shm;
+    
+    int fd = open(fname, O_RDWR | O_CREAT, 0666);
+    assert(fd >= 0);
 
-	int i = ftruncate(fd, fsize);
-	assert(i == 0);
+    int i = ftruncate(fd, fsize);
+    assert(i == 0);
 
-	shm = mmap(NULL, fsize, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
-	assert(shm != MAP_FAILED);
-	close(fd);
+    shm = mmap(NULL, fsize, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+    assert(shm != MAP_FAILED);
+    close(fd);
 
-	memset(shm, 0, fsize);
+    memset(shm, 0, fsize);
 
-	return (char*) shm;
+    return (char*) shm;
 }
 
 char* bufmanager_pool_init_existing(const char* fname) {
-	void* shm;
+    void* shm;
 
-	// Wait until the file exists
-	while (access(fname, F_OK) != 0) {
-		printf("%s does not exist, waiting...\n", fname);
-		usleep(1000000);
-	}
-	
-	// Open the file, get its length
-	int fd = open(fname, O_RDWR, 0666);
-	assert(fd >= 0);
+    // Wait until the file exists
+    while (access(fname, F_OK) != 0) {
+        printf("%s does not exist, waiting...\n", fname);
+        usleep(1000000);
+    }
+    
+    // Open the file, get its length
+    int fd = open(fname, O_RDWR, 0666);
+    assert(fd >= 0);
 
-	struct stat st;
-	fstat(fd, &st);
-	size_t fsize = st.st_size;
+    struct stat st;
+    fstat(fd, &st);
+    size_t fsize = st.st_size;
 
-	// Map it
-	shm = mmap(NULL, fsize, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
-	assert(shm != MAP_FAILED);
-	close(fd);
+    // Map it
+    shm = mmap(NULL, fsize, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+    assert(shm != MAP_FAILED);
+    close(fd);
 
-	return (char*) shm;
+    return (char*) shm;
 }
 
 BufManager bufmanager_init(const char* name,
@@ -105,8 +105,8 @@ BufManager bufmanager_init_existing(const char* name) {
     m.pool = m.baseptr + sizeof(PoolMetadata);
 
     while (!m.meta->initialized) {
-    	printf("Waiting for pool initialization...\n");
-    	usleep(1000000);
+        printf("Waiting for pool initialization...\n");
+        usleep(1000000);
     }
 
     printf("Loaded existing buffer pool, ");
@@ -121,7 +121,7 @@ BufManager bufmanager_init_existing(const char* name) {
     assert(m.complete.meta->element_size == sizeof(CompleteBuffer));
 
     m.null_buffer = (char*) malloc(m.meta->buffer_size);
-    return m;	
+    return m;   
 }
 
 void bufmanager_acquire(BufManager* mgr, Buffer* dst) {
@@ -130,68 +130,68 @@ void bufmanager_acquire(BufManager* mgr, Buffer* dst) {
 
     AvailableBuffer av = {-1};
     if (queue_get_nonblocking(&mgr->available, (char*) &av)) {
-    	dst->id = av.buffer_id;
-    	dst->remaining = mgr->meta->buffer_size;
+        dst->id = av.buffer_id;
+        dst->remaining = mgr->meta->buffer_size;
         dst->ptr = mgr->pool + (av.buffer_id * mgr->meta->buffer_size);
 
-    	// TODO: allow to #define away
-    	__sync_fetch_and_add(&mgr->stats.pool_acquired, 1);
+        // TODO: allow to #define away
+        __sync_fetch_and_add(&mgr->stats.pool_acquired, 1);
     } else {
-    	dst->id = -2;
-    	dst->remaining = mgr->meta->buffer_size;
-    	dst->ptr = mgr->null_buffer;
+        dst->id = -2;
+        dst->remaining = mgr->meta->buffer_size;
+        dst->ptr = mgr->null_buffer;
 
-    	// TODO: allow to #define away
-    	__sync_fetch_and_add(&mgr->stats.null_acquired, 1);
+        // TODO: allow to #define away
+        __sync_fetch_and_add(&mgr->stats.null_acquired, 1);
     }
 }
 
 void bufmanager_return(BufManager* mgr, uint64_t trace_id, Buffer* dst) {
-	// No asserts; allowed to return an invalid buffer
-	if (dst->id >= 0) {
-		CompleteBuffer b = {trace_id, dst->id};
-		queue_put_blocking(&mgr->complete, (char*) &b);
+    // No asserts; allowed to return an invalid buffer
+    if (dst->id >= 0) {
+        CompleteBuffer b = {trace_id, dst->id};
+        queue_put_blocking(&mgr->complete, (char*) &b);
 
-    	// TODO: allow to #define away
-    	__sync_fetch_and_add(&mgr->stats.pool_released, 1);
-	} else if (dst->id == -2) {
-    	// TODO: allow to #define away
-    	__sync_fetch_and_add(&mgr->stats.null_released, 1);
-	}
-	buffer_clear(dst);
+        // TODO: allow to #define away
+        __sync_fetch_and_add(&mgr->stats.pool_released, 1);
+    } else if (dst->id == -2) {
+        // TODO: allow to #define away
+        __sync_fetch_and_add(&mgr->stats.null_released, 1);
+    }
+    buffer_clear(dst);
 }
 
 
 Buffer buffer_create() {
-	Buffer b;
-	buffer_clear(&b);
-	return b;
+    Buffer b;
+    buffer_clear(&b);
+    return b;
 }
 
 void buffer_clear(Buffer* b) {
-	b->id = -1;
-	b->ptr = 0;
-	b->remaining = 0;
+    b->id = -1;
+    b->ptr = 0;
+    b->remaining = 0;
 }
 
 bool buffer_is_full(Buffer* b) {
-	return b->remaining == 0;
+    return b->remaining == 0;
 }
 
 bool buffer_remaining(Buffer* b) {
-	return b->remaining;
+    return b->remaining;
 }
 
 bool buffer_is_valid(Buffer* b) {
-	return b->id >= 0;
+    return b->id >= 0;
 }
 
 void buffer_write(Buffer* b, size_t size, char** dst, size_t* dst_size) {
-	if (b->remaining < size) size = b->remaining;
+    if (b->remaining < size) size = b->remaining;
 
-	*dst_size = size;
-	*dst = b->ptr;
+    *dst_size = size;
+    *dst = b->ptr;
 
-	b->remaining -= size;
-	b->ptr += size;
+    b->remaining -= size;
+    b->ptr += size;
 }
