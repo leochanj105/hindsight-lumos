@@ -9,6 +9,10 @@
 go get golang.org/x/net/context golang.org/x/exp/mmap google.golang.org/grpc
 ```
 * you may need to add agent dir to $GOPATH
+* allow cgo:
+```
+export CGO_LDFLAGS_ALLOW=".*"
+```
 
 ### *Testing Hindsight*
 0. Write configuration files. This is to define memory cap and buffer length, and agent/log collector addresses. Config file should be named by *[serv_name].conf* under *conf/*. Hindsight will use *default.conf* which is fine for single agent/non-report modes.
