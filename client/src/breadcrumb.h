@@ -18,7 +18,7 @@ typedef struct Breadcrumbs {
 typedef struct Breadcrumb {
     uint64_t trace_id; // The trace of this breadcrumb
     short type; // Regular (0) or Forward (1)
-    char addr[ADDR_MAX_SIZE]; // Literal addr:port string
+    char address[ADDR_MAX_SIZE]; // Literal host:port string
 } Breadcrumb;
 
 // name is used for mapping to the appropriate shmem file
@@ -28,10 +28,10 @@ Breadcrumbs breadcrumbs_init(const char* name, size_t capacity);
 Breadcrumbs breadcrumbs_init_existing(const char* name);
 
 // Add a regular (backwards) breadcrumb
-void breadcrumbs_add(Breadcrumbs* b, uint64_t trace_id, const char* addr);
+void breadcrumbs_add(Breadcrumbs* b, uint64_t trace_id, const char* address);
 
 // Add a forward breadcrumb
-void breadcrumbs_add_forward(Breadcrumbs* b, uint64_t trace_id, const char* addr);
+void breadcrumbs_add_forward(Breadcrumbs* b, uint64_t trace_id, const char* address);
 
 
 #endif // _HINDSIGHT_CLIENT_BREADCRUMB_H_

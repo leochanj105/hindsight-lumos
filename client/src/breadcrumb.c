@@ -23,19 +23,19 @@ Breadcrumbs breadcrumbs_init_existing(const char* name) {
     return b;
 }
 
-void breadcrumbs_add(Breadcrumbs* b, uint64_t trace_id, const char* addr) {
+void breadcrumbs_add(Breadcrumbs* b, uint64_t trace_id, const char* address) {
     Breadcrumb crumb;
     crumb.trace_id = trace_id;
     crumb.type = 0;
-    truncate_string(crumb.addr, addr, ADDR_MAX_SIZE);
+    truncate_string(crumb.address, address, ADDR_MAX_SIZE);
     queue_put_nonblocking(&b->queue, (char*) &crumb);
 }
 
 // Add a forward breadcrumb
-void breadcrumbs_add_forward(Breadcrumbs* b, uint64_t trace_id, const char* addr) {
+void breadcrumbs_add_forward(Breadcrumbs* b, uint64_t trace_id, const char* address) {
     Breadcrumb crumb;
     crumb.trace_id = trace_id;
     crumb.type = 1;
-    truncate_string(crumb.addr, addr, ADDR_MAX_SIZE);
+    truncate_string(crumb.address, address, ADDR_MAX_SIZE);
     queue_put_nonblocking(&b->queue, (char*) &crumb);
 }
