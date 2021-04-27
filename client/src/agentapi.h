@@ -46,6 +46,7 @@ typedef struct TriggerBatch {
 typedef struct BreadcrumbBatch {
 	size_t count; // will return up to BATCHSIZE breadcrumbs at a time
 	Breadcrumb breadcrumbs[BATCHSIZE];
+	char* breadcrumb_addrs[BATCHSIZE]; // workaround for cgo
 } BreadcrumbBatch;
 
 // Return a batch of `buffers->count` (<BATCHSIZE) buffers to the available queue.

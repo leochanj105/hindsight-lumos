@@ -35,4 +35,7 @@ void hindsight_agentapi_get_triggers_nonblocking(HindsightAgentAPI* api, Trigger
 
 void hindsight_agentapi_get_breadcrumbs_nonblocking(HindsightAgentAPI* api, BreadcrumbBatch* breadcrumbs) {
     breadcrumbs->count = queue_get_nonblocking_multi(&api->breadcrumbs, (char*) breadcrumbs->breadcrumbs, BATCHSIZE);
+    for (int i = 0; i < breadcrumbs->count; i++) {
+        breadcrumbs->breadcrumb_addrs[i] = breadcrumbs->breadcrumbs[i].address;
+    }
 }
