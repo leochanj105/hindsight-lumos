@@ -95,6 +95,10 @@ void hindsight_forward_breadcrumb(const char* addr);
 
 // Fire a trigger.  For now, only report a trigger ID
 void hindsight_trigger(int trigger_id);
+void hindsight_trigger_manual(uint64_t trace_id, int trigger_id);
+
+uint64_t hindsight_get_traceid();
+char* hindsight_get_local_address();
 
 
 #endif // _HINDSIGHT_HINDSIGHT_H_

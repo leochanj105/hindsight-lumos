@@ -146,3 +146,18 @@ void hindsight_forward_breadcrumb(const char* addr) {
 void hindsight_trigger(int trigger_id) {
 	triggers_fire(&hindsight.triggers, trigger_id, hindsight_tls.header.trace_id);
 }
+
+void hindsight_trigger_manual(uint64_t trace_id, int trigger_id) {
+	triggers_fire(&hindsight.triggers, trigger_id, trace_id);	
+}
+
+uint64_t hindsight_get_traceid() {
+	return hindsight_tls.header.trace_id;
+}
+
+char* hindsight_get_local_address() {
+	char* address = malloc(64 * sizeof(char));
+	memcpy(address, hindsight.config.address, 32);
+	memcpy(address+32, hindsight.config.port, 32);
+	return address;
+}
