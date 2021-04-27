@@ -88,15 +88,18 @@ func drain_forever(api *C.HindsightAgentAPI) {
 	last_print := int(time.Now().UnixNano())
 	print_every := 1000000000
 	count := 0
+	sum := 0
 
 	var cb C.CompleteBuffers
 	for {
 		now := int(time.Now().UnixNano())
 		if ((now - last_print) > print_every) {
-			tput := (count * print_every) / (now - last_print)
-			fmt.Println("Throughput:", tput)
+			tput := (sum * print_every) / (now - last_print)
+			batchsize := float32(sum) / float32(count)
+			fmt.Println("Throughput:", tput, "Average batch:", batchsize)
 			last_print = now
 			count = 0
+			sum = 0
 		}
 
 		max_backoff := 100000
@@ -114,7 +117,8 @@ func drain_forever(api *C.HindsightAgentAPI) {
 			}
 		}
 
-		count += int(cb.count)
+		count += 1
+		sum += int(cb.count)
 
 		var ab C.AvailableBuffers
 		ab.count = cb.count
