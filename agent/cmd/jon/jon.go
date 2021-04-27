@@ -4,8 +4,8 @@ package main
 //   export CGO_LDFLAGS_ALLOW=".*"
 
 /*
-#cgo CFLAGS: -I../client/src
-#cgo LDFLAGS: ../client/lib/libtracer.a
+#cgo CFLAGS: -I${SRCDIR}/../../../client/src
+#cgo LDFLAGS: ${SRCDIR}/../../../client/lib/libtracer.a
 
 #include "agentapi.h"
 
@@ -70,9 +70,9 @@ func make_all_buffers_available(api *C.HindsightAgentAPI) {
 	fmt.Println("Initialize buffers: done")
 	fmt.Println("Queue states:")
 	fmt.Print("  Available ")
-	C.queue2_print(&api.mgr.available)
+	C.queue_print(&api.mgr.available)
 	fmt.Print("  Complete ")
-	C.queue2_print(&api.mgr.complete)
+	C.queue_print(&api.mgr.complete)
 }
 
 func init_agentapi(fname string) *C.HindsightAgentAPI {
