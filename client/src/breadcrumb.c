@@ -23,20 +23,11 @@ Breadcrumbs breadcrumbs_init_existing(const char* name) {
     return b;
 }
 
-void _breadcrumb_set_addr(Breadcrumb* crumb, const char* addr) {
-    size_t addr_len = strlen(addr);
-    if (addr_len > BREADCRUMB_MAX_SIZE-1) {
-        addr_len = BREADCRUMB_MAX_SIZE-1;
-    }
-    memcpy(crumb->addr, addr, addr_len);
-    crumb->addr[addr_len] = '\0';
-}
-
 void breadcrumbs_add(Breadcrumbs* b, uint64_t trace_id, const char* addr) {
     Breadcrumb crumb;
     crumb.trace_id = trace_id;
     crumb.type = 0;
-    _breadcrumb_set_addr(&crumb, addr);
+    truncate_string(crumb.addr, addr, ADDR_MAX_SIZE);
     queue_put_nonblocking(&b->queue, (char*) &crumb);
 }
 
@@ -45,6 +36,6 @@ void breadcrumbs_add_forward(Breadcrumbs* b, uint64_t trace_id, const char* addr
     Breadcrumb crumb;
     crumb.trace_id = trace_id;
     crumb.type = 1;
-    _breadcrumb_set_addr(&crumb, addr);
+    truncate_string(crumb.addr, addr, ADDR_MAX_SIZE);
     queue_put_nonblocking(&b->queue, (char*) &crumb);
 }

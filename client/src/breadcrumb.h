@@ -6,7 +6,7 @@
 
 #include "queue.h"
 
-#define BREADCRUMB_MAX_SIZE 32
+#define ADDR_MAX_SIZE 32
 
 typedef struct Breadcrumbs {
     const char* name; // Name of this service
@@ -18,7 +18,7 @@ typedef struct Breadcrumbs {
 typedef struct Breadcrumb {
     uint64_t trace_id; // The trace of this breadcrumb
     short type; // Regular (0) or Forward (1)
-    char addr[BREADCRUMB_MAX_SIZE]; // Hack: literal addr:port string
+    char addr[ADDR_MAX_SIZE]; // Literal addr:port string
 } Breadcrumb;
 
 // name is used for mapping to the appropriate shmem file
@@ -32,9 +32,6 @@ void breadcrumbs_add(Breadcrumbs* b, uint64_t trace_id, const char* addr);
 
 // Add a forward breadcrumb
 void breadcrumbs_add_forward(Breadcrumbs* b, uint64_t trace_id, const char* addr);
-
-// Copy the provided addr into a breadcrumb
-void _breadcrumb_set_addr(Breadcrumb* crumb, const char* addr);
 
 
 #endif // _HINDSIGHT_CLIENT_BREADCRUMB_H_

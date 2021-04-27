@@ -74,5 +74,5 @@ char* serialize() {
 }
 
 void deserialize(char* baggage) {
-    // TODO: add breadcrumb?
+    hindsight_breadcrumb(baggage);
 }

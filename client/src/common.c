@@ -8,6 +8,7 @@
 #include <sys/stat.h>
 #include <time.h>
 
+
 char* get_shm_fname(char* dst1, char* dst2) {
     char* name = malloc(sizeof(char)*64);
     memset(name, 0, sizeof(char)*64);
@@ -16,6 +17,15 @@ char* get_shm_fname(char* dst1, char* dst2) {
     strcat(name, "__");
     strcat(name, dst2);
     return name;
+}
+
+void truncate_string(char* dst, const char* src, size_t max_size) {
+    size_t src_len = strlen(src);
+    if (src_len > max_size-1) {
+        src_len = max_size-1;
+    }
+    memcpy(dst, src, src_len);
+    dst[src_len] = '\0';
 }
 
 uint64_t nanos() {

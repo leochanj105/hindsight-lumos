@@ -30,8 +30,7 @@ typedef struct HindsightConfig {
     size_t buffer_size;
     size_t breadcrumbs_capacity;
     size_t triggers_capacity;
-    char* address;
-    char* port;
+    char* address; // max 32 bytes addr:port string
 } HindsightConfig;
 
 typedef struct Hindsight {

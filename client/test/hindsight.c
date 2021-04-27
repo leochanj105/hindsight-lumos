@@ -20,7 +20,6 @@ HindsightConfig config() {
 	conf.breadcrumbs_capacity = conf.pool_capacity;
 	conf.triggers_capacity = conf.pool_capacity;
 	conf.address = malloc(32 * sizeof(char));
-	conf.port = malloc(32 * sizeof(char));
 	return conf;
 }
 

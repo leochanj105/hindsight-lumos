@@ -12,7 +12,7 @@ __thread TraceState hindsight_tls = {false};
 void hindsight_print_config(HindsightConfig* conf) {
     printf("Hindsight Config:\n");
     printf("  Buffer pool cap=%ld buf_length=%ld\n", conf->pool_capacity, conf->buffer_size);
-    printf("  Service addr=%s port=%s\n", conf->address, conf->port);
+    printf("  Service addr=%s\n", conf->address);
     printf("  Queue sizes breadcrumbs_cap=%ld triggers_cap=%ld\n", conf->breadcrumbs_capacity, conf->triggers_capacity);
 }
 
@@ -23,10 +23,12 @@ HindsightConfig hindsight_load_config(const char* fname) {
     conf.buffer_size = -1;
     conf.breadcrumbs_capacity = -1;
     conf.triggers_capacity = -1;
-    conf.address = malloc(32 * sizeof(char));
-    conf.port = malloc(32 * sizeof(char));
-    memset(conf.address, 0, 32*sizeof(char));
-    memset(conf.port, 0, 32*sizeof(char));
+
+    // Addr in the conf file is specified as separate address and port strings
+    char* conf_addr = (char*) malloc(32 * sizeof(char));
+    char* conf_port = (char*) malloc(32 * sizeof(char));
+    memset(conf_addr, 0, 32*sizeof(char));
+    memset(conf_port, 0, 32*sizeof(char));
     
     // Open the specified file, with defaults as backup
     FILE* config_file;
@@ -63,11 +65,11 @@ HindsightConfig hindsight_load_config(const char* fname) {
         }
 
         if (!strcmp(var, "addr")) {
-            conf.address = value;
+            conf_addr = value;
         }
 
         if (!strcmp(var, "port")) {
-            conf.port = value;
+            conf_port = value;
         }       
 
         if (!strcmp(var, "breadcrumbs_cap")) {
@@ -81,6 +83,15 @@ HindsightConfig hindsight_load_config(const char* fname) {
     fclose(config_file);
 
     if (line) free(line);
+
+    
+    // Addr in the conf struct is a single string of address:port
+    conf.address = (char*) malloc(32 * sizeof(char));
+    memset(conf.address, 0, 32*sizeof(char));
+
+    strcpy(conf.address, conf_addr);
+    strcat(conf.address, ":");
+    strcat(conf.address, conf_port);
 
     if (conf.pool_capacity == -1) conf.pool_capacity = 1;
     if (conf.buffer_size == -1) conf.buffer_size = 1;
@@ -156,8 +167,5 @@ uint64_t hindsight_get_traceid() {
 }
 
 char* hindsight_get_local_address() {
-    char* address = malloc(64 * sizeof(char));
-    memcpy(address, hindsight.config.address, 32);
-    memcpy(address+32, hindsight.config.port, 32);
-    return address;
+    return hindsight.config.address;
 }
