@@ -31,8 +31,8 @@ typedef struct BufManager {
     PoolMetadata* meta; // Metadata to this pool; lives at start of shmem region
     char* pool; // Pointer to shared-memory region used for buffers
 
-    Queue2 available; // Used for receiving fresh buffers
-    Queue2 complete; // Used for sending completed buffers.  
+    Queue available; // Used for receiving fresh buffers
+    Queue complete; // Used for sending completed buffers.  
                     // TODO: queue impl will need to be updated to send both (traceid, bufid)
 
     char* null_buffer; // Used if unable to acquire a buffer from available queue

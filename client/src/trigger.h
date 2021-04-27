@@ -9,7 +9,7 @@
 typedef struct Triggers {
     const char* name; // Name of this service
 
-    Queue2 queue; // Used to send triggers
+    Queue queue; // Used to send triggers
 } Triggers;
 
 // For now, a trigger is just an ID and trace_id

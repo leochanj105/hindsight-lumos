@@ -82,8 +82,8 @@ BufManager bufmanager_init(const char* name,
     printf("buffer_size=%ld ", m.meta->buffer_size);
     printf("at %s\n", fname);
 
-    m.available = queue2_init(AVAILABLE_SHM_FILENAME(name), sizeof(AvailableBuffer), capacity);
-    m.complete = queue2_init(COMPLETE_SHM_FILENAME(name), sizeof(CompleteBuffer), capacity);
+    m.available = queue_init(AVAILABLE_SHM_FILENAME(name), sizeof(AvailableBuffer), capacity);
+    m.complete = queue_init(COMPLETE_SHM_FILENAME(name), sizeof(CompleteBuffer), capacity);
 
     m.null_buffer = (char*) malloc(m.meta->buffer_size);
     return m;
@@ -114,8 +114,8 @@ BufManager bufmanager_init_existing(const char* name) {
     printf("buffer_size=%ld ", m.meta->buffer_size);
     printf("at %s\n", fname);
 
-    m.available = queue2_init_existing(AVAILABLE_SHM_FILENAME(name));
-    m.complete = queue2_init_existing(COMPLETE_SHM_FILENAME(name));
+    m.available = queue_init_existing(AVAILABLE_SHM_FILENAME(name));
+    m.complete = queue_init_existing(COMPLETE_SHM_FILENAME(name));
 
     assert(m.available.meta->element_size == sizeof(AvailableBuffer));
     assert(m.complete.meta->element_size == sizeof(CompleteBuffer));
@@ -129,7 +129,7 @@ void bufmanager_acquire(BufManager* mgr, Buffer* dst) {
     assert(!buffer_is_valid(dst));
 
     AvailableBuffer av = {-1};
-    if (queue2_get_nonblocking(&mgr->available, (char*) &av)) {
+    if (queue_get_nonblocking(&mgr->available, (char*) &av)) {
     	dst->id = av.buffer_id;
     	dst->remaining = mgr->meta->buffer_size;
         dst->ptr = mgr->pool + (av.buffer_id * mgr->meta->buffer_size);
@@ -150,7 +150,7 @@ void bufmanager_return(BufManager* mgr, uint64_t trace_id, Buffer* dst) {
 	// No asserts; allowed to return an invalid buffer
 	if (dst->id >= 0) {
 		CompleteBuffer b = {trace_id, dst->id};
-		queue2_put_blocking(&mgr->complete, (char*) &b);
+		queue_put_blocking(&mgr->complete, (char*) &b);
 
     	// TODO: allow to #define away
     	__sync_fetch_and_add(&mgr->stats.pool_released, 1);

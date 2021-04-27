@@ -12,8 +12,8 @@
 
 
 
-Queue2 queue2_init(const char* fname, size_t element_size, size_t capacity) {
-	Queue2 q;
+Queue queue_init(const char* fname, size_t element_size, size_t capacity) {
+	Queue q;
 
 	size_t element_metadata_size = sizeof(QueueElementMetadata);
 	size_t element_total_size = element_size + element_metadata_size;
@@ -53,8 +53,8 @@ Queue2 queue2_init(const char* fname, size_t element_size, size_t capacity) {
 	return q;
 }
 
-Queue2 queue2_init_existing(const char* fname) {
-	Queue2 q;
+Queue queue_init_existing(const char* fname) {
+	Queue q;
 
 	// Wait until the file exists
 	while (access(fname, F_OK) != 0) {
@@ -91,7 +91,7 @@ Queue2 queue2_init_existing(const char* fname) {
 
 	return q;
 }
-void queue2_print(Queue2* q) {
+void queue_print(Queue* q) {
 	size_t head = q->meta->head;
 	size_t tail = q->meta->tail;
 	size_t occupancy = tail-head;
@@ -99,12 +99,12 @@ void queue2_print(Queue2* q) {
 	printf("occupancy=%ld remaining=%ld head=%ld tail=%ld\n", occupancy, remaining, head, tail);
 }
 
-char* queue2_ptr(Queue2* q, size_t index) {
+char* queue_ptr(Queue* q, size_t index) {
 	index = index % q->meta->capacity;
 	return q->queue + (q->meta->element_total_size * index);
 }
 
-size_t queue2_get_nonblocking_multi(Queue2* q, char* elements, size_t max_elements) {
+size_t queue_get_nonblocking_multi(Queue* q, char* elements, size_t max_elements) {
 	assert(max_elements != 0);
 	while (true) {
 		// First, read the current head and tail values of the queue
@@ -135,7 +135,7 @@ size_t queue2_get_nonblocking_multi(Queue2* q, char* elements, size_t max_elemen
 		// We got our elements.
 		for (int i = 0; i < delta; i++) {
 			// Grab the element
-			char* e_ptr = queue2_ptr(q, head+i);
+			char* e_ptr = queue_ptr(q, head+i);
 			QueueElementMetadata* e_md = (QueueElementMetadata*) e_ptr;
 
 			// It's possible a writer is still writing this element
@@ -164,17 +164,17 @@ size_t queue2_get_nonblocking_multi(Queue2* q, char* elements, size_t max_elemen
 
 }
 
-bool queue2_get_nonblocking(Queue2* q, char* element) {
-	return queue2_get_nonblocking_multi(q, element, 1) == 1;
+bool queue_get_nonblocking(Queue* q, char* element) {
+	return queue_get_nonblocking_multi(q, element, 1) == 1;
 }
 
-void queue2_get_blocking(Queue2* q, char* element) {
+void queue_get_blocking(Queue* q, char* element) {
 	// Only allowed to put if (tail-head) < capacity
 	int max_backoff = 100000; // 100ms
 	int backoff = 10;
 
 	// Call non-blocking impl and backoff
-	while (!queue2_get_nonblocking(q, element)) {
+	while (!queue_get_nonblocking(q, element)) {
 		usleep(backoff);
 		backoff *= 2;
 		if (backoff > max_backoff) {
@@ -183,7 +183,7 @@ void queue2_get_blocking(Queue2* q, char* element) {
 	}
 }
 
-size_t queue2_put_nonblocking_multi(Queue2* q, char* elements, size_t num_elements) {
+size_t queue_put_nonblocking_multi(Queue* q, char* elements, size_t num_elements) {
 	while (true) {
 		// First, read the current head and tail values of the queue
 		__sync_synchronize();
@@ -211,7 +211,7 @@ size_t queue2_put_nonblocking_multi(Queue2* q, char* elements, size_t num_elemen
 
 		// We can do all of the writes.
 		for (int i = 0; i < num_to_write; i++) {			
-			char* e_ptr = queue2_ptr(q, tail+i);
+			char* e_ptr = queue_ptr(q, tail+i);
 			QueueElementMetadata* e_md = (QueueElementMetadata*) e_ptr;
 
 			// It's possible a reader is still reading this element
@@ -240,15 +240,15 @@ size_t queue2_put_nonblocking_multi(Queue2* q, char* elements, size_t num_elemen
 
 }
 
-bool queue2_put_nonblocking(Queue2* q, char* element) {
-	return queue2_put_nonblocking_multi(q, element, 1) == 1;
+bool queue_put_nonblocking(Queue* q, char* element) {
+	return queue_put_nonblocking_multi(q, element, 1) == 1;
 }
 
-void queue2_put_blocking(Queue2* q, char* element) {
-	queue2_put_blocking_multi(q, element, 1);
+void queue_put_blocking(Queue* q, char* element) {
+	queue_put_blocking_multi(q, element, 1);
 }
 
-void queue2_put_blocking_multi(Queue2* q, char* elements, size_t num_elements) {
+void queue_put_blocking_multi(Queue* q, char* elements, size_t num_elements) {
 	assert(num_elements > 0);
 
 	int max_backoff = 100000; // 100ms
@@ -257,7 +257,7 @@ void queue2_put_blocking_multi(Queue2* q, char* elements, size_t num_elements) {
 	size_t element_size = q->meta->element_size;
 
 	while (true) {
-		size_t num_written = queue2_put_nonblocking_multi(q, elements, num_elements);
+		size_t num_written = queue_put_nonblocking_multi(q, elements, num_elements);
 
 		elements = elements + (num_written * element_size);
 		num_elements -= num_written;

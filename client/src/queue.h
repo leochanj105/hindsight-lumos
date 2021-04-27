@@ -21,32 +21,32 @@ typedef struct QueueElementMetadata {
 	int status; // 0=empty, 1=writing, 2=full, 3=reading
 } QueueElementMetadata;
 
-typedef struct Queue2 {
+typedef struct Queue {
 	// shmem pointers:
 	QueueMetadata* meta; // Metadata of the queue, **within** the shmem region
 	char* baseptr; // Baseptr of the shmem region
 	char* queue; // Baseptr of the queue region, comes after the metadata
-} Queue2;
+} Queue;
 
 // Return true if a shmem queue exists for the specified name
-bool queue2_exists(const char* fname);
+bool queue_exists(const char* fname);
 
 // Creates a new shm queue at the specified filename
-Queue2 queue2_init(const char* fname, size_t element_size, size_t capacity);
+Queue queue_init(const char* fname, size_t element_size, size_t capacity);
 
 // Uses an existing shm queue at the specified filename.
 // Blocks until the file exists
-Queue2 queue2_init_existing(const char* fname);
+Queue queue_init_existing(const char* fname);
 
-void queue2_print(Queue2* q);
+void queue_print(Queue* q);
 
-void queue2_put_blocking(Queue2* q, char* element);
-void queue2_put_blocking_multi(Queue2* q, char* elements, size_t num_elements);
-bool queue2_put_nonblocking(Queue2* q, char* element);
-size_t queue2_put_nonblocking_multi(Queue2* q, char* elements, size_t num_elements);
+void queue_put_blocking(Queue* q, char* element);
+void queue_put_blocking_multi(Queue* q, char* elements, size_t num_elements);
+bool queue_put_nonblocking(Queue* q, char* element);
+size_t queue_put_nonblocking_multi(Queue* q, char* elements, size_t num_elements);
 
-void queue2_get_blocking(Queue2* q, char* dst_element);
-bool queue2_get_nonblocking(Queue2* q, char* dst_element);
-size_t queue2_get_nonblocking_multi(Queue2* q, char* elements, size_t max_elements);
+void queue_get_blocking(Queue* q, char* dst_element);
+bool queue_get_nonblocking(Queue* q, char* dst_element);
+size_t queue_get_nonblocking_multi(Queue* q, char* elements, size_t max_elements);
 
 #endif // _HINDSIGHT_QUEUE_H_

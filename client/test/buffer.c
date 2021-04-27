@@ -86,9 +86,9 @@ void test_buffer_write() {
 	printf("test_buffer_write passed\n");	
 }
 
-void put_available(Queue2 q, int bufid) {
+void put_available(Queue q, int bufid) {
 	AvailableBuffer av = {bufid};
-	queue2_put_blocking(&q, (char*) &av);
+	queue_put_blocking(&q, (char*) &av);
 }
 
 void test_bufmanager() {
@@ -228,16 +228,16 @@ void test_tracestate_nullbuffer() {
 	assert(trace.buffer.id == -2);
 
 	CompleteBuffer cb;
-	assert(queue2_get_nonblocking(&mgr.complete, &cb));
+	assert(queue_get_nonblocking(&mgr.complete, &cb));
 	assert(cb.trace_id == 3000);
 	assert(cb.buffer_id == 0);
-	assert(queue2_get_nonblocking(&mgr.complete, &cb));
+	assert(queue_get_nonblocking(&mgr.complete, &cb));
 	assert(cb.trace_id == 3000);
 	assert(cb.buffer_id == 1);
-	assert(queue2_get_nonblocking(&mgr.complete, &cb));
+	assert(queue_get_nonblocking(&mgr.complete, &cb));
 	assert(cb.trace_id == 3000);
 	assert(cb.buffer_id == 7);
-	assert(!queue2_get_nonblocking(&mgr.complete, &cb));
+	assert(!queue_get_nonblocking(&mgr.complete, &cb));
 
 	
 	printf("test_tracestate_nullbuffer passed\n");	

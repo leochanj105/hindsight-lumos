@@ -12,14 +12,14 @@
 Breadcrumbs breadcrumbs_init(const char* name, size_t capacity) {
     Breadcrumbs b;
     b.name = name;
-    b.queue = queue2_init(BREADCRUMBS_SHM_FILENAME(name), sizeof(Breadcrumb), capacity);
+    b.queue = queue_init(BREADCRUMBS_SHM_FILENAME(name), sizeof(Breadcrumb), capacity);
     return b;
 }
 
 Breadcrumbs breadcrumbs_init_existing(const char* name) {
     Breadcrumbs b;
     b.name = name;
-    b.queue = queue2_init_existing(BREADCRUMBS_SHM_FILENAME(name));
+    b.queue = queue_init_existing(BREADCRUMBS_SHM_FILENAME(name));
     return b;
 }
 
@@ -37,7 +37,7 @@ void breadcrumbs_add(Breadcrumbs* b, uint64_t trace_id, const char* addr) {
     crumb.trace_id = trace_id;
     crumb.type = 0;
     _breadcrumb_set_addr(&crumb, addr);
-    queue2_put_nonblocking(&b->queue, (char*) &crumb);
+    queue_put_nonblocking(&b->queue, (char*) &crumb);
 }
 
 // Add a forward breadcrumb
@@ -46,5 +46,5 @@ void breadcrumbs_add_forward(Breadcrumbs* b, uint64_t trace_id, const char* addr
     crumb.trace_id = trace_id;
     crumb.type = 1;
     _breadcrumb_set_addr(&crumb, addr);
-    queue2_put_nonblocking(&b->queue, (char*) &crumb);
+    queue_put_nonblocking(&b->queue, (char*) &crumb);
 }

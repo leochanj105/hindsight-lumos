@@ -80,9 +80,9 @@ void make_all_buffers_available(HindsightAgentAPI* api) {
 	printf("Initialize buffers: done\n");
 	printf("Queue states:\n");
 	printf("  Available ");
-	queue2_print(&api->mgr.available);
+	queue_print(&api->mgr.available);
 	printf("  Complete ");
-	queue2_print(&api->mgr.complete);	
+	queue_print(&api->mgr.complete);	
 }
 
 HindsightAgentAPI* init_agentapi(const char* name) {

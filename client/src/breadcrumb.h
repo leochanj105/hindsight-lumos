@@ -11,7 +11,7 @@
 typedef struct Breadcrumbs {
     const char* name; // Name of this service
 
-    Queue2 queue; // Used to send breadcrumbs
+    Queue queue; // Used to send breadcrumbs
 } Breadcrumbs;
 
 // For now, a breadcrumb is a fixed-length char array

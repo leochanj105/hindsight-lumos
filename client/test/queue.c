@@ -11,87 +11,87 @@
 
 
 void test_queue_simple() {
-	Queue2 q = queue2_init("/dev/shm/test_queue_simple", sizeof(int), 10);
+	Queue q = queue_init("/dev/shm/test_queue_simple", sizeof(int), 10);
 
 	int rv;
-	assert(!queue2_get_nonblocking(&q, (char*) &rv));
-	assert(!queue2_get_nonblocking(&q, (char*) &rv));
-	assert(!queue2_get_nonblocking(&q, (char*) &rv));
+	assert(!queue_get_nonblocking(&q, (char*) &rv));
+	assert(!queue_get_nonblocking(&q, (char*) &rv));
+	assert(!queue_get_nonblocking(&q, (char*) &rv));
 
 	int x = 99;
-	assert(queue2_put_nonblocking(&q, (char*) &x));
-	assert(queue2_get_nonblocking(&q, (char*) &rv));
+	assert(queue_put_nonblocking(&q, (char*) &x));
+	assert(queue_get_nonblocking(&q, (char*) &rv));
 	assert(rv == x);
 
 	printf("test_queue_simple passedd\n");
 }
 
 void test_queue_nonblocking() {
-	Queue2 q = queue2_init("/dev/shm/test_queue_nonblocking", sizeof(int), 10);
+	Queue q = queue_init("/dev/shm/test_queue_nonblocking", sizeof(int), 10);
 
 	for (int i = 0; i < 10; i++) {
 		int y = i + 7;
-		assert(queue2_put_nonblocking(&q, (char*) &y));
+		assert(queue_put_nonblocking(&q, (char*) &y));
 		assert(y == i+7);
 	}
 	int nonex = -300;
-	assert(!queue2_put_nonblocking(&q, (char*) &nonex));
-	assert(!queue2_put_nonblocking(&q, (char*) &nonex));
-	assert(!queue2_put_nonblocking(&q, (char*) &nonex));
+	assert(!queue_put_nonblocking(&q, (char*) &nonex));
+	assert(!queue_put_nonblocking(&q, (char*) &nonex));
+	assert(!queue_put_nonblocking(&q, (char*) &nonex));
 	assert(nonex == -300);
 	for (int i = 0; i < 10; i++) {
 		int y = -1;
-		assert(queue2_get_nonblocking(&q, (char*) &y));
+		assert(queue_get_nonblocking(&q, (char*) &y));
 		assert(y == i + 7);
 	}
 	int noney = -75;
-	assert(!queue2_get_nonblocking(&q, (char*) &noney));
+	assert(!queue_get_nonblocking(&q, (char*) &noney));
 	assert(noney == -75);
 	for (int i = 0; i < 10; i++) {
 		int y = i + 7;
-		assert(queue2_put_nonblocking(&q, (char*) &y));
+		assert(queue_put_nonblocking(&q, (char*) &y));
 		assert(y == i+7);
 	}
-	assert(!queue2_put_nonblocking(&q, (char*) &nonex));
-	assert(!queue2_put_nonblocking(&q, (char*) &nonex));
-	assert(!queue2_put_nonblocking(&q, (char*) &nonex));
+	assert(!queue_put_nonblocking(&q, (char*) &nonex));
+	assert(!queue_put_nonblocking(&q, (char*) &nonex));
+	assert(!queue_put_nonblocking(&q, (char*) &nonex));
 	assert(nonex == -300);
 	for (int i = 0; i < 10; i++) {
 		int y = -1;
-		assert(queue2_get_nonblocking(&q, (char*) &y));
+		assert(queue_get_nonblocking(&q, (char*) &y));
 		assert(y == i + 7);
 	}
 
 	for (int i = 0; i < 3; i++) {
 		int y = i + 7;
-		assert(queue2_put_nonblocking(&q, (char*) &y));
+		assert(queue_put_nonblocking(&q, (char*) &y));
 		assert(y == i+7);
 	}
 	for (int i = 0; i < 3; i++) {
 		int y = -1;
-		assert(queue2_get_nonblocking(&q, (char*) &y));
+		assert(queue_get_nonblocking(&q, (char*) &y));
 		assert(y == i + 7);
 	}
 
 	for (int i = 0; i < 3; i++) {
 		int y = i + 100000;
-		assert(queue2_put_nonblocking(&q, (char*) &y));
+		assert(queue_put_nonblocking(&q, (char*) &y));
 		assert(y == i + 100000);
 	}
 	for (int i = 0; i < 3; i++) {
 		int y = -1;
-		assert(queue2_get_nonblocking(&q, (char*) &y));
+		assert(queue_get_nonblocking(&q, (char*) &y));
 		assert(y == i + 100000);
 	}
 
 	for (int i = 0; i < 3; i++) {
 		int y = i - 1000;
-		assert(queue2_put_nonblocking(&q, (char*) &y));
+		assert(queue_put_nonblocking(&q, (char*) &y));
 		assert(y == i -1000);
 	}
 	for (int i = 0; i < 3; i++) {
 		int y = -1;
-		assert(queue2_get_nonblocking(&q, (char*) &y));
+		assert(queue_get_nonblocking(&q, (char*) &y));
 		assert(y == i- 1000);
 	}
 
@@ -99,19 +99,19 @@ void test_queue_nonblocking() {
 	int next_getv = 3;
 
 	for (int i = 0; i < 3; i++) {
-		assert(queue2_put_nonblocking(&q, (char*) &next_putv));
+		assert(queue_put_nonblocking(&q, (char*) &next_putv));
 		next_putv++;
 	}
 
 	for (int i = 0; i < 10; i++) {
 		for (int j = 0; j < 5; j++) {
-			assert(queue2_put_nonblocking(&q, (char*) &next_putv));
+			assert(queue_put_nonblocking(&q, (char*) &next_putv));
 			next_putv++;			
 		}
 
 		for (int j = 0; j < 5; j++) {
 			int y = -1;
-			assert(queue2_get_nonblocking(&q, (char*) &y));
+			assert(queue_get_nonblocking(&q, (char*) &y));
 			assert(y == next_getv);
 			next_getv++;
 		}
@@ -119,101 +119,101 @@ void test_queue_nonblocking() {
 
 	for (int i = 0; i < 3; i++) {
 		int rv = -1;
-		assert(queue2_get_nonblocking(&q, (char*) &rv));
+		assert(queue_get_nonblocking(&q, (char*) &rv));
 		assert(rv == next_getv);
 		next_getv++;
 	}
-	assert(!queue2_get_nonblocking(&q, (char*) &noney));
+	assert(!queue_get_nonblocking(&q, (char*) &noney));
 	assert(noney == -75);
 
 	printf("test_queue_nonblocking passed\n");
 }
 
 void test_queue_nonblocking_multi() {
-	Queue2 q = queue2_init("/dev/shm/test_queue_nonblocking_multi", sizeof(int), 10);
+	Queue q = queue_init("/dev/shm/test_queue_nonblocking_multi", sizeof(int), 10);
 
 	{
 		size_t max_elements = 10;
 		int nones[max_elements];
-		assert(queue2_get_nonblocking_multi(&q, nones, max_elements) == 0);
+		assert(queue_get_nonblocking_multi(&q, nones, max_elements) == 0);
 	}
 
 	for (int i = 0; i < 10; i++) {
 		int y = i + 7;
-		assert(queue2_put_nonblocking(&q, (char*) &y));
+		assert(queue_put_nonblocking(&q, (char*) &y));
 		assert(y == i+7);
 	}
 
 	{
 		size_t max_elements = 10;
 		int ys[max_elements];
-		size_t dequeued = queue2_get_nonblocking_multi(&q, ys, max_elements);
+		size_t dequeued = queue_get_nonblocking_multi(&q, ys, max_elements);
 		assert(dequeued == max_elements);
 	}
 
 	{
 		size_t max_elements = 10;
 		int nones[max_elements];
-		assert(queue2_get_nonblocking_multi(&q, nones, max_elements) == 0);
+		assert(queue_get_nonblocking_multi(&q, nones, max_elements) == 0);
 	}
 
 	for (int i = 0; i < 5; i++) {
 		int y = i + 7;
-		assert(queue2_put_nonblocking(&q, (char*) &y));
+		assert(queue_put_nonblocking(&q, (char*) &y));
 		assert(y == i+7);
 	}
 
 	{
 		size_t max_elements = 10;
 		int ys[max_elements];
-		size_t dequeued = queue2_get_nonblocking_multi(&q, ys, max_elements);
+		size_t dequeued = queue_get_nonblocking_multi(&q, ys, max_elements);
 		assert(dequeued == 5);
 	}
 
 	for (int i = 0; i < 10; i++) {
 		int y = i + 7;
-		assert(queue2_put_nonblocking(&q, (char*) &y));
+		assert(queue_put_nonblocking(&q, (char*) &y));
 		assert(y == i+7);
 	}
 
 	{
 		size_t max_elements = 5;
 		int ys[max_elements];
-		size_t dequeued = queue2_get_nonblocking_multi(&q, ys, max_elements);
+		size_t dequeued = queue_get_nonblocking_multi(&q, ys, max_elements);
 		assert(dequeued == max_elements);
 	}
 
 	{
 		size_t max_elements = 3;
 		int ys[max_elements];
-		size_t dequeued = queue2_get_nonblocking_multi(&q, ys, max_elements);
+		size_t dequeued = queue_get_nonblocking_multi(&q, ys, max_elements);
 		assert(dequeued == max_elements);
 	}
 
 	{
 		size_t max_elements = 1;
 		int ys[max_elements];
-		size_t dequeued = queue2_get_nonblocking_multi(&q, ys, max_elements);
+		size_t dequeued = queue_get_nonblocking_multi(&q, ys, max_elements);
 		assert(dequeued == max_elements);
 	}
 
 	{
 		size_t max_elements = 10;
 		int ys[max_elements];
-		size_t dequeued = queue2_get_nonblocking_multi(&q, ys, max_elements);
+		size_t dequeued = queue_get_nonblocking_multi(&q, ys, max_elements);
 		assert(dequeued == 1);
 	}
 	
 	printf("test_queue_nonblocking_multi passed\n");
 }
 
-void test_queue2_put_nonblocking_multi() {
-	Queue2 q = queue2_init("/dev/shm/test_queue_nonblocking_multi", sizeof(int), 10);
+void test_queue_put_nonblocking_multi() {
+	Queue q = queue_init("/dev/shm/test_queue_nonblocking_multi", sizeof(int), 10);
 
 	{
 		size_t max_elements = 10;
 		int nones[max_elements];
-		assert(queue2_get_nonblocking_multi(&q, nones, max_elements) == 0);
+		assert(queue_get_nonblocking_multi(&q, nones, max_elements) == 0);
 	}
 
 	{
@@ -222,14 +222,14 @@ void test_queue2_put_nonblocking_multi() {
 		for (int i = 0; i < num_writes; i++) {
 			ys[i] = i + 7;
 		}
-		size_t num_written = queue2_put_nonblocking_multi(&q, ys, num_writes);
+		size_t num_written = queue_put_nonblocking_multi(&q, ys, num_writes);
 		assert(num_written == num_writes);
 	}
 
 	{
 		size_t max_elements = 10;
 		int ys[max_elements];
-		size_t dequeued = queue2_get_nonblocking_multi(&q, ys, max_elements);
+		size_t dequeued = queue_get_nonblocking_multi(&q, ys, max_elements);
 		assert(dequeued == max_elements);
 
 		for (int i = 0; i < max_elements; i++) {
@@ -240,7 +240,7 @@ void test_queue2_put_nonblocking_multi() {
 	{
 		size_t max_elements = 10;
 		int nones[max_elements];
-		assert(queue2_get_nonblocking_multi(&q, nones, max_elements) == 0);
+		assert(queue_get_nonblocking_multi(&q, nones, max_elements) == 0);
 	}
 
 	{
@@ -249,14 +249,14 @@ void test_queue2_put_nonblocking_multi() {
 		for (int i = 0; i < num_writes; i++) {
 			ys[i] = i + 50;
 		}
-		size_t num_written = queue2_put_nonblocking_multi(&q, ys, num_writes);
+		size_t num_written = queue_put_nonblocking_multi(&q, ys, num_writes);
 		assert(num_written == num_writes);
 	}
 
 	{
 		size_t max_elements = 10;
 		int ys[max_elements];
-		size_t dequeued = queue2_get_nonblocking_multi(&q, ys, max_elements);
+		size_t dequeued = queue_get_nonblocking_multi(&q, ys, max_elements);
 		assert(dequeued == 5);
 
 		for (int i = 0; i < 5; i++) {
@@ -270,7 +270,7 @@ void test_queue2_put_nonblocking_multi() {
 		for (int i = 0; i < num_writes; i++) {
 			ys[i] = i + 50;
 		}
-		size_t num_written = queue2_put_nonblocking_multi(&q, ys, num_writes);
+		size_t num_written = queue_put_nonblocking_multi(&q, ys, num_writes);
 		assert(num_written == num_writes);
 	}
 
@@ -280,14 +280,14 @@ void test_queue2_put_nonblocking_multi() {
 		for (int i = 0; i < num_writes; i++) {
 			ys[i] = i + 50;
 		}
-		size_t num_written = queue2_put_nonblocking_multi(&q, ys, num_writes);
+		size_t num_written = queue_put_nonblocking_multi(&q, ys, num_writes);
 		assert(num_written == 5);
 	}
 
 	{
 		size_t max_elements = 20;
 		int ys[max_elements];
-		size_t dequeued = queue2_get_nonblocking_multi(&q, ys, max_elements);
+		size_t dequeued = queue_get_nonblocking_multi(&q, ys, max_elements);
 		assert(dequeued == 10);
 
 		for (int i = 0; i < 5; i++) {
@@ -298,68 +298,68 @@ void test_queue2_put_nonblocking_multi() {
 		}
 	}
 
-	printf("test_queue2_put_nonblocking_multi passed\n");
+	printf("test_queue_put_nonblocking_multi passed\n");
 }
 
 void test_queue_blocking() {
-	Queue2 q = queue2_init("/dev/shm/test_queue_blocking", sizeof(int), 10);
+	Queue q = queue_init("/dev/shm/test_queue_blocking", sizeof(int), 10);
 
 	for (int i = 0; i < 10; i++) {
 		int y = i + 7;
-		queue2_put_blocking(&q, (char*) &y);
+		queue_put_blocking(&q, (char*) &y);
 		assert(y == i+7);
 	}
 	int nonex = -300;
-	assert(!queue2_put_nonblocking(&q, (char*) &nonex));
+	assert(!queue_put_nonblocking(&q, (char*) &nonex));
 	assert(nonex == -300);
 
 	for (int i = 0; i < 10; i++) {
 		int y = i + 7;
-		queue2_get_blocking(&q, (char*) &y);
+		queue_get_blocking(&q, (char*) &y);
 		assert(y == i+7);
 	}
-	assert(!queue2_get_nonblocking(&q, (char*) &nonex));
+	assert(!queue_get_nonblocking(&q, (char*) &nonex));
 
 	printf("test_queue_blocking passed\n");
 }
 
 void test_tiny_queue() {
-	Queue2 q = queue2_init("/dev/shm/test_tiny_queue", sizeof(int), 1);
+	Queue q = queue_init("/dev/shm/test_tiny_queue", sizeof(int), 1);
 
 	for (int i = 0; i < 1; i++) {
 		int y = i + 7;
-		assert(queue2_put_nonblocking(&q, (char*) &y));
+		assert(queue_put_nonblocking(&q, (char*) &y));
 		assert(y == i+7);
 	}
 	int nonex = -300;
-	assert(!queue2_put_nonblocking(&q, (char*) &nonex));
-	assert(!queue2_put_nonblocking(&q, (char*) &nonex));
-	assert(!queue2_put_nonblocking(&q, (char*) &nonex));
+	assert(!queue_put_nonblocking(&q, (char*) &nonex));
+	assert(!queue_put_nonblocking(&q, (char*) &nonex));
+	assert(!queue_put_nonblocking(&q, (char*) &nonex));
 	assert(nonex == -300);
 	for (int i = 0; i < 1; i++) {
 		int y = -1;
-		assert(queue2_get_nonblocking(&q, (char*) &y));
+		assert(queue_get_nonblocking(&q, (char*) &y));
 		assert(y == i + 7);
 	}
 	int noney = -75;
-	assert(!queue2_get_nonblocking(&q, (char*) &noney));
+	assert(!queue_get_nonblocking(&q, (char*) &noney));
 	assert(noney == -75);
 	for (int i = 0; i < 1; i++) {
 		int y = i + 7;
-		assert(queue2_put_nonblocking(&q, (char*) &y));
+		assert(queue_put_nonblocking(&q, (char*) &y));
 		assert(y == i+7);
 	}
-	assert(!queue2_put_nonblocking(&q, (char*) &nonex));
-	assert(!queue2_put_nonblocking(&q, (char*) &nonex));
-	assert(!queue2_put_nonblocking(&q, (char*) &nonex));
+	assert(!queue_put_nonblocking(&q, (char*) &nonex));
+	assert(!queue_put_nonblocking(&q, (char*) &nonex));
+	assert(!queue_put_nonblocking(&q, (char*) &nonex));
 	assert(nonex == -300);
 	assert(nonex == -300);
 	for (int i = 0; i < 1; i++) {
 		int y = -1;
-		assert(queue2_get_nonblocking(&q, (char*) &y));
+		assert(queue_get_nonblocking(&q, (char*) &y));
 		assert(y == i + 7);
 	}
-	assert(!queue2_get_nonblocking(&q, (char*) &noney));
+	assert(!queue_get_nonblocking(&q, (char*) &noney));
 	assert(noney == -75);
 
 
@@ -374,24 +374,24 @@ typedef struct StructForQueueTest {
 } StructForQueueTest;
 
 void test_queue_struct() {
-	Queue2 q = queue2_init("/dev/shm/test_queue_struct", sizeof(StructForQueueTest), 10);
+	Queue q = queue_init("/dev/shm/test_queue_struct", sizeof(StructForQueueTest), 10);
 
 	for (int i = 0; i < 10; i++) {
 		StructForQueueTest v = {i*10, i*20, i*30, i*40};
-		assert(queue2_put_nonblocking(&q, (char*) &v));
+		assert(queue_put_nonblocking(&q, (char*) &v));
 	}
 	StructForQueueTest none = {-1, -2, -3, -4};
-	assert(!queue2_put_nonblocking(&q, (char*) &none));
+	assert(!queue_put_nonblocking(&q, (char*) &none));
 
 	for (int i = 0; i < 10; i++) {
 		StructForQueueTest v = {0,0,0,0};
-		assert(queue2_get_nonblocking(&q, (char*) &v));
+		assert(queue_get_nonblocking(&q, (char*) &v));
 		assert(v.a == i*10);
 		assert(v.b == i*20);
 		assert(v.c == i*30);
 		assert(v.d == i*40);
 	}
-	assert(!queue2_get_nonblocking(&q, (char*) &none));
+	assert(!queue_get_nonblocking(&q, (char*) &none));
 
 
 	printf("test_queue_struct passed\n");		
@@ -400,7 +400,7 @@ void test_queue_struct() {
 typedef struct TestArgs {
 	int thread_num;
 	int enqueue_count;
-	Queue2* queue;
+	Queue* queue;
 	pthread_barrier_t* barrier;
 } TestArgs;
 
@@ -412,14 +412,14 @@ void queue_blocking_multithread_thread(void* arg) {
 
 	for(int i = 0; i < args->enqueue_count; i++) {
 		int v = args->thread_num * args->enqueue_count + i;
-		queue2_put_blocking(args->queue, (char*) &v);
+		queue_put_blocking(args->queue, (char*) &v);
 		usleep(1000);
 	}
 	printf("  test_queue_blocking_multithread: thread %d exit\n", args->thread_num);
 }
 
 void test_queue_blocking_multithread() {
-	Queue2 q = queue2_init("/dev/shm/test_queue_blocking_multithread", sizeof(int), 10);
+	Queue q = queue_init("/dev/shm/test_queue_blocking_multithread", sizeof(int), 10);
 
 	int num_threads = 10;
 	int enqueue_count = 1000;
@@ -446,7 +446,7 @@ void test_queue_blocking_multithread() {
 	for (int i = 0; i < enqueue_count; i++) {
 		for (int j = 0; j < num_threads; j++) {
 			int v = -1;
-			queue2_get_blocking(&q, &v);
+			queue_get_blocking(&q, &v);
 			seen[v] = true;
 		}
 	}
@@ -464,7 +464,7 @@ void test_queue_blocking_multithread() {
 
 int main(int argc, char const *argv[])
 {
-	printf("Testing queue2 implementation\n");
+	printf("Testing queue implementation\n");
 	test_queue_simple();
 	test_queue_nonblocking();
 	test_queue_blocking();
@@ -472,6 +472,6 @@ int main(int argc, char const *argv[])
 	test_queue_struct();
 	test_queue_blocking_multithread();
 	test_queue_nonblocking_multi();
-	test_queue2_put_nonblocking_multi();
+	test_queue_put_nonblocking_multi();
 	return 0;
 }
