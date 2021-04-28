@@ -1,76 +1,204 @@
 package memory
 
+// IMPORTANT: for the below to work, must do:
+//   export CGO_LDFLAGS_ALLOW=".*"
+
+/*
+#cgo CFLAGS: -I${SRCDIR}/../../../client/src
+#cgo LDFLAGS: ${SRCDIR}/../../../client/lib/libtracer.a
+
+#include "agentapi.h"
+
+*/
+import "C"
+
 import (
 	"fmt"
-	"os"
-	"syscall"
-
-	. "github.com/geraldleizhang/hindsight/agent/pkg/util"
 )
 
-type Pool struct {
-	Pool []byte
+// BATCHSIZE is #defined in agentapi.h
+//   The value here must be the same as the value in agentapi.h
+const BATCHSIZE = 100
+
+type AgentAPI struct {
+	c_api *C.HindsightAgentAPI
 }
 
-type Dict struct {
-	Dict []byte
+type CompleteBuffer struct {
+	Request_id uint64
+	Buffer_id int
 }
 
-var SharedPool Pool
-var SharedDict Dict
+type Trigger struct {
+	Request_id uint64
+	Trigger_id int
+}
 
-var Cap int
-var Buf_length int
+type Breadcrumb struct {
+	Request_id uint64
+	Address string
+}
 
-func MemInit(fname string, size int) []byte {
-	for {
-		if IsFileExists(fname) == true {
-			break
+func InitAgentAPI(fname string) *AgentAPI {
+	var agent AgentAPI
+    agent.c_api = C.hindsight_agentapi_init(C.CString(fname))
+    agent.drainAllBuffers()
+    agent.releaseAllBuffers()
+    return &agent
+}
+
+func (agent *AgentAPI) drainAllBuffers() {
+	// Drain any available buffers
+    davailable := 0
+    for {
+        var ab C.AvailableBuffers
+        C.hindsight_agentapi_get_available_nonblocking(agent.c_api, &ab)
+
+        if (ab.count == 0) {
+            break
+        }
+
+        davailable += int(ab.count)
+    }
+
+    // Drain all complete buffers
+    dcomplete := 0
+    for {
+        var cb C.CompleteBuffers
+        C.hindsight_agentapi_get_complete_nonblocking(agent.c_api, &cb)
+
+        if (cb.count == 0) {
+            break
+        }
+
+        dcomplete += int(cb.count)
+    }
+
+    fmt.Println("Resetting buffers: drained", davailable, "available and", dcomplete, "complete")
+}
+
+// Makes all buffers available in the shm available queue
+// TODO: initial buffers should be made available by the client rather than agent probably
+func (agent *AgentAPI) releaseAllBuffers() {
+    fmt.Println("Initialize buffers: making", agent.c_api.mgr.meta.capacity, "buffers available...")
+
+    next_buffer_id := 0
+    remaining := agent.c_api.mgr.meta.capacity
+    for (remaining > 0) {
+        var av C.AvailableBuffers
+        av.count = 100
+        if (av.count > remaining) {
+            av.count = remaining
+        }
+        remaining -= av.count
+
+        for i:= 0; i < 100; i++ {
+            av.bufs[i].buffer_id = C.int(next_buffer_id)
+            next_buffer_id++
+        }
+
+        C.hindsight_agentapi_put_available_blocking(agent.c_api, &av);
+    }
+
+    fmt.Println("Initialize buffers: done")
+    fmt.Println("Queue states:")
+    fmt.Print("  Available ")
+    C.queue_print(&agent.c_api.mgr.available)
+    fmt.Print("  Complete ")
+    C.queue_print(&agent.c_api.mgr.complete)
+}
+
+/* Retrieves up to BATCHSIZE buffers from the complete queue.
+
+BATCHSIZE is hard-coded in agentapi.h
+
+This is a non-blocking call; may return 0 buffers
+*/
+func (agent *AgentAPI) GetComplete() []CompleteBuffer {
+	var cb C.CompleteBuffers
+	C.hindsight_agentapi_get_complete_nonblocking(agent.c_api, &cb)
+
+	count := int(cb.count)
+	buffers := make([]CompleteBuffer, count)
+	for i := 0; i < count; i++ {
+		buffer := &buffers[i]
+		buffer.Request_id = uint64(cb.bufs[i].trace_id)
+		buffer.Buffer_id = int(cb.bufs[i].buffer_id)
+	}
+
+	return buffers
+}
+
+/* Puts buffers to the available queue.
+
+This is a blocking call; it will wait until all available IDs
+have been enqueued.
+
+In practice this should never block if the queue capacity 
+is equal to, or exceeds, the buffer pool capacity
+*/
+func (agent *AgentAPI) PutAvailable(ids []int) {
+	var ab C.AvailableBuffers
+
+	for len(ids) > 0 {
+		size := len(ids)
+		if size > BATCHSIZE {
+			size = BATCHSIZE
 		}
-	}
-	f, err := os.OpenFile(fname, os.O_RDWR|os.O_CREATE, 0666)
-	if err != nil {
-		fmt.Println("open file failed:", err)
-	}
-	fd := int(f.Fd())
-	syscall.Ftruncate(fd, int64(size))
 
-	mem, err := syscall.Mmap(fd, 0, size, syscall.PROT_READ|syscall.PROT_WRITE, syscall.MAP_SHARED)
+		ab.count = C.ulong(size)
+		for i := 0; i < size; i++ {
+			ab.bufs[i].buffer_id = C.int(ids[i])
+		}
 
-	if err != nil {
-		fmt.Println("mmap failed:", err)
+        C.hindsight_agentapi_put_available_blocking(agent.c_api, &ab);
+
+		ids = ids[size:]
 	}
-
-	return mem
 }
 
-func GetBufMetadata(buffer_id int) (int64, int64) {
-	offset := buffer_id * Buf_length * 4
-	request_id := BytesToInt64(SharedPool.Pool[offset : offset+8])
-	timestamp := BytesToInt64(SharedPool.Pool[offset+8 : offset+16])
-	return request_id, timestamp
-}
 
-func GetRequestID(buffer_id int) int64 {
-	offset := buffer_id * Buf_length * 4
-	request_id := BytesToInt64(SharedPool.Pool[offset : offset+8])
-	return request_id
-}
+/* Retrieves up to BATCHSIZE triggers from the triggers queue.
 
-func GetRawRequestID(buffer_id int) []byte {
-	offset := buffer_id * Buf_length * 4
-	return SharedPool.Pool[offset : offset+8]
-}
+BATCHSIZE is hard-coded in agentapi.h
 
-func GetBreadcrumbs(buffer_id int) []int {
-	offset := buffer_id * Buf_length * 4
-	breadcrumb_count := BytesToInt32(SharedPool.Pool[offset+32 : offset+36])
-	if breadcrumb_count == 0 {
-		return nil
+This is a non-blocking call; may return 0 triggers
+*/
+func (agent *AgentAPI) GetTriggers() []*Trigger {
+	var tb C.TriggerBatch
+	C.hindsight_agentapi_get_triggers_nonblocking(agent.c_api, &tb)
+
+	var triggers []*Trigger
+	count := int(tb.count)
+	for i := 0; i < count; i++ {
+		var trigger Trigger
+		trigger.Request_id = uint64(tb.triggers[i].trace_id)
+		trigger.Trigger_id = int(tb.triggers[i].trigger_id)
+		triggers = append(triggers, &trigger)
 	}
-	var res []int
-	for i := 0; i < int(breadcrumb_count); i++ {
-		res = append(res, int(BytesToInt32(SharedPool.Pool[offset+36+i*4:offset+40+i*4])))
+
+	return triggers
+}
+
+
+/* Retrieves up to BATCHSIZE breadcrumbs from the breadcrumbs queue.
+
+BATCHSIZE is hard-coded in agentapi.h
+
+This is a non-blocking call; may return 0 breadcrumbs
+*/
+func (agent *AgentAPI) GetBreadcrumbs() []*Breadcrumb {
+	var bb C.BreadcrumbBatch
+	C.hindsight_agentapi_get_breadcrumbs_nonblocking(agent.c_api, &bb)
+
+	var breadcrumbs []*Breadcrumb
+	count := int(bb.count)
+	for i := 0; i < count; i++ {
+		var breadcrumb Breadcrumb
+		breadcrumb.Request_id = uint64(bb.breadcrumbs[i].trace_id)
+		breadcrumb.Address = C.GoString(bb.breadcrumb_addrs[i])
+		breadcrumbs = append(breadcrumbs, &breadcrumb)
 	}
-	return res
+
+	return breadcrumbs	
 }

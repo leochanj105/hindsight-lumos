@@ -12,7 +12,6 @@ import (
 	. "github.com/geraldleizhang/hindsight/agent/pkg/cache"
 	. "github.com/geraldleizhang/hindsight/agent/pkg/collector"
 	. "github.com/geraldleizhang/hindsight/agent/pkg/memory"
-	. "github.com/geraldleizhang/hindsight/agent/pkg/queue"
 	. "github.com/geraldleizhang/hindsight/agent/pkg/server"
 	. "github.com/geraldleizhang/hindsight/agent/pkg/util"
 )
