@@ -5,6 +5,9 @@ import (
 	"os"
 	"sync"
 	"time"
+	"bufio"
+	"strings"
+	"fmt"
 )
 
 var DEBUG int
@@ -14,6 +17,53 @@ var Server_addr string
 var Server_port string
 var LC_addr string
 var LC_port string
+
+func Conf_init(service_name string) bool {
+	conf_file, err := os.Open("/etc/hindsight_conf/" + service_name + ".conf")
+	if err != nil {
+		conf_file, err = os.Open("/etc/hindsight_conf/default.conf")
+		if err != nil {
+			fmt.Println("Please check conf file")
+			return false
+		}
+	}
+	defer conf_file.Close()
+
+	scanner := bufio.NewScanner(conf_file)
+	scanner.Split(bufio.ScanLines)
+
+	for scanner.Scan() {
+		///// cap is deprecated; now read direct from shm
+		// if strings.Contains(scanner.Text(), "cap") {
+		// 	Cap, _ = strconv.Atoi(strings.Split(scanner.Text(), " ")[1])
+		// }
+		///// buf_length is deprecated; now read direct from shm
+		// if strings.Contains(scanner.Text(), "buf_length") {
+		// 	Buf_length, _ = strconv.Atoi(strings.Split(scanner.Text(), " ")[1])
+		// }
+		if strings.Contains(scanner.Text(), "addr") && !strings.Contains(scanner.Text(), "lc") {
+			Server_addr = strings.Split(scanner.Text(), " ")[1]
+		}
+		if strings.Contains(scanner.Text(), "port") && !strings.Contains(scanner.Text(), "lc") {
+			Server_port = strings.Split(scanner.Text(), " ")[1]
+		}
+		if strings.Contains(scanner.Text(), "lc_addr") {
+			LC_addr = strings.Split(scanner.Text(), " ")[1]
+		}
+		if strings.Contains(scanner.Text(), "lc_port") {
+			LC_port = strings.Split(scanner.Text(), " ")[1]
+		}
+	}
+
+	fmt.Println("config file loaded, addr =", Server_addr, "port =", Server_port)
+
+	if Server_addr == "" || Server_port == "0" {
+		fmt.Println("Please declare agent addr and port")
+		return false
+	}
+
+	return true
+}
 
 type MessageQueue struct {
 	Req   map[int64]int

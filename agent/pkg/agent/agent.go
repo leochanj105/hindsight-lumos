@@ -5,9 +5,14 @@ import (
     "sync"
     "context"
     "time"
+    "log"
+    "net"
     "container/list"
     "github.com/emirpasic/gods/sets/treeset"
+    "github.com/geraldleizhang/hindsight/agent/pkg/util"
     "github.com/geraldleizhang/hindsight/agent/pkg/memory"
+    . "github.com/geraldleizhang/hindsight/agent/pkg/datapb"
+    "google.golang.org/grpc"
 )
 
 type TraceData struct {
@@ -26,7 +31,7 @@ func (trace *TraceData) Add(other *TraceData) {
 
 type Agent struct {
     api *memory.GoAgentAPI  // API to the shared memory
-    trigger_delay int64     // Used for experiments; hard-coded delay before trigger fires
+    trigger_delay uint64     // Used for experiments; hard-coded delay before trigger fires
     cache *TraceCache
     trigger_manager *TriggerManager
 }
@@ -107,7 +112,7 @@ type TraceCache struct {
     notify_available_buffers chan int      // Notify of change in cache capacity
 }
 
-func InitAgent(fname string, delay int) *Agent {
+func InitAgent(fname string, trigger_delay uint64) *Agent {
     var api *memory.GoAgentAPI
     api = memory.InitGoAgentAPI(fname)    
 
@@ -138,15 +143,35 @@ func InitAgent(fname string, delay int) *Agent {
     cache.breadcrumbs = api.Breadcrumbs
 
     triggers.available = api.Available
-    triggers.triggers = api.Triggers
     triggers.cache_triggers = cache.triggers
     triggers.cache_expired_triggers = cache.expired_triggers
     triggers.cache_notify_available_buffers = cache.notify_available_buffers
+
+    // Hack-ish here to delay triggers
+    if trigger_delay == 0 {
+        triggers.triggers = api.Triggers
+    } else {
+        proxy := make(chan []memory.Trigger)
+        triggers.triggers = proxy
+        go func() {
+            for {
+                select {
+                case fired := <-api.Triggers: {
+                    go func() {
+                        time.Sleep(time.Duration(trigger_delay) * time.Nanosecond)
+                        proxy <- fired
+                    }()
+                }
+                }
+            }
+        }()
+    }
 
     //// Create final agent
 
     var agent Agent
     agent.api = api
+    agent.trigger_delay = trigger_delay
     agent.cache = &cache;
     agent.trigger_manager = &triggers
 
@@ -157,7 +182,7 @@ func InitAgent(fname string, delay int) *Agent {
 
 func (agent *Agent) Run(ctx context.Context) {
     wg := new(sync.WaitGroup)
-    wg.Add(3)
+    wg.Add(4)
     go func() {
         agent.cache.Run(ctx)
         wg.Done()
@@ -167,9 +192,14 @@ func (agent *Agent) Run(ctx context.Context) {
         wg.Done()
     }()
     go func() {
+        agent.trigger_manager.RunGRPCServer()
+        wg.Done()
+    }()
+    go func() {
         agent.api.Run(ctx)
         wg.Done()
     }()
+    // LEI TODO: grpc server for remote triggers
     wg.Wait()
 }
 
@@ -282,6 +312,15 @@ func (tm *TriggerManager) reportNext() {
     delete(tm.unreported_data, trace_id)
 }
 
+/* gRPC requests from Log collector */
+func (tm *TriggerManager) Request(ctx context.Context, in *RequestID) (*CallRet, error) {
+    request_ids := in.Rid
+    for _, request_id := range request_ids {
+        tm.remote_triggers <- uint64(request_id)
+    }
+    return &CallRet{Callret: true}, nil
+}
+
 
 func (tm *TriggerManager) Run(ctx context.Context) {
     fmt.Println("TriggerManager goroutine running")
@@ -301,6 +340,20 @@ func (tm *TriggerManager) Run(ctx context.Context) {
             return
         default:
             tm.reportNext()
+        }
+    }
+}
+
+func (tm *TriggerManager) RunGRPCServer() {
+    for true {
+        lis, err := net.Listen("tcp", ":"+util.Server_port)
+        if err != nil {
+            log.Fatalf("failed to listen: %v", err)
+        }
+        s := grpc.NewServer()
+        RegisterAgentServer(s, tm)
+        if err := s.Serve(lis); err != nil {
+            log.Fatalf("failed to serve: %v", err)
         }
     }
 }

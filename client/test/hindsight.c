@@ -143,7 +143,7 @@ void drain_forever_agent(HindsightAgentAPI* api) {
 void drain_forever_client() {
 	printf("Beginning client trace\n");
 
-	size_t tracepoints_per_trace = 5;
+	size_t tracepoints_per_trace = 100;
 	size_t buf_size = 1000;
 	char buf[buf_size];
 
@@ -155,7 +155,6 @@ void drain_forever_client() {
 	uint64_t trace_id = 700;
 	while (true) {
 		hindsight_begin(++trace_id);
-		hindsight_trigger(0);
 		for (int i = 0; i < tracepoints_per_trace; i++) {
 			uint64_t now = nanos();
 			// printf("nanos %ld\n", now);
@@ -185,9 +184,9 @@ void drain_forever_client() {
 
 			hindsight_tracepoint(buf, buf_size);
 			count ++;
-			usleep(100000);
+			// usleep(100000);
 		}
-		if ((trace_id % 500) == 0) {
+		if ((trace_id % 5000) == 0) {
 			printf("Triggered %ld\n", trace_id);
 			hindsight_trigger(0);
 		}
@@ -196,7 +195,7 @@ void drain_forever_client() {
 
 		bool dosleep = true;
 		if (dosleep) {
-			usleep(1000);
+			usleep(100);
 		}
 	}	
 }
