@@ -185,6 +185,7 @@ void drain_forever_client() {
 			hindsight_tracepoint(buf, buf_size);
 			count ++;
 		}
+		hindsight_breadcrumb("Hello World!");
 		hindsight_end();
 	}	
 }

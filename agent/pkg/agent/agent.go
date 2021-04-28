@@ -314,13 +314,13 @@ func (cache *TraceCache) Run(ctx context.Context) {
 
             delete(cache.triggered, trace_id)
         }
-        case breadcrumbs := <-cache.breadcrumbs: {
-            /* Received some breadcrumbs from the shm breadcrumbs queue */
-            cache.addBreadcrumbs(breadcrumbs)
-        }
         case buffers := <-cache.complete: {
             /* Received some buffers from the shm complete queue */
             cache.addCompletedBuffers(buffers)
+        }
+        case breadcrumbs := <-cache.breadcrumbs: {
+            /* Received some breadcrumbs from the shm breadcrumbs queue */
+            cache.addBreadcrumbs(breadcrumbs)
         }
         default: {
             /* Default case: check if eviction is needed */
