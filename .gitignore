@@ -1,3 +1,6 @@
+.gitignore
+*/bin/*
+
 # Prerequisites
 *.d
 
