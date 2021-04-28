@@ -17,6 +17,7 @@ import (
 	"sync"
     "context"
     "time"
+    "unsafe"
 )
 
 // BATCHSIZE is #defined in agentapi.h
@@ -382,4 +383,17 @@ func (agent *AgentAPI) GetBreadcrumbBatches() BreadcrumbBatch {
 	}
 
 	return breadcrumbs	
+}
+
+func (agent *AgentAPI) GetBuffer(buffer_id int) []byte {
+	buffer_size := int(agent.c_api.mgr.meta.buffer_size)
+	start := buffer_id * buffer_size
+	end := start + buffer_size
+	var data []byte
+	data = (*[1<<30]byte)(unsafe.Pointer(agent.c_api.mgr.pool))[start:end]
+	return data
+}
+
+func (api *GoAgentAPI) GetBuffer(buffer_id int) []byte {
+	return api.agent.GetBuffer(buffer_id)
 }

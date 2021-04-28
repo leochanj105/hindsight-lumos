@@ -11,7 +11,7 @@ import (
     "github.com/emirpasic/gods/sets/treeset"
     "github.com/geraldleizhang/hindsight/agent/pkg/util"
     "github.com/geraldleizhang/hindsight/agent/pkg/memory"
-    . "github.com/geraldleizhang/hindsight/agent/pkg/datapb"
+    "github.com/geraldleizhang/hindsight/agent/pkg/datapb"
     "google.golang.org/grpc"
 )
 
@@ -42,6 +42,7 @@ that are fired both locally and received from the log
 collector
 */
 type TriggerManager struct {
+    api *memory.GoAgentAPI  // API to the shared memory
 
     // Incoming from grpc handler
     remote_triggers chan uint64
@@ -128,6 +129,7 @@ func InitAgent(fname string, trigger_delay uint64) *Agent {
     cache.notify_available_buffers = make(chan int, 10000)
 
     var triggers TriggerManager
+    triggers.api = api
     triggers.remote_triggers = make(chan uint64, 1000)
     triggers.new_trace_data = make(chan *TraceData, 10000)
     triggers.triggered = make(map[uint64](chan struct{}))
@@ -151,7 +153,7 @@ func InitAgent(fname string, trigger_delay uint64) *Agent {
     if trigger_delay == 0 {
         triggers.triggers = api.Triggers
     } else {
-        proxy := make(chan []memory.Trigger)
+        proxy := make(chan []memory.Trigger, 10000)
         triggers.triggers = proxy
         go func() {
             for {
@@ -291,7 +293,7 @@ func (tm *TriggerManager) unTrigger(trace_id uint64) {
 }
 
 /* Reports trace data to the collector */
-func (tm *TriggerManager) reportNext() {
+func (tm *TriggerManager) reportNext(lc datapb.CollectorClient) {
     it := tm.unreported_trace_ids.Iterator()
     if !it.First() {
         return
@@ -299,31 +301,69 @@ func (tm *TriggerManager) reportNext() {
 
     // Get the next trace to report
     trace_id := uint64(it.Value().(int))
-    data := tm.unreported_data[trace_id]
+    trace := tm.unreported_data[trace_id]
 
-    fmt.Printf("Reporting trace %d with %d buffers, breadcrumbs: ", trace_id, len(data.Buffers))
-    for i, addr := range data.Breadcrumbs {
+    // Remove from unreported data
+    tm.unreported_trace_ids.Remove(int(trace_id))
+    delete(tm.unreported_data, trace_id)
+
+
+    fmt.Printf("Reporting trace %d with %d buffers, breadcrumbs: ", trace_id, len(trace.Buffers))
+    for i, addr := range trace.Breadcrumbs {
         fmt.Printf("(%d: %s) ", i, addr)
     }
     fmt.Printf("\n")
 
-    // Data is now reported
-    tm.unreported_trace_ids.Remove(int(trace_id))
-    delete(tm.unreported_data, trace_id)
+    var entry []int32
+    var trace_data []byte
+    var addrs []string
+    addrs = append(addrs, util.Server_addr+":"+util.Server_port)
+
+    for _, buffer_id := range trace.Buffers {
+        entry = append(entry, int32(buffer_id))
+        data := tm.api.GetBuffer(buffer_id)
+        trace_data = append(trace_data, data...)
+        addrs = append(addrs, trace.Breadcrumbs...)
+    }
+
+    ctx, cancel := context.WithTimeout(context.Background(), 1000000000*time.Nanosecond)
+    defer cancel()
+
+    _, err := lc.Report(ctx, &datapb.Trace{
+        RequestId: int64(trace_id),
+        Entry:     entry,
+        Trace:     trace_data,
+        Addrs:     addrs})
+
+    if err != nil {
+        fmt.Println("report", err)
+        // return
+    }
 }
 
 /* gRPC requests from Log collector */
-func (tm *TriggerManager) Request(ctx context.Context, in *RequestID) (*CallRet, error) {
+func (tm *TriggerManager) Request(ctx context.Context, in *datapb.RequestID) (*datapb.CallRet, error) {
     request_ids := in.Rid
     for _, request_id := range request_ids {
         tm.remote_triggers <- uint64(request_id)
     }
-    return &CallRet{Callret: true}, nil
+    return &datapb.CallRet{Callret: true}, nil
 }
 
 
 func (tm *TriggerManager) Run(ctx context.Context) {
     fmt.Println("TriggerManager goroutine running")
+    conn, err := grpc.Dial(util.LC_addr+":"+util.LC_port, 
+                            grpc.WithInsecure(), 
+                            grpc.WithTimeout(100000000*time.Nanosecond))
+    if err != nil {
+        fmt.Println("dial", util.LC_addr+":"+util.LC_port, err)
+        return
+    }
+    fmt.Println("TriggerManager connected to", util.LC_addr+":"+util.LC_port)
+    defer conn.Close()
+
+    collector := datapb.NewCollectorClient(conn)
     for {
         select {
         case triggers := <-tm.triggers:
@@ -339,7 +379,7 @@ func (tm *TriggerManager) Run(ctx context.Context) {
         case <- ctx.Done():
             return
         default:
-            tm.reportNext()
+            tm.reportNext(collector)
         }
     }
 }
@@ -351,7 +391,7 @@ func (tm *TriggerManager) RunGRPCServer() {
             log.Fatalf("failed to listen: %v", err)
         }
         s := grpc.NewServer()
-        RegisterAgentServer(s, tm)
+        datapb.RegisterAgentServer(s, tm)
         if err := s.Serve(lis); err != nil {
             log.Fatalf("failed to serve: %v", err)
         }

@@ -15,7 +15,7 @@
 
 HindsightConfig config() {
 	HindsightConfig conf;
-	conf.pool_capacity = 10000;
+	conf.pool_capacity = 100000;
 	conf.buffer_size = 4000;
 	conf.breadcrumbs_capacity = conf.pool_capacity;
 	conf.triggers_capacity = conf.pool_capacity;
@@ -184,13 +184,18 @@ void drain_forever_client() {
 
 			hindsight_tracepoint(buf, buf_size);
 			count ++;
-			// usleep(100000);
 		}
-		if ((trace_id % 100000) == 0) {
+		if ((trace_id % 200) == 0) {
+			printf("Triggered %ld\n", trace_id);
 			hindsight_trigger(0);
 		}
 		hindsight_breadcrumb("Hello World!");
 		hindsight_end();
+
+		bool dosleep = true;
+		if (dosleep) {
+			usleep(10000);
+		}
 	}	
 }
 
