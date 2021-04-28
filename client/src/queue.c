@@ -48,7 +48,7 @@ Queue queue_init(const char* fname, size_t element_size, size_t capacity) {
     printf("capacity=%ld ", q.meta->capacity);
     printf("element_size=%ld ", q.meta->element_size);
     printf("element_total_size=%ld ", q.meta->element_total_size);
-    printf("at %s\n", fname);
+    printf("at %s (%p)\n", fname, q.baseptr);
 
     return q;
 }
@@ -87,7 +87,7 @@ Queue queue_init_existing(const char* fname) {
     printf("capacity=%ld ", q.meta->capacity);
     printf("element_size=%ld ", q.meta->element_size);
     printf("element_total_size=%ld ", q.meta->element_total_size);
-    printf("at %s\n", fname);
+    printf("at %s (%p)\n", fname, q.baseptr);
 
     return q;
 }

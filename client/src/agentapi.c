@@ -30,12 +30,12 @@ void hindsight_agentapi_get_complete_nonblocking(HindsightAgentAPI* api, Complet
 }
 
 void hindsight_agentapi_get_triggers_nonblocking(HindsightAgentAPI* api, TriggerBatch* triggers) {
-    triggers->count = queue_get_nonblocking_multi(&api->triggers, (char*) triggers->triggers, BATCHSIZE);
+    triggers->count = queue_get_nonblocking_multi(&api->triggers.queue, (char*) triggers->triggers, BATCHSIZE);
 }
 
-void hindsight_agentapi_get_breadcrumbs_nonblocking(HindsightAgentAPI* api, BreadcrumbBatch* breadcrumbs) {
-    breadcrumbs->count = queue_get_nonblocking_multi(&api->breadcrumbs, (char*) breadcrumbs->breadcrumbs, BATCHSIZE);
-    for (int i = 0; i < breadcrumbs->count; i++) {
-        breadcrumbs->breadcrumb_addrs[i] = breadcrumbs->breadcrumbs[i].address;
+void hindsight_agentapi_get_breadcrumbs_nonblocking(HindsightAgentAPI* api, BreadcrumbBatch* batch) {
+    batch->count = queue_get_nonblocking_multi(&api->breadcrumbs.queue, (char*) batch->breadcrumbs, BATCHSIZE);
+    for (int i = 0; i < batch->count; i++) {
+        batch->breadcrumb_addrs[i] = batch->breadcrumbs[i].address;
     }
 }

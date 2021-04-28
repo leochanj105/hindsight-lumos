@@ -371,6 +371,14 @@ typedef struct StructForQueueTest {
 	int b;
 	int c;
 	int64_t d;
+	int ab;
+	int bb;
+	int cb;
+	int64_t db;
+	int64_t dba;
+	int64_t dbs;
+	int64_t dbd;
+	int64_t dbf;
 } StructForQueueTest;
 
 void test_queue_struct() {
