@@ -118,15 +118,15 @@ func InitAgent(fname string, delay int) *Agent {
     cache.lru = list.New()
     cache.data = make(map[uint64]*list.Element)
     cache.triggered = make(map[uint64]struct{})
-    cache.triggers = make(chan uint64)
-    cache.expired_triggers = make(chan uint64)
-    cache.notify_available_buffers = make(chan int)
+    cache.triggers = make(chan uint64, 10000)
+    cache.expired_triggers = make(chan uint64, 10000)
+    cache.notify_available_buffers = make(chan int, 10000)
 
     var triggers TriggerManager
-    triggers.remote_triggers = make(chan uint64)
-    triggers.new_trace_data = make(chan *TraceData)
+    triggers.remote_triggers = make(chan uint64, 1000)
+    triggers.new_trace_data = make(chan *TraceData, 10000)
     triggers.triggered = make(map[uint64](chan struct{}))
-    triggers.timeouts = make(chan uint64)
+    triggers.timeouts = make(chan uint64, 10000)
     triggers.unreported_trace_ids = treeset.NewWithIntComparator()
     triggers.unreported_data = make(map[uint64]*TraceData)
 
@@ -194,7 +194,7 @@ func (tm *TriggerManager) addTraceData(trace *TraceData) {
     } else {
         /* Add the new trace data */
         tm.unreported_data[trace_id] = trace
-        tm.unreported_trace_ids.Add(trace_id)
+        tm.unreported_trace_ids.Add(int(trace_id))
     }
 
     // Set a new timeout for the trace
@@ -203,7 +203,7 @@ func (tm *TriggerManager) addTraceData(trace *TraceData) {
     go func() {
         // TODO this timeout can be much higher, e.g. minutes
         select {
-        case <- time.After(60 * time.Millisecond):
+        case <- time.After(3 * time.Second):
             tm.timeouts <- trace_id
         case <- canceller:
             return
@@ -211,6 +211,11 @@ func (tm *TriggerManager) addTraceData(trace *TraceData) {
     }()
 }
 
+/* Sets a trace as triggered.  This is called by the client
+invoking trigger over shm, and by the collector sending a 
+trigger to us.  We will send all current and future data
+for this trace ID to the collector.  We will stop sending 
+data for this trace after 60 seconds.  */
 func (tm *TriggerManager) addTrigger(trace_id uint64) {
     if canceller, ok := tm.triggered[trace_id]; ok {
         /* Already triggered; cancel old timeout */
@@ -223,7 +228,7 @@ func (tm *TriggerManager) addTrigger(trace_id uint64) {
     go func() {
         // TODO this timeout can be much higher, e.g. minutes
         select {
-        case <- time.After(60 * time.Millisecond):
+        case <- time.After(3 * time.Second):
             tm.timeouts <- trace_id
         case <- canceller:
             return
@@ -234,6 +239,7 @@ func (tm *TriggerManager) addTrigger(trace_id uint64) {
     tm.cache_triggers <- trace_id    
 }
 
+/* Sets a trace as untriggered and stops collecting its data */
 func (tm *TriggerManager) unTrigger(trace_id uint64) {
     if _, ok := tm.triggered[trace_id]; ok {
         /* Delete the trigger */
@@ -247,11 +253,33 @@ func (tm *TriggerManager) unTrigger(trace_id uint64) {
 
         /* Delete */
         delete(tm.unreported_data, trace_id)
-        tm.unreported_trace_ids.Remove(trace_id)
+        tm.unreported_trace_ids.Remove(int(trace_id))
     }
 
     /* Notify the cache to untrigger */
     tm.cache_expired_triggers <- trace_id
+}
+
+/* Reports trace data to the collector */
+func (tm *TriggerManager) reportNext() {
+    it := tm.unreported_trace_ids.Iterator()
+    if !it.First() {
+        return
+    }
+
+    // Get the next trace to report
+    trace_id := uint64(it.Value().(int))
+    data := tm.unreported_data[trace_id]
+
+    fmt.Printf("Reporting trace %d with %d buffers, breadcrumbs: ", trace_id, len(data.Buffers))
+    for i, addr := range data.Breadcrumbs {
+        fmt.Printf("(%d: %s) ", i, addr)
+    }
+    fmt.Printf("\n")
+
+    // Data is now reported
+    tm.unreported_trace_ids.Remove(int(trace_id))
+    delete(tm.unreported_data, trace_id)
 }
 
 
@@ -271,6 +299,8 @@ func (tm *TriggerManager) Run(ctx context.Context) {
             tm.unTrigger(trace_id)
         case <- ctx.Done():
             return
+        default:
+            tm.reportNext()
         }
     }
 }
@@ -426,7 +456,9 @@ func (cache *TraceCache) Run(ctx context.Context) {
         }
         default: {
             /* Default case: check if eviction is needed */
-            cache.checkEviction()
+            if !cache.checkEviction() {
+                time.Sleep(100 * time.Microsecond)
+            }
         }
         }
     }

@@ -12,6 +12,7 @@ go get golang.org/x/net/context golang.org/x/exp/mmap google.golang.org/grpc
 * allow cgo:
 ```
 export CGO_LDFLAGS_ALLOW=".*"
+export GOMAXPROCS=10
 ```
 
 ### *Testing Hindsight*

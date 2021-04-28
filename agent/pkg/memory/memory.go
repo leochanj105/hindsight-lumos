@@ -67,10 +67,10 @@ func InitAgentAPI(fname string) *AgentAPI {
 func InitGoAgentAPI(fname string) *GoAgentAPI {
 	var api GoAgentAPI
 	api.agent = InitAgentAPI(fname)
-	api.Available = make(chan []int)
-	api.Complete = make(chan CompleteBatch)
-	api.Triggers = make(chan []Trigger)
-	api.Breadcrumbs = make(chan BreadcrumbBatch)
+	api.Available = make(chan []int, 100000)
+	api.Complete = make(chan CompleteBatch, 100000)
+	api.Triggers = make(chan []Trigger, 100000)
+	api.Breadcrumbs = make(chan BreadcrumbBatch, 100000)
 	return &api
 }
 
@@ -125,7 +125,8 @@ func (api *GoAgentAPI) completeLoop(ctx context.Context) {
 				api.Complete <- completed
 				backoff = int(10)
 			} else {
-				time.Sleep(time.Duration(backoff) * time.Nanosecond)
+				duration := time.Duration(backoff) * time.Microsecond
+				time.Sleep(duration)
 				backoff *= 2
 		        if (backoff > max_backoff) {
 		            backoff = max_backoff
