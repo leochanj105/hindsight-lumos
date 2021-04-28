@@ -93,7 +93,6 @@ func (cache *TraceCache) evictNext() *TraceData {
     return trace
 }
 
-func (cache *TraceCache) Evict
 
 func CacheManager() {
     // fmt.Println("[cache mngr stat] size=", cache.size)

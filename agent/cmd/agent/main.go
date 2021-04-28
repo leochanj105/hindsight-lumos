@@ -9,6 +9,7 @@ import (
 	"strings"
 	"sync"
 
+	. "github.com/geraldleizhang/hindsight/agent/pkg/agent"
 	. "github.com/geraldleizhang/hindsight/agent/pkg/cache"
 	. "github.com/geraldleizhang/hindsight/agent/pkg/collector"
 	. "github.com/geraldleizhang/hindsight/agent/pkg/memory"
@@ -137,6 +138,8 @@ func stat() {
 
 func main() {
 	DEBUG = 0
+
+	agent := InitAgent("blah", 500)
 
 	isLC := flag.Bool("lc", false, "Log Collector")
 	serv_temp := flag.String("serv", "", "Service name")

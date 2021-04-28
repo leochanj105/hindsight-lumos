@@ -14,14 +14,28 @@ import "C"
 
 import (
 	"fmt"
+	"sync"
+    "context"
+    "time"
 )
 
 // BATCHSIZE is #defined in agentapi.h
 //   The value here must be the same as the value in agentapi.h
 const BATCHSIZE = 100
 
+/* For directly putting and getting stuff from shm */
 type AgentAPI struct {
 	c_api *C.HindsightAgentAPI
+}
+
+/* Go style API that has some goroutines and puts stuff into channels */
+type GoAgentAPI struct {
+	agent *AgentAPI
+
+    Available chan []int    // Channel for re-enqueueing buffers to shm available queue
+    Complete chan []CompleteBuffer // Channel for receiving completed buffers from shm
+    Triggers chan []Trigger // Channel for receiving local triggers from shm
+    Breadcrumbs chan []Breadcrumb // Channel for receiving breadcrumbs from shm
 }
 
 type CompleteBuffer struct {
@@ -46,6 +60,119 @@ func InitAgentAPI(fname string) *AgentAPI {
     agent.releaseAllBuffers()
     return &agent
 }
+
+func InitGoAgentAPI(fname string) *GoAgentAPI {
+	var api GoAgentAPI
+	api.agent = InitAgentAPI(fname)
+	api.Available = make(chan []int)
+	api.Complete = make(chan []CompleteBuffer)
+	api.Triggers = make(chan []Trigger)
+	api.Breadcrumbs = make(chan []Breadcrumb)
+	return &api
+}
+
+func (api *GoAgentAPI) Run(ctx context.Context) {
+    wg := new(sync.WaitGroup)
+    wg.Add(2)
+    go func() {
+        api.availableLoop(ctx)
+        wg.Done()
+    }()
+    go func() {
+        api.completeLoop(ctx)
+        wg.Done()
+    }()
+    go func() {
+        api.triggerLoop(ctx)
+        wg.Done()
+    }()
+    go func() {
+        api.breadcrumbsLoop(ctx)
+        wg.Done()
+    }()
+    wg.Wait()
+}
+
+func (api *GoAgentAPI) availableLoop(ctx context.Context) {
+	for {
+		select {
+		case bufids := <- api.Available:
+			api.agent.PutAvailable(bufids)
+		case <- ctx.Done():
+			return
+		}
+	}
+}
+
+func (api *GoAgentAPI) completeLoop(ctx context.Context) {
+    max_backoff := 100000
+    backoff := int(10)
+	for {
+		select {
+		case <- ctx.Done():
+			return
+		default:
+			completed := api.agent.GetComplete()
+			if len(completed) > 0 {
+				api.Complete <- completed
+				backoff = int(10)
+			} else {
+				time.Sleep(time.Duration(backoff) * time.Nanosecond)
+				backoff *= 2
+		        if (backoff > max_backoff) {
+		            backoff = max_backoff
+		        }
+			}
+		}
+	}
+}
+
+func (api *GoAgentAPI) triggerLoop(ctx context.Context) {
+    max_backoff := 100000
+    backoff := int(10)
+	for {
+		select {
+		case <- ctx.Done():
+			return
+		default:
+			triggers := api.agent.GetTriggers()
+			if len(triggers) > 0 {
+				api.Triggers <- triggers
+				backoff = int(10)
+			} else {
+				time.Sleep(time.Duration(backoff) * time.Nanosecond)
+				backoff *= 2
+	            if (backoff > max_backoff) {
+	                backoff = max_backoff
+	            }
+			}
+		}
+	}
+}
+
+func (api *GoAgentAPI) breadcrumbsLoop(ctx context.Context) {
+    max_backoff := 100000
+    backoff := int(10)
+	for {
+		select {
+		case <- ctx.Done():
+			return
+		default:
+			breadcrumbs := api.agent.GetBreadcrumbs()
+			if len(breadcrumbs) > 0 {
+				api.Breadcrumbs <- breadcrumbs
+				backoff = int(10)
+			} else {
+				time.Sleep(time.Duration(backoff) * time.Nanosecond)
+				backoff *= 2
+	            if (backoff > max_backoff) {
+	                backoff = max_backoff
+	            }
+			}
+		}
+	}
+}
+
 
 func (agent *AgentAPI) drainAllBuffers() {
 	// Drain any available buffers
@@ -164,17 +291,16 @@ BATCHSIZE is hard-coded in agentapi.h
 
 This is a non-blocking call; may return 0 triggers
 */
-func (agent *AgentAPI) GetTriggers() []*Trigger {
+func (agent *AgentAPI) GetTriggers() []Trigger {
 	var tb C.TriggerBatch
 	C.hindsight_agentapi_get_triggers_nonblocking(agent.c_api, &tb)
 
-	var triggers []*Trigger
 	count := int(tb.count)
+	triggers := make([]Trigger, count)
 	for i := 0; i < count; i++ {
-		var trigger Trigger
+		trigger := &triggers[i]
 		trigger.Request_id = uint64(tb.triggers[i].trace_id)
 		trigger.Trigger_id = int(tb.triggers[i].trigger_id)
-		triggers = append(triggers, &trigger)
 	}
 
 	return triggers
@@ -187,17 +313,16 @@ BATCHSIZE is hard-coded in agentapi.h
 
 This is a non-blocking call; may return 0 breadcrumbs
 */
-func (agent *AgentAPI) GetBreadcrumbs() []*Breadcrumb {
+func (agent *AgentAPI) GetBreadcrumbs() []Breadcrumb {
 	var bb C.BreadcrumbBatch
 	C.hindsight_agentapi_get_breadcrumbs_nonblocking(agent.c_api, &bb)
 
-	var breadcrumbs []*Breadcrumb
 	count := int(bb.count)
+	breadcrumbs := make([]Breadcrumb, count)
 	for i := 0; i < count; i++ {
-		var breadcrumb Breadcrumb
+		breadcrumb := &breadcrumbs[i]
 		breadcrumb.Request_id = uint64(bb.breadcrumbs[i].trace_id)
 		breadcrumb.Address = C.GoString(bb.breadcrumb_addrs[i])
-		breadcrumbs = append(breadcrumbs, &breadcrumb)
 	}
 
 	return breadcrumbs	
