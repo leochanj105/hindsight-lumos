@@ -16,6 +16,14 @@ type TraceData struct {
     Breadcrumbs []string
 }
 
+func (trace *TraceData) Add(other *TraceData) {
+    if other == nil {
+        return
+    }
+    trace.Buffers = append(trace.Buffers, other.Buffers...)
+    trace.Breadcrumbs = append(trace.Breadcrumbs, other.Breadcrumbs...)
+}
+
 type Agent struct {
     api *memory.GoAgentAPI  // API to the shared memory
     trigger_delay int64     // Used for experiments; hard-coded delay before trigger fires
@@ -29,33 +37,37 @@ that are fired both locally and received from the log
 collector
 */
 type TriggerManager struct {
-    local_triggers chan uint64      // Channel used to receive local triggers
-    remote_triggers chan uint64     // Channel used to receive remote triggers
-    new_trace_data chan *TraceData  // Channel used to receive data from the cache
 
-    /* Used by the TriggerManager to tell the cache of triggered traces and freed bufs */
-    cache_triggers <-chan uint64                // From TraceCache
-    cache_expired_triggers <-chan uint64        // From TraceCache
-    cache_notify_available_buffers <-chan int   // From TraceCache
+    // Incoming from grpc handler
+    remote_triggers chan uint64
 
-
-    /* Used by TriggerManager after reporting buffers, to make them available again */
-    available_buffers <-chan []int
+    // Channel for receiving triggered trace data from cache
+    new_trace_data chan *TraceData
 
     /* Every triggered trace will initiate a timer that eventually evicts the trace
     from the trigger manager.  These channels are used to reset the timeout when 
     new trace data arrives */
-    timers map[uint64](chan bool)    
+    triggered      map[uint64](chan struct{})
+    timeouts    chan uint64
 
     /* Stores the trace IDs of all triggered traces, until they expire.
     These are sorted, in case triggering becomes a bottleneck; low trace IDs
     get reported first*/
-    trace_ids *treeset.Set
+    unreported_trace_ids *treeset.Set
 
     /* TraceData that hasn't been reported yet.  A trace ID will remain in
     this map until it expires, but any reported buffers get immediately 
     cleared from the list */
     unreported_data map[uint64]*TraceData
+
+    // Incoming from shm (GoAgentAPI)
+    available   chan<- []int                    // to send evicted buffers to shm available queue
+    triggers    <-chan []memory.Trigger         // triggers from shm
+
+    /* Used by the TriggerManager to tell the cache of triggered traces and freed bufs */
+    cache_triggers chan<- uint64                // From TraceCache
+    cache_expired_triggers chan<- uint64        // From TraceCache
+    cache_notify_available_buffers chan<- int   // From TraceCache
 }
 
 type CacheStats struct {
@@ -88,7 +100,7 @@ type TraceCache struct {
     last_print uint64
 
     // Triggered and expired traces
-    triggered           map[uint64]bool    // Trace IDs that have been triggered
+    triggered           map[uint64]struct{}// Trace IDs that have been triggered
     triggers            chan uint64        // Receive new triggered trace IDs
     expired_triggers    chan uint64        // Trace IDs that are now expired
     triggered_data      chan<- *TraceData  //   From TriggerManager
@@ -105,17 +117,17 @@ func InitAgent(fname string, delay int) *Agent {
     cache.buf_count = 0
     cache.lru = list.New()
     cache.data = make(map[uint64]*list.Element)
-    cache.triggered = make(map[uint64]bool)
+    cache.triggered = make(map[uint64]struct{})
     cache.triggers = make(chan uint64)
     cache.expired_triggers = make(chan uint64)
     cache.notify_available_buffers = make(chan int)
 
     var triggers TriggerManager
-    triggers.local_triggers = make(chan uint64)
     triggers.remote_triggers = make(chan uint64)
     triggers.new_trace_data = make(chan *TraceData)
-    triggers.timers = make(map[uint64](chan bool))
-    triggers.trace_ids = treeset.NewWithIntComparator()
+    triggers.triggered = make(map[uint64](chan struct{}))
+    triggers.timeouts = make(chan uint64)
+    triggers.unreported_trace_ids = treeset.NewWithIntComparator()
     triggers.unreported_data = make(map[uint64]*TraceData)
 
     //// Link up channels
@@ -125,6 +137,8 @@ func InitAgent(fname string, delay int) *Agent {
     cache.complete = api.Complete
     cache.breadcrumbs = api.Breadcrumbs
 
+    triggers.available = api.Available
+    triggers.triggers = api.Triggers
     triggers.cache_triggers = cache.triggers
     triggers.cache_expired_triggers = cache.expired_triggers
     triggers.cache_notify_available_buffers = cache.notify_available_buffers
@@ -159,14 +173,102 @@ func (agent *Agent) Run(ctx context.Context) {
     wg.Wait()
 }
 
+func (tm *TriggerManager) addTraceData(trace *TraceData) {
+    trace_id := trace.Request_id
+
+    if canceller, ok := tm.triggered[trace_id]; ok {
+        /* This trace is still triggered. Cancel the old timer */
+        canceller <- struct{}{}
+    } else {
+        /* This trace is not triggered. Ditch the buffers, remind
+        the cache it's not triggered, and leave */
+        tm.cache_notify_available_buffers <- len(trace.Buffers)
+        tm.available <- trace.Buffers
+        tm.cache_expired_triggers <- trace_id
+        return
+    }
+    
+    if existing, ok := tm.unreported_data[trace_id]; ok {
+        /* There's some unreported data for this trace */
+        existing.Add(trace)
+    } else {
+        /* Add the new trace data */
+        tm.unreported_data[trace_id] = trace
+        tm.unreported_trace_ids.Add(trace_id)
+    }
+
+    // Set a new timeout for the trace
+    canceller := make(chan struct{})
+    tm.triggered[trace_id] = canceller
+    go func() {
+        // TODO this timeout can be much higher, e.g. minutes
+        select {
+        case <- time.After(60 * time.Millisecond):
+            tm.timeouts <- trace_id
+        case <- canceller:
+            return
+        }
+    }()
+}
+
+func (tm *TriggerManager) addTrigger(trace_id uint64) {
+    if canceller, ok := tm.triggered[trace_id]; ok {
+        /* Already triggered; cancel old timeout */
+        canceller <- struct{}{}
+    }
+
+    // Set a new timeout for the trace
+    canceller := make(chan struct{})
+    tm.triggered[trace_id] = canceller
+    go func() {
+        // TODO this timeout can be much higher, e.g. minutes
+        select {
+        case <- time.After(60 * time.Millisecond):
+            tm.timeouts <- trace_id
+        case <- canceller:
+            return
+        }
+    }()
+
+    // Notify cache
+    tm.cache_triggers <- trace_id    
+}
+
+func (tm *TriggerManager) unTrigger(trace_id uint64) {
+    if _, ok := tm.triggered[trace_id]; ok {
+        /* Delete the trigger */
+        delete(tm.triggered, trace_id)
+    }
+
+    if trace, ok := tm.unreported_data[trace_id]; ok {
+        /* Return the buffers */
+        tm.cache_notify_available_buffers <- len(trace.Buffers)
+        tm.available <- trace.Buffers
+
+        /* Delete */
+        delete(tm.unreported_data, trace_id)
+        tm.unreported_trace_ids.Remove(trace_id)
+    }
+
+    /* Notify the cache to untrigger */
+    tm.cache_expired_triggers <- trace_id
+}
+
+
 func (tm *TriggerManager) Run(ctx context.Context) {
     fmt.Println("TriggerManager goroutine running")
     for {
         select {
-        case trace_id := <-tm.local_triggers:
-            fmt.Println("Local trigger", trace_id)
+        case triggers := <-tm.triggers:
+            for _, trigger := range triggers {
+                tm.addTrigger(trigger.Request_id)
+            }
         case trace_id := <-tm.remote_triggers:
-            fmt.Println("Remote trigger", trace_id)
+            tm.addTrigger(trace_id)
+        case trace_data := <-tm.new_trace_data:
+            tm.addTraceData(trace_data)
+        case trace_id := <-tm.timeouts:
+            tm.unTrigger(trace_id)
         case <- ctx.Done():
             return
         }
@@ -294,7 +396,7 @@ func (cache *TraceCache) Run(ctx context.Context) {
             }
 
             // Mark as cached
-            cache.triggered[trace_id] = true;
+            cache.triggered[trace_id] = struct{}{};
 
             // If any data exists, send to the trigger manager
             if entry, ok := cache.data[trace_id]; ok {
