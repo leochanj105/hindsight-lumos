@@ -39,11 +39,13 @@ func drain_forever(api *memory.GoAgentAPI, ctx context.Context) {
         }
 
         select {
-        case breadcrumbs := <- api.Breadcrumbs:
+        case batch := <- api.Breadcrumbs:
             count += 1
-            sum += len(breadcrumbs)
-            for _, crumb := range breadcrumbs {
-                fmt.Println("Received breadcrumb:", crumb.Request_id, " at ", crumb.Address)
+            for trace_id, breadcrumbs := range batch {
+                for _, breadcrumb := range breadcrumbs {
+                    fmt.Println("Received breadcrumb:", trace_id, " at ", breadcrumb)
+                }
+                sum += len(breadcrumbs)
             }
         }
     }

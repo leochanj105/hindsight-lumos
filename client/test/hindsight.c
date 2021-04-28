@@ -142,8 +142,8 @@ void drain_forever_agent(HindsightAgentAPI* api) {
 
 void drain_forever_client() {
 	printf("Beginning client trace\n");
-	hindsight_begin(700);
 
+	size_t tracepoints_per_trace = 100;
 	size_t buf_size = 1000;
 	char buf[buf_size];
 
@@ -152,35 +152,40 @@ void drain_forever_client() {
 	uint64_t print_every = 1000000000UL;
 	uint64_t count = 0;
 	BufferStats stats = {0,0,0,0};
+	uint64_t trace_id = 700;
 	while (true) {
-		uint64_t now = nanos();
-		// printf("nanos %ld\n", now);
-		if ((now - last_print) > print_every) {
-			BufferStats current = hindsight.mgr.stats;
-			BufferStats delta = {
-				current.pool_acquired - stats.pool_acquired,
-				current.null_acquired - stats.null_acquired,
-				current.pool_released - stats.pool_released,
-				current.null_released - stats.null_released
-			};
+		hindsight_begin(trace_id++);
+		for (int i = 0; i < tracepoints_per_trace; i++) {
+			uint64_t now = nanos();
+			// printf("nanos %ld\n", now);
+			if ((now - last_print) > print_every) {
+				BufferStats current = hindsight.mgr.stats;
+				BufferStats delta = {
+					current.pool_acquired - stats.pool_acquired,
+					current.null_acquired - stats.null_acquired,
+					current.pool_released - stats.pool_released,
+					current.null_released - stats.null_released
+				};
 
-			// Calculate throughputs
-			uint64_t tput = (count * print_every) / (now - last_print);
-			delta.pool_acquired = (delta.pool_acquired * print_every) / (now - last_print);
-			delta.null_acquired = (delta.null_acquired * print_every) / (now - last_print);
-			delta.pool_released = (delta.pool_released * print_every) / (now - last_print);
-			delta.null_released = (delta.null_released * print_every) / (now - last_print);
+				// Calculate throughputs
+				uint64_t tput = (count * print_every) / (now - last_print);
+				delta.pool_acquired = (delta.pool_acquired * print_every) / (now - last_print);
+				delta.null_acquired = (delta.null_acquired * print_every) / (now - last_print);
+				delta.pool_released = (delta.pool_released * print_every) / (now - last_print);
+				delta.null_released = (delta.null_released * print_every) / (now - last_print);
 
-			printf("Tracepoints %ld - Pool: %ld %ld - NULL %ld %ld\n", tput, 
-				delta.pool_acquired, delta.pool_released, 
-				delta.null_acquired, delta.null_released);
-			last_print = now;
-			count = 0;
-			stats = current;
+				printf("Tracepoints %ld - Pool: %ld %ld - NULL %ld %ld\n", tput, 
+					delta.pool_acquired, delta.pool_released, 
+					delta.null_acquired, delta.null_released);
+				last_print = now;
+				count = 0;
+				stats = current;
+			}
+
+			hindsight_tracepoint(buf, buf_size);
+			count ++;
 		}
-
-		hindsight_tracepoint(buf, buf_size);
-		count ++;
+		hindsight_end();
 	}	
 }
 

@@ -39,14 +39,12 @@ func drain_forever(api *memory.GoAgentAPI, ctx context.Context) {
         }
 
         select {
-        case buffers := <- api.Complete:
+        case batch := <- api.Complete:
             count += 1
-            sum += len(buffers)            
-            ids := make([]int, len(buffers))
-            for i, buf := range buffers {
-                ids[i] = buf.Buffer_id
+            for _, buffer_ids := range batch {
+                sum += len(buffer_ids)
+                api.Available <- buffer_ids
             }
-            api.Available <- ids
         }
     }
     select {

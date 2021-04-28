@@ -28,14 +28,17 @@ type AgentAPI struct {
 	c_api *C.HindsightAgentAPI
 }
 
+type CompleteBatch map[uint64][]int
+type BreadcrumbBatch map[uint64][]string
+
 /* Go style API that has some goroutines and puts stuff into channels */
 type GoAgentAPI struct {
 	agent *AgentAPI
 
     Available chan []int    // Channel for re-enqueueing buffers to shm available queue
-    Complete chan []CompleteBuffer // Channel for receiving completed buffers from shm
+    Complete chan CompleteBatch // Channel for receiving completed buffers from shm
     Triggers chan []Trigger // Channel for receiving local triggers from shm
-    Breadcrumbs chan []Breadcrumb // Channel for receiving breadcrumbs from shm
+    Breadcrumbs chan BreadcrumbBatch // Channel for receiving breadcrumbs from shm
 }
 
 type CompleteBuffer struct {
@@ -65,15 +68,20 @@ func InitGoAgentAPI(fname string) *GoAgentAPI {
 	var api GoAgentAPI
 	api.agent = InitAgentAPI(fname)
 	api.Available = make(chan []int)
-	api.Complete = make(chan []CompleteBuffer)
+	api.Complete = make(chan CompleteBatch)
 	api.Triggers = make(chan []Trigger)
-	api.Breadcrumbs = make(chan []Breadcrumb)
+	api.Breadcrumbs = make(chan BreadcrumbBatch)
 	return &api
 }
 
+func (api *GoAgentAPI) Capacity() int {
+	return int(api.agent.c_api.mgr.meta.capacity)
+}
+
 func (api *GoAgentAPI) Run(ctx context.Context) {
+    fmt.Println("shm queue goroutine running")
     wg := new(sync.WaitGroup)
-    wg.Add(2)
+    wg.Add(4)
     go func() {
         api.availableLoop(ctx)
         wg.Done()
@@ -112,7 +120,7 @@ func (api *GoAgentAPI) completeLoop(ctx context.Context) {
 		case <- ctx.Done():
 			return
 		default:
-			completed := api.agent.GetComplete()
+			completed := api.agent.GetCompleteBatches()
 			if len(completed) > 0 {
 				api.Complete <- completed
 				backoff = int(10)
@@ -158,7 +166,7 @@ func (api *GoAgentAPI) breadcrumbsLoop(ctx context.Context) {
 		case <- ctx.Done():
 			return
 		default:
-			breadcrumbs := api.agent.GetBreadcrumbs()
+			breadcrumbs := api.agent.GetBreadcrumbBatches()
 			if len(breadcrumbs) > 0 {
 				api.Breadcrumbs <- breadcrumbs
 				backoff = int(10)
@@ -256,6 +264,29 @@ func (agent *AgentAPI) GetComplete() []CompleteBuffer {
 	return buffers
 }
 
+/* Retrieves up to BATCHSIZE buffers from the complete queue.
+
+Groups bufids by trace ID
+
+BATCHSIZE is hard-coded in agentapi.h
+
+This is a non-blocking call; may return 0 buffers
+*/
+func (agent *AgentAPI) GetCompleteBatches() CompleteBatch {
+	var cb C.CompleteBuffers
+	C.hindsight_agentapi_get_complete_nonblocking(agent.c_api, &cb)
+
+	count := int(cb.count)
+	buffers := make(CompleteBatch, count)
+	for i := 0; i < count; i++ {
+		trace_id := uint64(cb.bufs[i].trace_id)
+		buffer_id := int(cb.bufs[i].buffer_id)
+		buffers[trace_id] = append(buffers[trace_id], buffer_id)
+	}
+
+	return buffers
+}
+
 /* Puts buffers to the available queue.
 
 This is a blocking call; it will wait until all available IDs
@@ -323,6 +354,30 @@ func (agent *AgentAPI) GetBreadcrumbs() []Breadcrumb {
 		breadcrumb := &breadcrumbs[i]
 		breadcrumb.Request_id = uint64(bb.breadcrumbs[i].trace_id)
 		breadcrumb.Address = C.GoString(bb.breadcrumb_addrs[i])
+	}
+
+	return breadcrumbs	
+}
+
+
+/* Retrieves up to BATCHSIZE breadcrumbs from the breadcrumbs queue.
+
+Groups breadcrumbs by trace ID
+
+BATCHSIZE is hard-coded in agentapi.h
+
+This is a non-blocking call; may return 0 breadcrumbs
+*/
+func (agent *AgentAPI) GetBreadcrumbBatches() BreadcrumbBatch {
+	var bb C.BreadcrumbBatch
+	C.hindsight_agentapi_get_breadcrumbs_nonblocking(agent.c_api, &bb)
+
+	count := int(bb.count)
+	breadcrumbs := make(BreadcrumbBatch, count)
+	for i := 0; i < count; i++ {
+		trace_id := uint64(bb.breadcrumbs[i].trace_id)
+		addr := C.GoString(bb.breadcrumb_addrs[i])
+		breadcrumbs[trace_id] = append(breadcrumbs[trace_id], addr)
 	}
 
 	return breadcrumbs	
