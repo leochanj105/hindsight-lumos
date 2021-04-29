@@ -248,6 +248,8 @@ Throughput: 2047736 Average batch: 5.4422784
 This integration test runs the real Go agent and displays simple throughput numbers.  It also prints whenever a trace is triggered using Hindsight's `trigger` API.
 You will see RPC errors, as the test attempts to connect to an RPC server that isn't running.
 
+**Prerequisites:** For this test, you must `sudo make install` to ensure the Hindsight configs have been installed, otherwise you may see config errors.
+
 The tests require two terminals.  Note: terminal 1 must be run before terminal 2.
 
 **Terminal 1:**
