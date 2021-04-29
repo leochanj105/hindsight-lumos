@@ -4,16 +4,55 @@
 
 ### *Environmental Setup*
 * gcc
-* golang, with several packages
-```
-go get golang.org/x/net/context golang.org/x/exp/mmap google.golang.org/grpc
-```
-* you may need to add agent dir to $GOPATH
-* allow cgo:
+* golang 1.11 or higher (to support go modules)
+* you may need to add agent dir to `$GOPATH`
+* Hindsight's agent uses cgo::
 ```
 export CGO_LDFLAGS_ALLOW=".*"
 export GOMAXPROCS=10
 ```
+
+### First build
+0. Build the client.
+```
+cd client
+make
+```
+1. Run single-process tests
+```
+bin/queue_test
+bin/buffer_test
+```
+2. Run multi-process tests
+Open two terminals.  In the first, run:
+```
+bin/hindsight_test x
+```
+Then, in the second, run:
+```
+bin/hindsight_test
+```
+You will see some outputs, such as pool sizes and shm files used.  Then you will see output such as:
+
+Terminal 1:
+```
+Throughput: 2435647
+Throughput: 2436865
+```
+
+Terminal 2:
+```
+Tracepoints 22486887 - Pool: 0 0 - NULL 5846590 5846589
+Tracepoints 13126025 - Pool: 1725364 1725363 - NULL 1687401 1687402
+Tracepoints 9351492 - Pool: 2431388 2431388 - NULL 0 0
+```
+
+The first terminal acts as the "client" -- writing to Hindsight's client API
+
+The second terminal acts as a simple "agent" -- receiving written trace data and recycling buffers
+
+Note: 
+
 
 ### *Testing Hindsight*
 0. Write configuration files. This is to define memory cap and buffer length, and agent/log collector addresses. Config file should be named by *[serv_name].conf* under *conf/*. Hindsight will use *default.conf* which is fine for single agent/non-report modes.
