@@ -255,6 +255,8 @@ The tests require two terminals.  Note: terminal 1 must be run before terminal 2
 cd client
 bin/hindsight_test client
 ```
+***Note:*** *You can alternately run `bin/hindsight2_test client` which generates a lower volume of data*
+
 You should see output that looks like:
 ```
 Running as client
