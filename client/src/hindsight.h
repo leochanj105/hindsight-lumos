@@ -42,6 +42,7 @@ typedef struct Hindsight {
 
 // Single global instance of Hindsight state
 extern Hindsight hindsight;
+extern BufManager* mgr;
 
 // Thread-local trace state
 extern __thread TraceState hindsight_tracestate;

@@ -44,6 +44,11 @@ void tracestate_write(TraceState* trace,
                       char* buf,
                       size_t buf_size);
 
+// Attempts to one-shot write buffer
+bool tracestate_try_write(TraceState* trace,
+                          char* buf,
+                          size_t buf_size);
+
 
 
 

@@ -7,6 +7,7 @@
 #include "hindsight.h"
 
 Hindsight hindsight;
+BufManager* mgr;
 __thread TraceState hindsight_tls = {false};
 
 void hindsight_print_config(HindsightConfig* conf) {
@@ -127,22 +128,25 @@ void hindsight_init_with_config(const char* service_name, HindsightConfig config
     hindsight.triggers = triggers_init(
         service_name,
         hindsight.config.triggers_capacity);
+
+    mgr = &hindsight.mgr;
 }
 
 void hindsight_begin(uint64_t trace_id) {
-    tracestate_begin(&hindsight_tls, &hindsight.mgr, trace_id);
+    tracestate_begin(&hindsight_tls, mgr, trace_id);
 }
 
 void hindsight_end() {
-    tracestate_end(&hindsight_tls, &hindsight.mgr);
+    tracestate_end(&hindsight_tls, mgr);
 }
 
 void hindsight_tracepoint(char* buf, size_t buf_size) {
-    tracestate_write(&hindsight_tls, &hindsight.mgr, buf, buf_size);
+    if (tracestate_try_write(&hindsight_tls, buf, buf_size)) return;
+    tracestate_write(&hindsight_tls, mgr, buf, buf_size);
 }
 
 void hindsight_tracepoint_write(size_t write_size, char** dst, size_t* dst_size) {
-    tracestate_write_data(&hindsight_tls, &hindsight.mgr, 
+    tracestate_write_data(&hindsight_tls, mgr, 
         write_size, dst, dst_size);
 }
 

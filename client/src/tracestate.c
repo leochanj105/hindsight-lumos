@@ -96,18 +96,26 @@ void tracestate_write(TraceState* trace,
                       BufManager* mgr,
                       char* buf,
                       size_t buf_size) {
-    if (!trace->active) return;
-    char* dst;
-    size_t dst_size;
+    if (trace->active) {
+        char* dst;
+        size_t dst_size;
 
-    while (buf_size != 0) {
-        // Try to write everything
-        tracestate_write_data(trace, mgr, buf_size, &dst, &dst_size);
+        while (buf_size != 0) {
+            // Try to write everything
+            tracestate_write_data(trace, mgr, buf_size, &dst, &dst_size);
 
-        // Write what we're allowed
-        memcpy((void*) dst, (void*) buf, dst_size);
+            // Write what we're allowed
+            memcpy((void*) dst, (void*) buf, dst_size);
 
-        buf += dst_size;
-        buf_size -= dst_size;
+            buf += dst_size;
+            buf_size -= dst_size;
+        }
     }
+}
+
+// Writes data to the trace; called by tracepoint
+bool tracestate_try_write(TraceState* trace,
+                          char* buf,
+                          size_t buf_size) {
+    return trace->active && buffer_try_write_all(&trace->buffer, buf, buf_size);
 }

@@ -15,8 +15,8 @@
 
 HindsightConfig config() {
 	HindsightConfig conf;
-	conf.pool_capacity = 10000;
-	conf.buffer_size = 4000;
+	conf.pool_capacity = 1000;
+	conf.buffer_size = 10000;
 	conf.breadcrumbs_capacity = conf.pool_capacity;
 	conf.triggers_capacity = conf.pool_capacity;
 	conf.address = malloc(32 * sizeof(char));
@@ -143,8 +143,8 @@ void drain_forever_agent(HindsightAgentAPI* api) {
 void drain_forever_client() {
 	printf("Beginning client trace\n");
 
-	size_t tracepoints_per_trace = 100;
-	size_t buf_size = 1000;
+	size_t tracepoints_per_trace = 80000;
+	size_t buf_size = 100;
 	char buf[buf_size];
 
 	printf("Beginning client loop\n");
@@ -153,6 +153,7 @@ void drain_forever_client() {
 	uint64_t count = 0;
 	BufferStats stats = {0,0,0,0};
 	uint64_t trace_id = 700;
+	int check_every = 100;
 	while (true) {
 		hindsight_begin(++trace_id);
 		for (int i = 0; i < tracepoints_per_trace; i++) {
@@ -182,9 +183,10 @@ void drain_forever_client() {
 				stats = current;
 			}
 
-			hindsight_tracepoint(buf, buf_size);
-			count ++;
-			// usleep(100000);
+			for (int j = 0; j < check_every; j++) {
+				hindsight_tracepoint(buf, buf_size);
+			}
+			count += check_every;
 		}
 		if ((trace_id % 100000) == 0) {
 			hindsight_trigger(0);

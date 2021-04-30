@@ -96,6 +96,7 @@ bool buffer_is_valid(Buffer* b);
 // then `dst_size` will only be the remaining capacity, and the caller
 // must acquire a new buffer to write the remaining data.
 void buffer_write(Buffer* b, size_t size, char** dst, size_t* dst_size);
+bool buffer_try_write_all(Buffer* b, char* buf, size_t buf_size);
 
 
 #endif // _HINDSIGHT_CLIENT_BUFFER_H_

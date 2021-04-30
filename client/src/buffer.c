@@ -195,3 +195,11 @@ void buffer_write(Buffer* b, size_t size, char** dst, size_t* dst_size) {
     b->remaining -= size;
     b->ptr += size;
 }
+
+bool buffer_try_write_all(Buffer *b, char* buf, size_t buf_size) {
+    if (b->remaining < buf_size) return false;
+
+    memcpy((void*) b->ptr, (void*) buf, buf_size);
+    b->remaining -= buf_size;
+    return true;
+}
