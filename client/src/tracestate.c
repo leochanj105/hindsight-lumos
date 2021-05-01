@@ -29,8 +29,11 @@ time_t tracestate_get_time() {
 }
 
 void tracestate_begin(TraceState* trace, BufManager* mgr, uint64_t trace_id) {
-    // If we were previously active, return the buffer
     if (trace->active) {
+        // If the trace ID is the same, ignore this call
+        if (trace_id == trace->header.trace_id) return;
+
+        // If traceID is different, need to return the old buffer
         bufmanager_return(mgr, trace->header.trace_id, &trace->buffer);
     }
     buffer_clear(&trace->buffer);
