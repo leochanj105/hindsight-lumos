@@ -133,6 +133,7 @@ void bufmanager_acquire(BufManager* mgr, Buffer* dst) {
         dst->id = av.buffer_id;
         dst->remaining = mgr->meta->buffer_size;
         dst->ptr = mgr->pool + (av.buffer_id * mgr->meta->buffer_size);
+        dst->base = dst->ptr;
 
         // TODO: allow to #define away
         __sync_fetch_and_add(&mgr->stats.pool_acquired, 1);
@@ -140,6 +141,7 @@ void bufmanager_acquire(BufManager* mgr, Buffer* dst) {
         dst->id = -2;
         dst->remaining = mgr->meta->buffer_size;
         dst->ptr = mgr->null_buffer;
+        dst->base = dst->ptr;
 
         // TODO: allow to #define away
         __sync_fetch_and_add(&mgr->stats.null_acquired, 1);
@@ -171,6 +173,7 @@ Buffer buffer_create() {
 void buffer_clear(Buffer* b) {
     b->id = -1;
     b->ptr = 0;
+    b->base = 0;
     b->remaining = 0;
 }
 

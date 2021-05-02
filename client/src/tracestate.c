@@ -11,15 +11,18 @@ TraceState tracestate_create() {
 
 // Write the header to the current buffer
 void tracestate_write_header(TraceState* trace) {
+    char* base = trace->buffer.base;
     char* dst;
     size_t dst_size;
     buffer_write(&trace->buffer, sizeof(TraceHeader), &dst, &dst_size);
 
     // write_header should only be called on a fresh buffer.
     assert(dst_size == sizeof(TraceHeader));
+    assert(base == dst);
 
     // Write the header
     *((TraceHeader*) dst) = trace->header;
+    trace->current = (TraceHeader*) dst;
 }
 
 time_t tracestate_get_time() {
@@ -34,6 +37,8 @@ void tracestate_begin(TraceState* trace, BufManager* mgr, uint64_t trace_id) {
         if (trace_id == trace->header.trace_id) return;
 
         // If traceID is different, need to return the old buffer
+        trace->current->completed = tracestate_get_time();
+        trace->current->size = trace->buffer.ptr - trace->buffer.base;
         bufmanager_return(mgr, trace->header.trace_id, &trace->buffer);
     }
     buffer_clear(&trace->buffer);
@@ -43,7 +48,8 @@ void tracestate_begin(TraceState* trace, BufManager* mgr, uint64_t trace_id) {
     trace->header.trace_id = trace_id;
     trace->header.buffer_number = 0;
     trace->header.null_buffer_count = 0;
-    trace->header.timestamp = tracestate_get_time();
+    trace->header.size = 0;
+    trace->header.acquired = tracestate_get_time();
 
     // Acquire a fresh buffer and write the header
     bufmanager_acquire(mgr, &trace->buffer);
@@ -53,6 +59,10 @@ void tracestate_begin(TraceState* trace, BufManager* mgr, uint64_t trace_id) {
 void tracestate_end(TraceState* trace, BufManager* mgr) {
     if (!trace->active) return;
 
+    // Finish buffer data
+    trace->current->completed = tracestate_get_time();
+    trace->current->size = trace->buffer.ptr - trace->buffer.base;
+
     // Return the current buffer
     bufmanager_return(mgr, trace->header.trace_id, &trace->buffer);
     trace->active = false;
@@ -61,6 +71,8 @@ void tracestate_end(TraceState* trace, BufManager* mgr) {
     trace->header.buffer_number = 0;
     trace->header.trace_id = 0;
     trace->header.null_buffer_count = 0;
+    trace->header.size = 0;
+    trace->current = &trace->header;
 }
 
 void tracestate_write_data(TraceState* trace, 
@@ -75,12 +87,14 @@ void tracestate_write_data(TraceState* trace,
     if (*dst_size != 0) return;
 
     // Buffer is full, return old buffer
+    trace->current->completed = tracestate_get_time();
+    trace->current->size = trace->buffer.ptr - trace->buffer.base;
     bufmanager_return(mgr, trace->header.trace_id, &trace->buffer);
 
     // Acquire new buffer and write header
     bufmanager_acquire(mgr, &trace->buffer);
     trace->header.buffer_number++;
-    trace->header.timestamp = tracestate_get_time();
+    trace->header.acquired = tracestate_get_time();
     if (trace->buffer.ptr == mgr->null_buffer) {
         // TODO: probably shouldn't be implemented like this
         trace->header.null_buffer_count++;

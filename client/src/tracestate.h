@@ -9,7 +9,9 @@
 // It could include stuff like span IDs, but I'm not sure that's necessary in the header
 typedef struct TraceHeader {
     uint64_t trace_id;
-    uint64_t timestamp;
+    uint64_t acquired;
+    uint64_t completed;
+    uint32_t size;
     short buffer_number;
     short null_buffer_count;
 } TraceHeader;
@@ -17,7 +19,8 @@ typedef struct TraceHeader {
 // TraceState represents an active, ongoing trace in the current process
 typedef struct TraceState {
     bool active;
-    TraceHeader header; // The current trace header. Gets written to every buffer.
+    TraceHeader header; // The trace header data. Gets written to every buffer.
+    TraceHeader* current; // Header within the current active buffer.
     Buffer buffer; // The current active buffer.
 } TraceState;
 

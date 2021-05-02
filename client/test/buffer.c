@@ -158,7 +158,8 @@ void test_tracestate() {
 	}
 
 	tracestate_begin(&trace, &mgr, 3000);
-	assert(sizeof(TraceHeader) == 24);
+	printf("Traceheader size %ld\n", sizeof(TraceHeader));
+	assert(sizeof(TraceHeader) == 32);
 	assert(trace.buffer.id == 0);
 	assert(trace.buffer.remaining == (buffer_size - sizeof(TraceHeader)));
 
@@ -175,12 +176,12 @@ void test_tracestate() {
 	tracestate_write(&trace, &mgr, data2, 60);
 	assert(trace.buffer.id == 1);
 	assert(trace.buffer.remaining == (2 * buffer_size - 2 * sizeof(TraceHeader) - 50 - 60));
-	for (int i = 0; i < 26; i++) {
+	for (int i = 0; i < 18; i++) {
 		int base = sizeof(TraceHeader) + 50;
 		assert(mgr.pool[base+i] == i);
 	}
 	assert(mgr.pool[100] != 26);
-	for (int i = 26; i < 60; i++) {
+	for (int i = 18; i < 60; i++) {
 		int base = 2 * sizeof(TraceHeader) + 50;
 		assert(mgr.pool[base+i] == i);
 	}
@@ -199,7 +200,7 @@ void test_tracestate_nullbuffer() {
 	}
 
 	tracestate_begin(&trace, &mgr, 3000);
-	assert(sizeof(TraceHeader) == 24);
+	assert(sizeof(TraceHeader) == 32);
 	assert(trace.buffer.id == 0);
 
 	char* data = make_data(50);
