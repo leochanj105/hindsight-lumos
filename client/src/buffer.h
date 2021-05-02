@@ -66,6 +66,9 @@ BufManager bufmanager_init(const char* name,
 // Initializes a bufmanager with existing shm regions and queues
 BufManager bufmanager_init_existing(const char* name);
 
+// Makes all buffers available; called on initialization
+void bufmanager_make_all_buffers_available(BufManager* mgr);
+
 // Acquires a buffer from the queue, setting it in dst.
 // Doesn't block -- will set the null buffer if nothing can be acquired
 void bufmanager_acquire(BufManager* mgr, Buffer* dst);

@@ -23,73 +23,12 @@ HindsightConfig config() {
 	return conf;
 }
 
-void reset_available_buffers(HindsightAgentAPI* api) {
-	printf("Resetting buffers: draining any existing buffers...\n");
-
-	size_t davailable = 0;
-	while (true) {
-		AvailableBuffers ab;
-
-		hindsight_agentapi_get_available_nonblocking(api, &ab);
-
-		if (ab.count == 0) {
-			break;
-		}
-
-		davailable += ab.count;
-	}
-
-	size_t dcomplete = 0;
-	while (true) {
-		CompleteBuffers cb;
-
-		hindsight_agentapi_get_complete_nonblocking(api, &cb);
-
-		if (cb.count == 0) {
-			break;
-		}
-
-		dcomplete += cb.count;
-	}
-
-	printf("Resetting buffers: drained %ld available and %ld complete.\n", davailable, dcomplete);
-}
-
-void make_all_buffers_available(HindsightAgentAPI* api) {
-	printf("Initialize buffers: making %ld buffers available...\n", api->mgr.meta->capacity);
-
-	int next_buffer_id = 0;
-	size_t remaining = api->mgr.meta->capacity;
-	while (remaining > 0) {
-		AvailableBuffers av;
-		av.count = 100;
-		if (av.count > remaining) {
-			av.count = remaining;
-		}
-		remaining -= av.count;
-
-		for (int i = 0; i < av.count; i++) {
-			av.bufs[i].buffer_id = next_buffer_id;
-			next_buffer_id++;
-		}
-
-		hindsight_agentapi_put_available_blocking(api, &av);
-	}
-
-	printf("Initialize buffers: done\n");
-	printf("Queue states:\n");
-	printf("  Available ");
-	queue_print(&api->mgr.available);
-	printf("  Complete ");
-	queue_print(&api->mgr.complete);	
-}
-
 HindsightAgentAPI* init_agentapi(const char* name) {
 	HindsightAgentAPI* api = hindsight_agentapi_init(name);
 
 	printf("Inited existing bufmanager %s\n", name);
 
-	reset_available_buffers(api);
+	// reset_available_buffers(api);
 
 	return api;
 }
@@ -210,8 +149,6 @@ void client() {
 
 void agent() {
 	HindsightAgentAPI* api = init_agentapi(PROCESS_NAME);
-
-	make_all_buffers_available(api);
 
 	drain_forever_agent(api);
 }

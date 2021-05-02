@@ -17,68 +17,10 @@ import (
     "time"
 )
 
-func reset_available_buffers(api *C.HindsightAgentAPI) {
-    davailable := 0
-    for {
-        var ab C.AvailableBuffers
-        C.hindsight_agentapi_get_available_nonblocking(api, &ab)
-
-        if (ab.count == 0) {
-            break
-        }
-
-        davailable += int(ab.count)
-    }
-
-    dcomplete := 0
-    for {
-        var cb C.CompleteBuffers
-        C.hindsight_agentapi_get_complete_nonblocking(api, &cb)
-
-        if (cb.count == 0) {
-            break
-        }
-
-        dcomplete += int(cb.count)
-    }
-
-    fmt.Println("Resetting buffers: drained", davailable, "available and", dcomplete, "complete")
-}
-
-func make_all_buffers_available(api *C.HindsightAgentAPI) {
-    fmt.Println("Initialize buffers: making", api.mgr.meta.capacity, "buffers available...")
-
-    next_buffer_id := 0
-    remaining := api.mgr.meta.capacity
-    for (remaining > 0) {
-        var av C.AvailableBuffers
-        av.count = 100
-        if (av.count > remaining) {
-            av.count = remaining
-        }
-        remaining -= av.count
-
-        for i:= 0; i < 100; i++ {
-            av.bufs[i].buffer_id = C.int(next_buffer_id)
-            next_buffer_id++
-        }
-
-        C.hindsight_agentapi_put_available_blocking(api, &av);
-    }
-
-    fmt.Println("Initialize buffers: done")
-    fmt.Println("Queue states:")
-    fmt.Print("  Available ")
-    C.queue_print(&api.mgr.available)
-    fmt.Print("  Complete ")
-    C.queue_print(&api.mgr.complete)
-}
 
 func init_agentapi(fname string) *C.HindsightAgentAPI {
     agentapi := C.hindsight_agentapi_init(C.CString(fname))
     fmt.Println("Inited existing bufmanager", fname)
-    reset_available_buffers(agentapi)
-    make_all_buffers_available(agentapi);
     return agentapi
 }
 
@@ -136,31 +78,6 @@ func main() {
 
     fname := "hs_integration_test"
 
-    // f, err := os.OpenFile(fname, os.O_RDWR|os.O_CREATE, 0666)
-    // if err != nil {
-    //  fmt.Println("open file failed:", err)
-    // }
-    // fd := int(f.Fd())
-    // fmt.Println("opened ", fd)
-
-    // fi, err := f.Stat()
-    // if err != nil {
-    //  fmt.Println("stat failed:",err)
-    // }
-    // fmt.Println("size is ", fi.Size())
-
-    // p, err := syscall.Mmap(fd, 0, int(fi.Size()), syscall.PROT_READ|syscall.PROT_WRITE, syscall.MAP_SHARED)
-
-    // fmt.Printf("%T\n", p)
-
     agentapi := init_agentapi(fname)
     drain_forever(agentapi)
-
-
-
-    // fmt.Println(q)
-
-    // fmt.Println(q.meta)
-
-    // md := C.QueueMetadata(p)
 }

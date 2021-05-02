@@ -70,31 +70,6 @@ func main() {
 
     fname := "hs_integration_test"
 
-    // f, err := os.OpenFile(fname, os.O_RDWR|os.O_CREATE, 0666)
-    // if err != nil {
-    //  fmt.Println("open file failed:", err)
-    // }
-    // fd := int(f.Fd())
-    // fmt.Println("opened ", fd)
-
-    // fi, err := f.Stat()
-    // if err != nil {
-    //  fmt.Println("stat failed:",err)
-    // }
-    // fmt.Println("size is ", fi.Size())
-
-    // p, err := syscall.Mmap(fd, 0, int(fi.Size()), syscall.PROT_READ|syscall.PROT_WRITE, syscall.MAP_SHARED)
-
-    // fmt.Printf("%T\n", p)
-
     agentapi := memory.InitAgentAPI(fname)
     drain_forever(agentapi)
-
-
-
-    // fmt.Println(q)
-
-    // fmt.Println(q.meta)
-
-    // md := C.QueueMetadata(p)
 }

@@ -92,7 +92,14 @@ void put_available(Queue q, int bufid) {
 }
 
 void test_bufmanager() {
-	BufManager mgr = bufmanager_init("test_bufmanager", 10, 100);
+	size_t capacity = 10;
+	BufManager mgr = bufmanager_init("test_bufmanager", capacity, 100);
+
+	for (int i = 0; i < capacity; i++) {
+		Buffer buf = buffer_create();
+		bufmanager_acquire(&mgr, &buf);
+		assert(buf.id == i);
+	}
 
 	put_available(mgr.available, 7);
 
@@ -151,11 +158,8 @@ void test_tracestate() {
 	int buffer_count = 10;
 	size_t buffer_size = 100;
 	BufManager mgr = bufmanager_init("test_tracestate", buffer_count, buffer_size);
-	TraceState trace = tracestate_create();
 
-	for (unsigned i = 0; i < buffer_count; i++) {
-		put_available(mgr.available, i);
-	}
+	TraceState trace = tracestate_create();
 
 	tracestate_begin(&trace, &mgr, 3000);
 	printf("Traceheader size %ld\n", sizeof(TraceHeader));
@@ -194,6 +198,12 @@ void test_tracestate_nullbuffer() {
 	size_t buffer_size = 100;
 	BufManager mgr = bufmanager_init("test_tracestate_nullbuffer", buffer_count, buffer_size);
 	TraceState trace = tracestate_create();
+
+	for (int i = 0; i < buffer_count; i++) {
+		Buffer buf = buffer_create();
+		bufmanager_acquire(&mgr, &buf);
+		assert(buf.id == i);
+	}
 
 	for (unsigned i = 0; i < 2; i++) {
 		put_available(mgr.available, i);

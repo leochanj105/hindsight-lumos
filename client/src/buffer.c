@@ -56,6 +56,21 @@ char* bufmanager_pool_init_existing(const char* fname) {
     return (char*) shm;
 }
 
+void bufmanager_make_all_buffers_available(BufManager* mgr) {
+    for (size_t i = 0; i < mgr->meta->capacity; i++) {
+        AvailableBuffer av;
+        av.buffer_id = i;
+        bool success = queue_put_nonblocking(&mgr->available, (char*) &av);
+
+        assert(success);
+    }
+
+    // Double check queue is now full
+    AvailableBuffer av;
+    bool success = queue_put_nonblocking(&mgr->available, (char*) &av);
+    assert(!success);
+}
+
 BufManager bufmanager_init(const char* name,
                            size_t capacity,
                            size_t buffer_size) {
@@ -74,7 +89,6 @@ BufManager bufmanager_init(const char* name,
     m.meta = (PoolMetadata*) m.baseptr;
     m.meta->capacity = capacity;
     m.meta->buffer_size = buffer_size;
-    m.meta->initialized = true;
     m.pool = m.baseptr + sizeof(PoolMetadata);
 
     printf("Created buffer pool, ");
@@ -86,6 +100,10 @@ BufManager bufmanager_init(const char* name,
     m.complete = queue_init(COMPLETE_SHM_FILENAME(name), sizeof(CompleteBuffer), capacity);
 
     m.null_buffer = (char*) malloc(m.meta->buffer_size);
+
+    bufmanager_make_all_buffers_available(&m);
+
+    m.meta->initialized = true;
     return m;
 }
 

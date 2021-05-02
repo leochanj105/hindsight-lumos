@@ -60,8 +60,13 @@ type Breadcrumb struct {
 func InitAgentAPI(fname string) *AgentAPI {
 	var agent AgentAPI
     agent.c_api = C.hindsight_agentapi_init(C.CString(fname))
-    agent.drainAllBuffers()
-    agent.releaseAllBuffers()
+    
+    fmt.Println("Initialize buffers: done")
+    fmt.Println("Queue states:")
+    fmt.Print("  Available ")
+    C.queue_print(&agent.c_api.mgr.available)
+    fmt.Print("  Complete ")
+    C.queue_print(&agent.c_api.mgr.complete)
     return &agent
 }
 
@@ -181,68 +186,6 @@ func (api *GoAgentAPI) breadcrumbsLoop(ctx context.Context) {
 			}
 		}
 	}
-}
-
-
-func (agent *AgentAPI) drainAllBuffers() {
-	// Drain any available buffers
-    davailable := 0
-    for {
-        var ab C.AvailableBuffers
-        C.hindsight_agentapi_get_available_nonblocking(agent.c_api, &ab)
-
-        if (ab.count == 0) {
-            break
-        }
-
-        davailable += int(ab.count)
-    }
-
-    // Drain all complete buffers
-    dcomplete := 0
-    for {
-        var cb C.CompleteBuffers
-        C.hindsight_agentapi_get_complete_nonblocking(agent.c_api, &cb)
-
-        if (cb.count == 0) {
-            break
-        }
-
-        dcomplete += int(cb.count)
-    }
-
-    fmt.Println("Resetting buffers: drained", davailable, "available and", dcomplete, "complete")
-}
-
-// Makes all buffers available in the shm available queue
-// TODO: initial buffers should be made available by the client rather than agent probably
-func (agent *AgentAPI) releaseAllBuffers() {
-    fmt.Println("Initialize buffers: making", agent.c_api.mgr.meta.capacity, "buffers available...")
-
-    next_buffer_id := 0
-    remaining := agent.c_api.mgr.meta.capacity
-    for (remaining > 0) {
-        var av C.AvailableBuffers
-        av.count = 100
-        if (av.count > remaining) {
-            av.count = remaining
-        }
-        remaining -= av.count
-
-        for i:= 0; i < 100; i++ {
-            av.bufs[i].buffer_id = C.int(next_buffer_id)
-            next_buffer_id++
-        }
-
-        C.hindsight_agentapi_put_available_blocking(agent.c_api, &av);
-    }
-
-    fmt.Println("Initialize buffers: done")
-    fmt.Println("Queue states:")
-    fmt.Print("  Available ")
-    C.queue_print(&agent.c_api.mgr.available)
-    fmt.Print("  Complete ")
-    C.queue_print(&agent.c_api.mgr.complete)
 }
 
 /* Retrieves up to BATCHSIZE buffers from the complete queue.
