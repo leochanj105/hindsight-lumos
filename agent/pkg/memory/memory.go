@@ -128,6 +128,7 @@ func (api *GoAgentAPI) completeLoop(ctx context.Context) {
 		default:
 			completed := api.agent.GetCompleteBatches()
 			if len(completed) > 0 {
+				fmt.Println("Got some completed batches")
 				api.Complete <- completed
 				backoff = int(10)
 			} else {
@@ -222,6 +223,7 @@ func (agent *AgentAPI) GetCompleteBatches() CompleteBatch {
 	C.hindsight_agentapi_get_complete_nonblocking(agent.c_api, &cb)
 
 	count := int(cb.count)
+	fmt.Println("Got", count, "buffers")
 	buffers := make(CompleteBatch, count)
 	for i := 0; i < count; i++ {
 		trace_id := uint64(cb.bufs[i].trace_id)

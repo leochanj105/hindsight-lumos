@@ -249,6 +249,7 @@ trigger to us.  We will send all current and future data
 for this trace ID to the collector.  We will stop sending 
 data for this trace after 60 seconds.  */
 func (tm *TriggerManager) addTrigger(trace_id uint64) {
+    log.Println("Received trigger for", trace_id)
     if canceller, ok := tm.triggered[trace_id]; ok {
         /* Already triggered; cancel old timeout */
         canceller <- struct{}{}
