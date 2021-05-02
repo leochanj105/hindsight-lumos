@@ -89,6 +89,7 @@ redirect all future buffers to the TriggerManager until told otherwise
 type TraceCache struct {
     // Constants for deciding when to evict 
     capacity            int // Above this threshold, we should evict
+    buffer_size         int // Size of buffers in the cache
     eviction_batch_size int // Each eviction should aim for this many buffers
     buf_count           int // Current number of cached buffers. Not the same
 
@@ -119,6 +120,7 @@ func InitAgent(fname string, trigger_delay uint64) *Agent {
 
     var cache TraceCache
     cache.capacity = (4 * api.Capacity()) / 5 // TODO: not hardcoded
+    cache.buffer_size = api.BufferSize()
     cache.eviction_batch_size = 20 // Hard code to some value for now
     cache.buf_count = 0
     cache.lru = list.New()
@@ -457,14 +459,15 @@ func (cache *TraceCache) addCompletedBuffers(batch memory.CompleteBatch) {
     cache.stats.complete_batches++
 
     var print_every uint64
-    print_every = 1000000000
+    print_every = 5000000000
     now := uint64(time.Now().UnixNano())
     if ((now - cache.last_print) > print_every) {
         count := cache.stats.complete_batches
         sum := cache.stats.complete_buffers
-        tput := (uint64(sum) * print_every) / (now - cache.last_print)
+        tput := float32(uint64(sum) * 1000000000) / float32(now - cache.last_print)
+        tput_mb := (tput * float32(cache.buffer_size)) / (1024 * 1024)
         batchsize := float32(sum) / float32(count)
-        fmt.Println("Throughput:", tput, "Average batch:", batchsize)
+        fmt.Printf("%.0f MB/s (%.0f bufs/s, %d bufs total), Avg batch %.1f\n", tput_mb, tput, sum, batchsize)
         cache.last_print = now
         cache.stats.complete_batches = 0
         cache.stats.complete_buffers = 0

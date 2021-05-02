@@ -84,6 +84,10 @@ func (api *GoAgentAPI) Capacity() int {
 	return int(api.agent.c_api.mgr.meta.capacity)
 }
 
+func (api *GoAgentAPI) BufferSize() int {
+	return int(api.agent.c_api.mgr.meta.buffer_size)
+}
+
 func (api *GoAgentAPI) Run(ctx context.Context) {
     fmt.Println("shm queue goroutine running")
     wg := new(sync.WaitGroup)
