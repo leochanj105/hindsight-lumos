@@ -122,25 +122,69 @@ func (api *GoAgentAPI) availableLoop(ctx context.Context) {
 	}
 }
 
-func (api *GoAgentAPI) completeLoop(ctx context.Context) {
-    max_backoff := 100000
-    backoff := int(10)
+func (api *GoAgentAPI) drainBatches(ctx context.Context, min_bs int) int {
+	var total int
+	total = 0
 	for {
 		select {
 		case <- ctx.Done():
-			return
+			return 0
 		default:
-			completed := api.agent.GetCompleteBatches()
-			if len(completed) > 0 {
+			count, completed := api.agent.GetCompleteBatches()
+
+			total += count
+			if count > 0 {
 				api.Complete <- completed
-				backoff = int(10)
-			} else {
-				duration := time.Duration(backoff) * time.Microsecond
-				time.Sleep(duration)
-				backoff *= 2
-		        if (backoff > max_backoff) {
-		            backoff = max_backoff
-		        }
+			}
+			if count < min_bs {
+				return total
+			}
+		}
+	}
+}
+
+func (api *GoAgentAPI) completeLoop(ctx context.Context) {
+	fmt.Println("completeLoop")
+    max_backoff := 100000
+    min_backoff := 10
+    backoff := int(10)
+    min_bs := 20
+	for {
+		// Keep processing batches so long as they are BATCHSIZE/2 large
+		total := api.drainBatches(ctx, min_bs)
+
+		if total < min_bs {
+			// Back off exponentially
+			backoff *= 2
+		} else {
+			backoff = min_backoff
+		}
+
+		// Keep within bounds
+        if (backoff > max_backoff) {
+            backoff = max_backoff
+        }
+		time.Sleep(time.Duration(backoff) * time.Nanosecond)
+	}
+}
+
+func (api *GoAgentAPI) drainTriggers(ctx context.Context, min_bs int) int {
+	var total int
+	total = 0
+	for {
+		select {
+		case <- ctx.Done():
+			return 0
+		default:
+			triggers := api.agent.GetTriggers()
+
+			count := len(triggers)
+			total += count
+			if count > 0 {
+				api.Triggers <- triggers
+			}
+			if count < min_bs {
+				return total
 			}
 		}
 	}
@@ -148,22 +192,44 @@ func (api *GoAgentAPI) completeLoop(ctx context.Context) {
 
 func (api *GoAgentAPI) triggerLoop(ctx context.Context) {
     max_backoff := 100000
+    min_backoff := 10
     backoff := int(10)
+    min_bs := 20
+	for {
+		// Keep processing batches so long as they are BATCHSIZE/2 large
+		total := api.drainTriggers(ctx, min_bs)
+
+		if total < min_bs {
+			// Back off exponentially
+			backoff *= 2
+		} else {
+			backoff = min_backoff
+		}
+
+		// Keep within bounds
+        if (backoff > max_backoff) {
+            backoff = max_backoff
+        }
+		time.Sleep(time.Duration(backoff) * time.Nanosecond)
+	}
+}
+
+func (api *GoAgentAPI) drainBreadcrumbs(ctx context.Context, min_bs int) int {
+	var total int
+	total = 0
 	for {
 		select {
 		case <- ctx.Done():
-			return
+			return 0
 		default:
-			triggers := api.agent.GetTriggers()
-			if len(triggers) > 0 {
-				api.Triggers <- triggers
-				backoff = int(10)
-			} else {
-				time.Sleep(time.Duration(backoff) * time.Nanosecond)
-				backoff *= 2
-	            if (backoff > max_backoff) {
-	                backoff = max_backoff
-	            }
+			count, breadcrumbs := api.agent.GetBreadcrumbBatches()
+
+			total += count
+			if count > 0 {
+				api.Breadcrumbs <- breadcrumbs
+			}
+			if count < min_bs {
+				return total
 			}
 		}
 	}
@@ -171,24 +237,25 @@ func (api *GoAgentAPI) triggerLoop(ctx context.Context) {
 
 func (api *GoAgentAPI) breadcrumbsLoop(ctx context.Context) {
     max_backoff := 100000
+    min_backoff := 10
     backoff := int(10)
+    min_bs := 20
 	for {
-		select {
-		case <- ctx.Done():
-			return
-		default:
-			breadcrumbs := api.agent.GetBreadcrumbBatches()
-			if len(breadcrumbs) > 0 {
-				api.Breadcrumbs <- breadcrumbs
-				backoff = int(10)
-			} else {
-				time.Sleep(time.Duration(backoff) * time.Nanosecond)
-				backoff *= 2
-	            if (backoff > max_backoff) {
-	                backoff = max_backoff
-	            }
-			}
+		// Keep processing batches so long as they are BATCHSIZE/2 large
+		total := api.drainBreadcrumbs(ctx, min_bs)
+
+		if total < min_bs {
+			// Back off exponentially
+			backoff *= 2
+		} else {
+			backoff = min_backoff
 		}
+
+		// Keep within bounds
+        if (backoff > max_backoff) {
+            backoff = max_backoff
+        }
+		time.Sleep(time.Duration(backoff) * time.Nanosecond)
 	}
 }
 
@@ -221,7 +288,7 @@ BATCHSIZE is hard-coded in agentapi.h
 
 This is a non-blocking call; may return 0 buffers
 */
-func (agent *AgentAPI) GetCompleteBatches() CompleteBatch {
+func (agent *AgentAPI) GetCompleteBatches() (int, CompleteBatch) {
 	var cb C.CompleteBuffers
 	C.hindsight_agentapi_get_complete_nonblocking(agent.c_api, &cb)
 
@@ -233,7 +300,7 @@ func (agent *AgentAPI) GetCompleteBatches() CompleteBatch {
 		buffers[trace_id] = append(buffers[trace_id], buffer_id)
 	}
 
-	return buffers
+	return count, buffers
 }
 
 /* Puts buffers to the available queue.
@@ -317,7 +384,7 @@ BATCHSIZE is hard-coded in agentapi.h
 
 This is a non-blocking call; may return 0 breadcrumbs
 */
-func (agent *AgentAPI) GetBreadcrumbBatches() BreadcrumbBatch {
+func (agent *AgentAPI) GetBreadcrumbBatches() (int, BreadcrumbBatch) {
 	var bb C.BreadcrumbBatch
 	C.hindsight_agentapi_get_breadcrumbs_nonblocking(agent.c_api, &bb)
 
@@ -329,7 +396,7 @@ func (agent *AgentAPI) GetBreadcrumbBatches() BreadcrumbBatch {
 		breadcrumbs[trace_id] = append(breadcrumbs[trace_id], addr)
 	}
 
-	return breadcrumbs	
+	return count, breadcrumbs
 }
 
 func (agent *AgentAPI) GetBuffer(buffer_id int) []byte {

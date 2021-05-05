@@ -60,6 +60,7 @@ type TriggerManager struct {
     These are sorted, in case triggering becomes a bottleneck; low trace IDs
     get reported first*/
     unreported_trace_ids *treeset.Set
+    has_unreported_trace_ids chan struct{}
 
     /* TraceData that hasn't been reported yet.  A trace ID will remain in
     this map until it expires, but any reported buffers get immediately 
@@ -102,6 +103,9 @@ type TraceCache struct {
     complete    <-chan memory.CompleteBatch     // buffers from shm complete queue
     breadcrumbs <-chan memory.BreadcrumbBatch   // breadcrumbs from shm
 
+    // Used internally to trigger eviction
+    eviction_required chan struct{}
+
     // Stats for logging
     stats CacheStats
     last_print uint64
@@ -129,6 +133,7 @@ func InitAgent(fname string, trigger_delay uint64) *Agent {
     cache.triggers = make(chan uint64, 10000)
     cache.expired_triggers = make(chan uint64, 10000)
     cache.notify_available_buffers = make(chan int, 10000)
+    cache.eviction_required = make(chan struct{}, 1000)
 
     var triggers TriggerManager
     triggers.api = api
@@ -137,6 +142,7 @@ func InitAgent(fname string, trigger_delay uint64) *Agent {
     triggers.triggered = make(map[uint64](chan struct{}))
     triggers.timeouts = make(chan uint64, 10000)
     triggers.unreported_trace_ids = treeset.NewWithIntComparator()
+    triggers.has_unreported_trace_ids = make(chan struct{}, 1000)
     triggers.unreported_data = make(map[uint64]*TraceData)
 
     //// Link up channels
@@ -229,6 +235,7 @@ func (tm *TriggerManager) addTraceData(trace *TraceData) {
         /* Add the new trace data */
         tm.unreported_data[trace_id] = trace
         tm.unreported_trace_ids.Add(int(trace_id))
+        tm.has_unreported_trace_ids <- struct{}{}
     }
 
     // Set a new timeout for the trace
@@ -379,10 +386,10 @@ func (tm *TriggerManager) Run(ctx context.Context) {
             tm.addTraceData(trace_data)
         case trace_id := <-tm.timeouts:
             tm.unTrigger(trace_id)
+        case <- tm.has_unreported_trace_ids:
+            tm.reportNext(collector)
         case <- ctx.Done():
             return
-        default:
-            tm.reportNext(collector)
         }
     }
 }
@@ -401,9 +408,13 @@ func (tm *TriggerManager) RunGRPCServer() {
     }
 }
 
+func (cache* TraceCache) evictionRequired() bool {
+    return cache.buf_count > cache.capacity
+}
+
 /* Check if the cache is over capacity, and evict some buffers if so */
 func (cache* TraceCache) checkEviction() bool {
-    if cache.buf_count <= cache.capacity {
+    if !cache.evictionRequired() {
         return false
     }
 
@@ -455,6 +466,12 @@ func (cache *TraceCache) addCompletedBuffers(batch memory.CompleteBatch) {
         entry := cache.lru.PushFront(td)
         cache.data[trace_id] = entry
     }
+
+    /* Trigger eviction if above threshold */
+    if cache.evictionRequired() {
+        cache.eviction_required <- struct{}{}
+    }
+
 
     cache.stats.complete_batches++
 
@@ -551,11 +568,8 @@ func (cache *TraceCache) Run(ctx context.Context) {
             /* Received some breadcrumbs from the shm breadcrumbs queue */
             cache.addBreadcrumbs(breadcrumbs)
         }
-        default: {
-            /* Default case: check if eviction is needed */
-            if !cache.checkEviction() {
-                time.Sleep(100 * time.Microsecond)
-            }
+        case <- cache.eviction_required: {
+            cache.checkEviction()
         }
         }
     }
