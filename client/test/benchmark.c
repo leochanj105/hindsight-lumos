@@ -119,8 +119,17 @@ void client_thread_main(volatile int *alive,
         int client_id, struct arguments *arguments) {
     printf("Client %d started\n", client_id);
 
+    size_t payload_src_size = arguments->payload_size;
+    char payload[payload_src_size];
+
+    uint64_t trace_id = 1000000LL * client_id;
+    int tracepoints_per_request = arguments->tracepoints_per_request;
     while (*alive) {
-        usleep(1000);
+        hindsight_begin(++trace_id);
+        for (int i = 0; i < tracepoints_per_request; i++) {
+            hindsight_tracepoint(payload, payload_src_size);
+        }
+        hindsight_end();
     }
     printf("Client ended\n");
 }
