@@ -16,7 +16,7 @@ STATIC_LDFLAGS = -fPIC
 LDFLAGS = $(STATIC_LDFLAGS) -shared
 LIBRARY = $(LIBDIR)/libtracer.so
 STATIC_LIBRARY = $(LIBDIR)/libtracer.a
-SRCFILES = $(SRCDIR)/tracer.c $(SRCDIR)/queue.c $(SRCDIR)/buffer.c $(SRCDIR)/tracestate.c $(SRCDIR)/trigger.c $(SRCDIR)/breadcrumb.c $(SRCDIR)/hindsight.c $(SRCDIR)/agentapi.c $(SRCDIR)/common.c
+SRCFILES = $(SRCDIR)/tracer.c $(SRCDIR)/runner.c $(SRCDIR)/queue.c $(SRCDIR)/buffer.c $(SRCDIR)/tracestate.c $(SRCDIR)/trigger.c $(SRCDIR)/breadcrumb.c $(SRCDIR)/hindsight.c $(SRCDIR)/agentapi.c $(SRCDIR)/common.c
 
 DEPFILES := $(SRCFILES:%.c=$(DEPDIR)/%.d)
 DEPFLAGS = -MT $@ -MMD -MP -MF $(DEPDIR)/$*.d
@@ -24,7 +24,7 @@ OBJFILES = ${SRCFILES:.c=.o}
 INCLUDEFLAGS = -I $(SRCDIR)
 PTHREADFLAGS = -lpthread
 
-TARGET = dirs bin/breadcrumbs_test bin/triggers_test bin/buffer_test bin/queue_test bin/tracer_test bin/client_test bin/multi_client_test bin/hindsight_test bin/hindsight2_test bin/data_test $(LIBRARY) $(STATIC_LIBRARY)
+TARGET = dirs bin/breadcrumbs_test bin/benchmark_test bin/triggers_test bin/buffer_test bin/queue_test bin/tracer_test bin/client_test bin/multi_client_test bin/hindsight_test bin/hindsight2_test bin/data_test $(LIBRARY) $(STATIC_LIBRARY)
 .PHONY: all debug
 
 all: $(TARGET)

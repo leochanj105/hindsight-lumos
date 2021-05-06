@@ -10,13 +10,17 @@
 #include <time.h>
 
 #define PROCESS_NAME "hs_integration_test"
+#define BUFFERSIZE 128000
+#define TRACEPOINTSPERTRACE 3000
+#define WRITESIZE 32000
+#define CHECKEVERY 3000
 
 // TODO: configurable number of each thread.  Implement drainer in go. Compare
 
 HindsightConfig config() {
 	HindsightConfig conf;
 	conf.pool_capacity = 10000;
-	conf.buffer_size = 10000;
+	conf.buffer_size = BUFFERSIZE;
 	conf.breadcrumbs_capacity = conf.pool_capacity;
 	conf.triggers_capacity = conf.pool_capacity;
 	conf.address = malloc(32 * sizeof(char));
@@ -82,8 +86,8 @@ void drain_forever_agent(HindsightAgentAPI* api) {
 void drain_forever_client() {
 	printf("Beginning client trace\n");
 
-	size_t tracepoints_per_trace = 80000;
-	size_t write_size = 4000;
+	size_t tracepoints_per_trace = TRACEPOINTSPERTRACE;
+	size_t write_size = WRITESIZE;
 
 	printf("Beginning client loop\n");
 	uint64_t last_print = nanos();
@@ -91,7 +95,7 @@ void drain_forever_client() {
 	uint64_t count = 0;
 	BufferStats stats = {0,0,0,0};
 	uint64_t trace_id = 700;
-	int check_every = 10000;
+	int check_every = CHECKEVERY;
 
 	size_t total_buf_size = write_size * check_every;
 	char* buf = (char*) malloc(total_buf_size);
