@@ -27,6 +27,15 @@ static struct argp_option options[] = {
   { 0 }
 };
 
+static inline unsigned long long getticks(void)
+{
+    unsigned int lo, hi;
+
+    // RDTSC copies contents of 64-bit TSC into EDX:EAX
+    asm volatile("rdtsc" : "=a" (lo), "=d" (hi));
+    return (unsigned long long)hi << 32 | lo;
+}
+
 struct arguments {
   int num_threads;
   size_t buffer_size;
@@ -58,6 +67,9 @@ static error_t parse_opt (int key, char *arg, struct argp_state *state) {
       break;
     case 'p':
       arguments->trigger_probability = atof(arg);
+      break;
+    case 'd':
+      arguments->duration = atoll(arg);
       break;
     case 'o':
       arguments->output_file = arg;
@@ -98,33 +110,57 @@ void init_hindsight_client(struct arguments *arguments) {
 }
 
 typedef struct client_args {
+    volatile int *alive;
     int client_id;
     struct arguments* arguments;
-
 } client_args;
 
-void client_thread_main(int client_id, struct arguments *arguments) {
+void client_thread_main(volatile int *alive, 
+        int client_id, struct arguments *arguments) {
     printf("Client %d started\n", client_id);
+
+    while (*alive) {
+        usleep(1000);
+    }
+    printf("Client ended\n");
 }
 
 void* run_client_thread(void *vargp) {
     client_args* args = (client_args*) vargp;
-    client_thread_main(args->client_id, args->arguments);
+    client_thread_main(args->alive, args->client_id, args->arguments);
     return 0;
 }
 
 void run_clients(struct arguments *arguments) {
+    volatile int alive = 1;
     printf("Running clients\n");
     pthread_t threads[arguments->num_threads];
     client_args args[arguments->num_threads];
     for (int i = 0; i < arguments->num_threads; i++) {
+        args[i].alive = &alive;
         args[i].client_id = i;
         args[i].arguments = arguments;
         pthread_create(&threads[i], NULL, run_client_thread, (void*) &args[i]);
     }
+
+
+    uint64_t end = nanos() + arguments->duration * 1000000000LL;
+    if (arguments->duration == 0) {
+        end = -1;
+    }
+
+    while (true) {
+        uint64_t now = nanos();
+        if (now > end) {
+            break;
+        }
+        usleep(1000000);
+    }
+    alive = 0;
     for (int i = 0; i < arguments->num_threads; i++) {
         pthread_join(threads[i], NULL);
     }
+    printf("Clients complete.\n");
 }
 
 
@@ -148,12 +184,13 @@ int main (int argc, char **argv) {
      be reflected in arguments. */
   argp_parse (&argp, argc, argv, 0, 0, &arguments);
 
-  printf("name=%s\nbuffer_size=%ld\nbuffer_count=%ld\nnum_threads=%d\npayload_size=%ld\ntp_per=%d\ntrigger=%.3f\n-------\n",
+  printf("name=%s\nbuffer_size=%ld\nbuffer_count=%ld\nnum_threads=%d\npayload_size=%ld\ntp_per=%d\ntrigger=%.3f\nduration=%lu\n-------\n",
             arguments.process_name,
             arguments.buffer_size, arguments.buffer_count,
             arguments.num_threads, arguments.payload_size,
             arguments.tracepoints_per_request,
-            arguments.trigger_probability);
+            arguments.trigger_probability,
+            arguments.duration);
 
   init_hindsight_client(&arguments);
   printf("------\n");
