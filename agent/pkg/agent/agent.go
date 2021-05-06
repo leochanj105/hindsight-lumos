@@ -107,8 +107,10 @@ type TraceCache struct {
     eviction_required chan struct{}
 
     // Stats for logging
-    stats CacheStats
-    last_print uint64
+    stats       CacheStats
+    last_print  uint64
+    print_every uint64
+    next_print *time.Timer
 
     // Triggered and expired traces
     triggered           map[uint64]struct{}// Trace IDs that have been triggered
@@ -134,6 +136,8 @@ func InitAgent(fname string, trigger_delay uint64) *Agent {
     cache.expired_triggers = make(chan uint64, 10000)
     cache.notify_available_buffers = make(chan int, 10000)
     cache.eviction_required = make(chan struct{}, 1000)
+    cache.print_every = 5000
+    cache.next_print = time.NewTimer(1 * time.Millisecond)
 
     var triggers TriggerManager
     triggers.api = api
@@ -480,21 +484,24 @@ func (cache *TraceCache) addCompletedBuffers(batch memory.CompleteBatch) {
 
 
     cache.stats.complete_batches++
+}
 
-    var print_every uint64
-    print_every = 5000000000
+func (cache *TraceCache) print() {
     now := uint64(time.Now().UnixNano())
-    if ((now - cache.last_print) > print_every) {
-        count := cache.stats.complete_batches
-        sum := cache.stats.complete_buffers
-        tput := float32(uint64(sum) * 1000000000) / float32(now - cache.last_print)
-        tput_mb := (tput * float32(cache.buffer_size)) / (1024 * 1024)
-        batchsize := float32(sum) / float32(count)
-        fmt.Printf("%.0f MB/s (%.0f bufs/s, %d bufs total), Avg batch %.1f\n", tput_mb, tput, sum, batchsize)
-        cache.last_print = now
-        cache.stats.complete_batches = 0
-        cache.stats.complete_buffers = 0
+    count := cache.stats.complete_batches
+    sum := cache.stats.complete_buffers
+    tput := float32(uint64(sum) * 1000000000) / float32(now - cache.last_print)
+    tput_mb := (tput * float32(cache.buffer_size)) / (1024 * 1024)
+    var batchsize float32
+    if count == 0 {
+        batchsize = 0
+    } else {
+        batchsize = float32(sum) / float32(count)
     }
+    fmt.Printf("%.0f MB/s (%.0f bufs/s, %d bufs total), Avg batch %.1f\n", tput_mb, tput, sum, batchsize)
+    cache.last_print = now
+    cache.stats.complete_batches = 0
+    cache.stats.complete_buffers = 0
 }
 
 /* Add some breadcrumbs to the cache */
@@ -576,6 +583,10 @@ func (cache *TraceCache) Run(ctx context.Context) {
         }
         case <- cache.eviction_required: {
             cache.checkEviction()
+        }
+        case <- cache.next_print.C: {
+            cache.print()
+            cache.next_print.Reset(1000 * time.Millisecond)
         }
         }
     }
