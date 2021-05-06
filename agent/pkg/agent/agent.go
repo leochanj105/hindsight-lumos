@@ -498,7 +498,7 @@ func (cache *TraceCache) print() {
     } else {
         batchsize = float32(sum) / float32(count)
     }
-    fmt.Printf("%.0f MB/s (%.0f bufs/s, %d bufs total), Avg batch %.1f\n", tput_mb, tput, sum, batchsize)
+    fmt.Printf("%.3f MB/s (%.0f bufs/s, %d bufs total), Avg batch %.1f\n", tput_mb, tput, sum, batchsize)
     cache.last_print = now
     cache.stats.complete_batches = 0
     cache.stats.complete_buffers = 0
