@@ -443,6 +443,12 @@ func (cache* TraceCache) checkEviction() bool {
 /* Add some buffers to the cache */
 func (cache *TraceCache) addCompletedBuffers(batch memory.CompleteBatch) {
     for trace_id, buffer_ids := range batch {
+        /* Ignore trace ID 0 */
+        if trace_id == 0 {
+            cache.available <- buffer_ids
+            continue
+        }
+
         cache.buf_count += len(buffer_ids)
         cache.stats.complete_buffers += len(buffer_ids)
 
