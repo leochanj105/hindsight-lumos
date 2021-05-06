@@ -53,6 +53,10 @@ void tracestate_begin(TraceState* trace, BufManager* mgr, uint64_t trace_id) {
 
     // Acquire a fresh buffer and write the header
     bufmanager_acquire(mgr, &trace->buffer);
+    if (trace->buffer.id == -2) {
+        // TODO: probably shouldn't be implemented like this
+        trace->header.null_buffer_count++;
+    }
     tracestate_write_header(trace);
 }
 

@@ -12,6 +12,7 @@
 #include "agentapi.h"
 #include "common.h"
 #include <time.h>
+#include <sys/sysinfo.h>
 
 #include <sched.h>
 
@@ -145,15 +146,20 @@ void set_cores(int* cores, size_t cores_size) {
 
 void client_thread_main(volatile int *alive, 
         int client_id, struct arguments *arguments, exp_stats* stats) {
-    printf("Client %d started\n", client_id);
 
     // Bind to core
-    int* cores[1];
-    cores[0] = client_id % 16;
+    int cores[1];
+    cores[0] = client_id % get_nprocs();
     set_cores(cores, 1);
+
+    printf("Client %d started on core %d\n", client_id, cores[0]);
 
     size_t payload_src_size = arguments->payload_size;
     char payload[payload_src_size];
+    int* payload_ints = (int*) payload;
+    for (int i = 0; i < payload_src_size/4; i++) {
+      payload_ints[i] = rand();
+    }
 
     uint64_t trace_id = 1000000LL * client_id;
     int tracepoints_per_request = arguments->tracepoints_per_request;
@@ -161,7 +167,7 @@ void client_thread_main(volatile int *alive,
 
     int traces = 0;
     int invalid_traces = 0;
-    int batchsize = 1000;
+    int batchsize = 100;
     uint64_t count = 0;
     uint64_t sum_begins = 0;
     uint64_t sum_tracepoints = 0;
@@ -263,7 +269,7 @@ void print_thread_main(volatile int *alive, struct arguments *args, exp_stats* s
             delta.pool_released = (delta.pool_released * print_every) / (now - last_print);
             delta.null_released = (delta.null_released * print_every) / (now - last_print);
 
-            printf("data:\t%ld\t%ld\t%ld\t%ld\t%ld\t%ld\t%ld\t%ld\t%ld\t%ld\t%ld\t%ld\t%ld\t%ld\n",
+            printf("data:\t%ld\t%ld\t%ld\t%ld\t%ld\t%ld\t%ld\t%ld\t%ld\t%ld\t%ld\t%.2f\t%.2f\t%.2f\n",
                 now - begin,
                 now - last_print,
                 traces,
@@ -275,9 +281,9 @@ void print_thread_main(volatile int *alive, struct arguments *args, exp_stats* s
                 delta.pool_released,
                 delta.null_acquired,
                 delta.null_released,
-                begins / traces,
-                tracepoints / count,
-                ends / traces
+                traces == 0 ? 0 : begins / (float) traces,
+                tracepoints == 0 ? 0 : tracepoints / (float) count,
+                ends == 0 ? 0 : ends / (float) traces
                 );
             last_print = now;
             prev_count = new_count;

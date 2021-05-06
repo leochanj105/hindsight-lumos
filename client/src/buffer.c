@@ -12,7 +12,7 @@
 #define POOL_SHM_FILENAME(name) get_shm_fname(name, "pool")
 #define AVAILABLE_SHM_FILENAME(name) get_shm_fname(name, "available_queue")
 #define COMPLETE_SHM_FILENAME(name) get_shm_fname(name, "complete_queue")
-#define NULL_BUFFER_COUNT 100
+#define NULL_BUFFER_COUNT 1000
 
 char* bufmanager_pool_init(const char* fname, size_t fsize) {
     void* shm;
@@ -228,5 +228,6 @@ bool buffer_try_write_all(Buffer *b, char* buf, size_t buf_size) {
 
     memcpy((void*) b->ptr, (void*) buf, buf_size);
     b->remaining -= buf_size;
+    b->ptr += buf_size;
     return true;
 }
