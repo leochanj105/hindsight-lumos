@@ -484,7 +484,7 @@ func (cache *TraceCache) addCompletedBuffers(batch memory.CompleteBatch) {
         tput := float32(uint64(sum) * 1000000000) / float32(now - cache.last_print)
         tput_mb := (tput * float32(cache.buffer_size)) / (1024 * 1024)
         batchsize := float32(sum) / float32(count)
-        fmt.Printf("%.0f MB/s (%.0f bufs/s, %d bufs total), Avg batch %.1f\n", tput_mb, tput, sum, batchsize)
+        fmt.Printf("%.3f MB/s (%.0f bufs/s, %d bufs total), Avg batch %.1f\n", tput_mb, tput, sum, batchsize)
         cache.last_print = now
         cache.stats.complete_batches = 0
         cache.stats.complete_buffers = 0
