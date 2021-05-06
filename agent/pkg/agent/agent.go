@@ -135,7 +135,7 @@ func InitAgent(fname string, trigger_delay uint64) *Agent {
     cache.triggers = make(chan uint64, 10000)
     cache.expired_triggers = make(chan uint64, 10000)
     cache.notify_available_buffers = make(chan int, 10000)
-    cache.eviction_required = make(chan struct{}, 1000)
+    cache.eviction_required = make(chan struct{}, 1)
     cache.print_every = 5000
     cache.next_print = time.NewTimer(1 * time.Millisecond)
 
@@ -146,7 +146,7 @@ func InitAgent(fname string, trigger_delay uint64) *Agent {
     triggers.triggered = make(map[uint64](chan struct{}))
     triggers.timeouts = make(chan uint64, 10000)
     triggers.unreported_trace_ids = treeset.NewWithIntComparator()
-    triggers.has_unreported_trace_ids = make(chan struct{}, 1000)
+    triggers.has_unreported_trace_ids = make(chan struct{}, 1)
     triggers.unreported_data = make(map[uint64]*TraceData)
 
     //// Link up channels
@@ -239,7 +239,10 @@ func (tm *TriggerManager) addTraceData(trace *TraceData) {
         /* Add the new trace data */
         tm.unreported_data[trace_id] = trace
         tm.unreported_trace_ids.Add(int(trace_id))
-        tm.has_unreported_trace_ids <- struct{}{}
+        select {
+            case tm.has_unreported_trace_ids <- struct{}{}: {}
+            default: {}
+        }
     }
 
     // Set a new timeout for the trace
@@ -479,7 +482,10 @@ func (cache *TraceCache) addCompletedBuffers(batch memory.CompleteBatch) {
 
     /* Trigger eviction if above threshold */
     if cache.evictionRequired() {
-        cache.eviction_required <- struct{}{}
+        select {
+            case cache.eviction_required <- struct{}{}: {}
+            default: {}
+        }
     }
 
 
