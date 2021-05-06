@@ -173,3 +173,7 @@ uint64_t hindsight_get_traceid() {
 char* hindsight_get_local_address() {
     return hindsight.config.address;
 }
+
+int hindsight_null_buffer_count() {
+    return hindsight_tls.header.null_buffer_count;
+}

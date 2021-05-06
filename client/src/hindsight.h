@@ -100,5 +100,7 @@ void hindsight_trigger_manual(uint64_t trace_id, int trigger_id);
 uint64_t hindsight_get_traceid();
 char* hindsight_get_local_address();
 
+int hindsight_null_buffer_count();
+
 
 #endif // _HINDSIGHT_HINDSIGHT_H_
