@@ -1,3 +1,5 @@
+
+#define _GNU_SOURCE
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -10,6 +12,8 @@
 #include "agentapi.h"
 #include "common.h"
 #include <time.h>
+
+#include <sched.h>
 
 const char *argp_program_version = "argp-ex3 1.0";
 const char *argp_program_bug_address = "<bug-gnu-utils@gnu.org>";
@@ -124,9 +128,29 @@ typedef struct exp_stats {
     uint64_t ends;
 } exp_stats;
 
+void set_cores(int* cores, size_t cores_size) {
+  if (cores_size == 0) {
+    printf("Trying to bind to empty core set\n");
+  }
+  cpu_set_t cpuset;
+  CPU_ZERO(&cpuset);
+  for (int i = 0; i < cores_size; i++) {
+    CPU_SET(cores[i], &cpuset);
+  }
+  int rc = pthread_setaffinity_np(pthread_self(), sizeof(cpu_set_t), &cpuset);
+  if (rc != 0) {
+    printf("Error calling pthread_setaffinity_np: %d\n", rc);
+  }
+}
+
 void client_thread_main(volatile int *alive, 
         int client_id, struct arguments *arguments, exp_stats* stats) {
     printf("Client %d started\n", client_id);
+
+    // Bind to core
+    int* cores[1];
+    cores[0] = client_id % 16;
+    set_cores(cores, 1);
 
     size_t payload_src_size = arguments->payload_size;
     char payload[payload_src_size];

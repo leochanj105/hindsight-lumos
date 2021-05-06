@@ -95,7 +95,7 @@ void tracestate_write_data(TraceState* trace,
     bufmanager_acquire(mgr, &trace->buffer);
     trace->header.buffer_number++;
     trace->header.acquired = tracestate_get_time();
-    if (trace->buffer.ptr == mgr->null_buffer) {
+    if (trace->buffer.id == -2) {
         // TODO: probably shouldn't be implemented like this
         trace->header.null_buffer_count++;
     }

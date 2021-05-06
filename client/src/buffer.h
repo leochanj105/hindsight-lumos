@@ -36,6 +36,7 @@ typedef struct BufManager {
                     // TODO: queue impl will need to be updated to send both (traceid, bufid)
 
     char* null_buffer; // Used if unable to acquire a buffer from available queue
+    uint32_t null_buffer_index;
 } BufManager;
 
 // Points to a buffer allocated in shared memory

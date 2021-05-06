@@ -12,6 +12,7 @@
 #define POOL_SHM_FILENAME(name) get_shm_fname(name, "pool")
 #define AVAILABLE_SHM_FILENAME(name) get_shm_fname(name, "available_queue")
 #define COMPLETE_SHM_FILENAME(name) get_shm_fname(name, "complete_queue")
+#define NULL_BUFFER_COUNT 100
 
 char* bufmanager_pool_init(const char* fname, size_t fsize) {
     void* shm;
@@ -99,7 +100,8 @@ BufManager bufmanager_init(const char* name,
     m.available = queue_init(AVAILABLE_SHM_FILENAME(name), sizeof(AvailableBuffer), capacity);
     m.complete = queue_init(COMPLETE_SHM_FILENAME(name), sizeof(CompleteBuffer), capacity);
 
-    m.null_buffer = (char*) malloc(m.meta->buffer_size);
+    m.null_buffer = (char*) malloc(m.meta->buffer_size * NULL_BUFFER_COUNT);
+    m.null_buffer_index = 0;
 
     bufmanager_make_all_buffers_available(&m);
 
@@ -138,7 +140,8 @@ BufManager bufmanager_init_existing(const char* name) {
     assert(m.available.meta->element_size == sizeof(AvailableBuffer));
     assert(m.complete.meta->element_size == sizeof(CompleteBuffer));
 
-    m.null_buffer = (char*) malloc(m.meta->buffer_size);
+    m.null_buffer = (char*) malloc(m.meta->buffer_size * NULL_BUFFER_COUNT);
+    m.null_buffer_index = 0;
     return m;   
 }
 
@@ -156,9 +159,12 @@ void bufmanager_acquire(BufManager* mgr, Buffer* dst) {
         // TODO: allow to #define away
         __sync_fetch_and_add(&mgr->stats.pool_acquired, 1);
     } else {
+        uint32_t null_i = __sync_fetch_and_add(&mgr->null_buffer_index, 1);
+        size_t null_offset = (null_i % NULL_BUFFER_COUNT) * mgr->meta->buffer_size;
+
         dst->id = -2;
         dst->remaining = mgr->meta->buffer_size;
-        dst->ptr = mgr->null_buffer;
+        dst->ptr = mgr->null_buffer + null_offset;
         dst->base = dst->ptr;
 
         // TODO: allow to #define away
