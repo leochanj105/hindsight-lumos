@@ -356,6 +356,10 @@ func (tm *TriggerManager) reportNext(lc datapb.CollectorClient) {
         fmt.Println("report", err)
         // return
     }
+
+    // Return the buffers
+    tm.available <- trace.Buffers
+    tm.cache_notify_available_buffers <- len(trace.Buffers)
 }
 
 /* gRPC requests from Log collector */
