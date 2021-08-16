@@ -170,6 +170,13 @@ void bufmanager_acquire(BufManager* mgr, Buffer* dst) {
         // TODO: allow to #define away
         __sync_fetch_and_add(&mgr->stats.null_acquired, 1);
     }
+    mgr->buf_counter++;
+    uint64_t dur = nanos() - mgr->last_print;
+    if (dur > 1000000000) {
+        printf("[Client] Throughput: %d\n", (int)(mgr->buf_counter * ((float)1000000000/(float)dur)) ) ;
+        mgr->buf_counter = 0;
+        mgr->last_print = nanos();
+    }
 }
 
 void bufmanager_return(BufManager* mgr, uint64_t trace_id, Buffer* dst) {

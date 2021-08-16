@@ -1,37 +1,14 @@
 package main
 
 import (
-	"fmt"
 	"context"
 	"flag"
-	"sync"
+	"fmt"
+
 	"github.com/geraldleizhang/hindsight/agent/pkg/agent"
-	"github.com/geraldleizhang/hindsight/agent/pkg/collector"
+	"github.com/geraldleizhang/hindsight/agent/pkg/collector_new"
 	"github.com/geraldleizhang/hindsight/agent/pkg/util"
 )
-
-func run_lc() {
-	collector.CollectorInit()
-	wg := new(sync.WaitGroup)
-	wg.Add(3)
-
-	go func() {
-		collector.RunLCResponseServer()
-		wg.Done()
-	}()
-
-	go func() {
-		collector.RunRetrievalHandler()
-		wg.Done()
-	}()
-
-	go func() {
-		collector.RunCollector()
-		wg.Done()
-	}()
-
-	wg.Wait()
-}
 
 func main() {
 
@@ -52,11 +29,13 @@ func main() {
 
 	if *isLC == true {
 		fmt.Println("running lc")
-		run_lc()
+		lc := collector_new.InitLC()
+		ctx, _ := context.WithCancel(context.Background())
+		lc.Run(ctx)
 	} else {
 		fmt.Println("running server")
 		agent := agent.InitAgent(service_name, delay)
-	    ctx, _ := context.WithCancel(context.Background())
+		ctx, _ := context.WithCancel(context.Background())
 		agent.Run(ctx)
 	}
 

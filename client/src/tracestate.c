@@ -60,6 +60,17 @@ void tracestate_begin(TraceState* trace, BufManager* mgr, uint64_t trace_id) {
     tracestate_write_header(trace);
 }
 
+void tracestate_begin_sampling(TraceState* trace, 
+    BufManager* mgr, 
+    uint64_t trace_id,
+    int sample_rate) {
+    if(trace_id % 10000000 > 10000000 / sample_rate) {
+        trace->active = false;
+        return;
+    }
+    tracestate_begin(trace, mgr, trace_id);
+}
+
 void tracestate_end(TraceState* trace, BufManager* mgr) {
     if (!trace->active) return;
 

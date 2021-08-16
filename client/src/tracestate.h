@@ -31,6 +31,8 @@ TraceState tracestate_create();
 // I think currently traceID is the only thing Hindsight should need
 void tracestate_begin(TraceState* trace, BufManager* mgr, uint64_t trace_id);
 
+void tracestate_begin_sampling(TraceState* trace, BufManager* mgr, uint64_t trace_id, int sample_rate);
+
 // Ends the current trace state, flushes the buffer
 void tracestate_end(TraceState* trace, BufManager* mgr);
 

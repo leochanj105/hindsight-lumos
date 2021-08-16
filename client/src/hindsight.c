@@ -24,6 +24,8 @@ HindsightConfig hindsight_load_config(const char* fname) {
     conf.buffer_size = -1;
     conf.breadcrumbs_capacity = -1;
     conf.triggers_capacity = -1;
+    conf.payload = 1;
+    conf.sample_rate = 1;  
 
     // Addr in the conf file is specified as separate address and port strings
     char* conf_addr = (char*) malloc(32 * sizeof(char));
@@ -46,15 +48,17 @@ HindsightConfig hindsight_load_config(const char* fname) {
         char* temp = strchr(line, '\n');
         int index = (int)(temp - line);
 
-        char* new_line = malloc(sizeof(char)*20);
+        char* new_line = malloc(sizeof(char)*32);
         if (index == strlen(line)-1) {
             strncpy(new_line, line, index);
         } else {
             strncpy(new_line, line, strlen(line));
         }
 
-        char* var = malloc(sizeof(char)*20);
-        char* value = malloc(sizeof(char)*20);
+        char* var = malloc(sizeof(char)*32);
+        memset(var, 0, 32*sizeof(char));
+        char* value = malloc(sizeof(char)*32);
+        memset(value, 0, 32*sizeof(char));
         sscanf(new_line, "%s %s", var, value);
 
         if (!strcmp(var, "cap")) {
@@ -80,6 +84,14 @@ HindsightConfig hindsight_load_config(const char* fname) {
         if (!strcmp(var, "triggers_cap")) {
             conf.triggers_capacity = atoi(value);
         }       
+
+        if (!strcmp(var, "payload")) {
+            conf.payload = atoi(value);
+        }       
+
+        if (!strcmp(var, "sample_rate")) {
+            conf.sample_rate = atoi(value);
+        }
     }
     fclose(config_file);
 
@@ -92,7 +104,7 @@ HindsightConfig hindsight_load_config(const char* fname) {
 
     strcpy(conf.address, conf_addr);
     strcat(conf.address, ":");
-    strcat(conf.address, conf_port);
+    strncat(conf.address, conf_port, 4);
 
     if (conf.pool_capacity == -1) conf.pool_capacity = 1;
     if (conf.buffer_size == -1) conf.buffer_size = 1;
@@ -136,6 +148,10 @@ void hindsight_begin(uint64_t trace_id) {
     tracestate_begin(&hindsight_tls, mgr, trace_id);
 }
 
+void hindsight_begin_sampling(uint64_t trace_id) {
+    tracestate_begin_sampling(&hindsight_tls, mgr, trace_id, hindsight.config.sample_rate);
+}
+
 void hindsight_end() {
     tracestate_end(&hindsight_tls, mgr);
 }
@@ -172,6 +188,22 @@ uint64_t hindsight_get_traceid() {
 
 char* hindsight_get_local_address() {
     return hindsight.config.address;
+}
+
+char* hindsight_serialize() {
+    return hindsight_get_local_address();
+}
+
+void hindsight_deserialize(char* baggage) {
+    hindsight_breadcrumb(baggage);
+}
+
+int hindsight_payload() {
+    return hindsight.config.payload;
+}
+
+int hindsight_sample_rate() {
+    return hindsight.config.sample_rate;
 }
 
 int hindsight_null_buffer_count() {

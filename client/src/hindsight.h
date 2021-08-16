@@ -31,6 +31,8 @@ typedef struct HindsightConfig {
     size_t breadcrumbs_capacity;
     size_t triggers_capacity;
     char* address; // max 32 bytes addr:port string
+    int payload;
+    int sample_rate; // reverse, 100 -> 0.01
 } HindsightConfig;
 
 typedef struct Hindsight {
@@ -70,6 +72,9 @@ void hindsight_init_with_config(const char* service_name, HindsightConfig config
 // The current thread is beginning execution of the specified trace_id
 void hindsight_begin(uint64_t trace_id);
 
+// Beginning execution with head based sampling (sample rate defined in config file)
+void hindsight_begin_sampling(uint64_t trace_id);
+
 // The current thread has completed execution
 void hindsight_end();
 
@@ -101,6 +106,14 @@ uint64_t hindsight_get_traceid();
 char* hindsight_get_local_address();
 
 int hindsight_null_buffer_count();
+
+char* hindsight_serialize();
+
+void hindsight_deserialize(char* baggage);
+
+int hindsight_payload();
+
+int hindsight_sample_rate();
 
 
 #endif // _HINDSIGHT_HINDSIGHT_H_
