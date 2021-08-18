@@ -142,6 +142,8 @@ void hindsight_init_with_config(const char* service_name, HindsightConfig config
         hindsight.config.triggers_capacity);
 
     mgr = &hindsight.mgr;
+
+    tail_init();
 }
 
 void hindsight_begin(uint64_t trace_id) {
