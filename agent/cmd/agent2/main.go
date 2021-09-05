@@ -4,9 +4,6 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"log"
-	"os"
-	"os/signal"
 
 	"github.com/geraldleizhang/hindsight/agent/pkg/agent"
 	"github.com/geraldleizhang/hindsight/agent/pkg/collector_new"
@@ -30,16 +27,7 @@ func main() {
 		return
 	}
 
-	c := make(chan os.Signal, 1)
-	signal.Notify(c, os.Interrupt)
-
-	ctx, cancel := context.WithCancel(context.Background())
-
-	go func() {
-		oscall := <-c
-		log.Printf("system call:%+v", oscall)
-		cancel()
-	}()
+	ctx, _ := context.WithCancel(context.Background())
 
 	if *isLC == true {
 		fmt.Println("running lc")
