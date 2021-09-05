@@ -32,17 +32,30 @@ time_t tracestate_get_time() {
 }
 
 void tracestate_begin(TraceState* trace, BufManager* mgr, uint64_t trace_id) {
+    tracestate_begin_with_sampling(trace, mgr, trace_id, 0, UINT64_MAX);
+}
+
+void tracestate_begin_with_sampling(TraceState* trace, BufManager* mgr, uint64_t trace_id, uint64_t head_sampling_threshold, uint64_t retroactive_sampling_threshold) {
     if (trace->active) {
         // If the trace ID is the same, ignore this call
         if (trace_id == trace->header.trace_id) return;
 
         // If traceID is different, need to return the old buffer
-        trace->current->completed = tracestate_get_time();
-        trace->current->size = trace->buffer.ptr - trace->buffer.base;
-        bufmanager_return(mgr, trace->header.trace_id, &trace->buffer);
+        if (trace->recording) {
+            trace->current->completed = tracestate_get_time();
+            trace->current->size = trace->buffer.ptr - trace->buffer.base;
+            bufmanager_return(mgr, trace->header.trace_id, &trace->buffer);
+        }
     }
     buffer_clear(&trace->buffer);
+
     trace->active = true;
+
+    // Apply head sampling threshold
+    trace->head_sampled = (trace_id <= head_sampling_threshold);
+
+    // Apply retroactive sampling threshold
+    trace->recording = trace->head_sampled || (trace_id <= retroactive_sampling_threshold);
 
     // Set the new header
     trace->header.trace_id = trace_id;
@@ -52,35 +65,31 @@ void tracestate_begin(TraceState* trace, BufManager* mgr, uint64_t trace_id) {
     trace->header.acquired = tracestate_get_time();
 
     // Acquire a fresh buffer and write the header
-    bufmanager_acquire(mgr, &trace->buffer);
-    if (trace->buffer.id == -2) {
-        // TODO: probably shouldn't be implemented like this
-        trace->header.null_buffer_count++;
+    if (trace->recording) {
+        bufmanager_acquire(mgr, &trace->buffer);
+        if (trace->buffer.id == -2) {
+            // TODO: probably shouldn't be implemented like this
+            trace->header.null_buffer_count++;
+        }
+        tracestate_write_header(trace);
     }
-    tracestate_write_header(trace);
-}
-
-void tracestate_begin_sampling(TraceState* trace, 
-    BufManager* mgr, 
-    uint64_t trace_id,
-    int sample_rate) {
-    if(trace_id % 10000000 > 10000000 / sample_rate) {
-        trace->active = false;
-        return;
-    }
-    tracestate_begin(trace, mgr, trace_id);
 }
 
 void tracestate_end(TraceState* trace, BufManager* mgr) {
     if (!trace->active) return;
 
-    // Finish buffer data
-    trace->current->completed = tracestate_get_time();
-    trace->current->size = trace->buffer.ptr - trace->buffer.base;
+    if (trace->recording) {
+        // Finish buffer data
+        trace->current->completed = tracestate_get_time();
+        trace->current->size = trace->buffer.ptr - trace->buffer.base;
 
-    // Return the current buffer
-    bufmanager_return(mgr, trace->header.trace_id, &trace->buffer);
+        // Return the current buffer
+        bufmanager_return(mgr, trace->header.trace_id, &trace->buffer);
+    }
+
     trace->active = false;
+    trace->head_sampled = false;
+    trace->recording = false;
 
     // Clear the header
     trace->header.buffer_number = 0;
@@ -95,7 +104,7 @@ void tracestate_write_data(TraceState* trace,
                            size_t write_size, 
                            char** dst, 
                            size_t* dst_size) {
-    if (!trace->active) return;
+    if (!trace->recording) return;
 
     // Common case: there's room in the current buffer. Write and return.
     buffer_write(&trace->buffer, write_size, dst, dst_size);
@@ -128,7 +137,7 @@ void tracestate_write(TraceState* trace,
                       BufManager* mgr,
                       char* buf,
                       size_t buf_size) {
-    if (trace->active) {
+    if (trace->recording) {
         char* dst;
         size_t dst_size;
 
@@ -149,5 +158,5 @@ void tracestate_write(TraceState* trace,
 bool tracestate_try_write(TraceState* trace,
                           char* buf,
                           size_t buf_size) {
-    return trace->active && buffer_try_write_all(&trace->buffer, buf, buf_size);
+    return trace->recording && buffer_try_write_all(&trace->buffer, buf, buf_size);
 }

@@ -7,6 +7,7 @@
 #include <unistd.h>
 #include <sys/stat.h>
 #include <time.h>
+#include <math.h>
 
 
 char* get_shm_fname(char* dst1, char* dst2) {
@@ -33,4 +34,9 @@ uint64_t nanos() {
     clock_gettime(CLOCK_MONOTONIC_RAW, &t);
     uint64_t nanos = t.tv_sec * 1000000000UL + t.tv_nsec;
     return nanos;
+}
+
+uint64_t multiply_by(uint64_t v, float f) {
+    if (f == 0) return 0;
+    return v / (uint64_t) round(1.0/f);
 }

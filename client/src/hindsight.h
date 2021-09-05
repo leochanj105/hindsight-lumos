@@ -12,6 +12,8 @@
 
 #define HINDSIGHT_DEFAULT_CONFIG "/etc/hindsight_conf/default.conf"
 
+#define TRIGGER_ID_HEAD_BASED_SAMPLING 1
+
 /*
 All of Hindsight's APIs can be invoked from tracestate.h
 
@@ -32,7 +34,11 @@ typedef struct HindsightConfig {
     size_t triggers_capacity;
     char* address; // max 32 bytes addr:port string
     int payload;
-    int sample_rate; // reverse, 100 -> 0.01
+    float retroactive_sampling_percentage; // percentage of requests that we will sample; between 0 to 1; default 1
+    float head_sampling_probability; // probability of automatically triggering for head-based sampling; between 0 to 1; default 0
+
+    uint64_t _retroactive_sampling_threshold; // derived from retroactive_sampling_percentage
+    uint64_t _head_sampling_threshold; // derived from head_sampling_probability
 } HindsightConfig;
 
 typedef struct Hindsight {
@@ -49,9 +55,17 @@ extern BufManager* mgr;
 // Thread-local trace state
 extern __thread TraceState hindsight_tracestate;
 
-// Used internally to load a Hindsight config
-HindsightConfig hindsight_load_config(const char* fname);
+// Load a hindsight config from the specified file
+HindsightConfig hindsight_load_config_file(const char* fname);
 
+// Load a hindsight config for the specified service name; configs are located in /etc/hindsight_conf, e.g. loads /etc/hindsight_conf/{service_name}.conf
+HindsightConfig hindsight_load_config(const char* service_name);
+
+// Hindsight config defaults
+HindsightConfig hindsight_default_config();
+
+// Print the config to stdout
+void hindsight_print_config(HindsightConfig* conf);
 
 /*
 This method must be called before any other Hindsight API is used,
@@ -72,8 +86,9 @@ void hindsight_init_with_config(const char* service_name, HindsightConfig config
 // The current thread is beginning execution of the specified trace_id
 void hindsight_begin(uint64_t trace_id);
 
-// Beginning execution with head based sampling (sample rate defined in config file)
-void hindsight_begin_sampling(uint64_t trace_id);
+// Call this if the trace has been head-sampled already
+// Will ignore all sampling probabilities and always trace + trigger the trace
+void hindsight_begin_sampled(uint64_t trace_id);
 
 // The current thread has completed execution
 void hindsight_end();
@@ -104,6 +119,7 @@ void hindsight_trigger_manual(uint64_t trace_id, int trigger_id);
 
 uint64_t hindsight_get_traceid();
 char* hindsight_get_local_address();
+bool hindsight_get_is_head_sampled();
 
 int hindsight_null_buffer_count();
 
@@ -113,7 +129,12 @@ void hindsight_deserialize(char* baggage);
 
 int hindsight_payload();
 
-int hindsight_sample_rate();
+float hindsight_retroactive_sampling_percentage();
+
+float hindsight_head_sampling_probability();
+
+bool hindsight_is_active();
+bool hindsight_is_recording();
 
 
 #endif // _HINDSIGHT_HINDSIGHT_H_

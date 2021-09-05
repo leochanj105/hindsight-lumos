@@ -3,6 +3,7 @@
 #include <sys/mman.h>
 #include <assert.h>
 #include <string.h>
+#include "common.h"
 
 #include "hindsight.h"
 
@@ -15,17 +16,36 @@ void hindsight_print_config(HindsightConfig* conf) {
     printf("  Buffer pool cap=%ld buf_length=%ld\n", conf->pool_capacity, conf->buffer_size);
     printf("  Service addr=%s\n", conf->address);
     printf("  Queue sizes breadcrumbs_cap=%ld triggers_cap=%ld\n", conf->breadcrumbs_capacity, conf->triggers_capacity);
+    printf("  Head-based sampling p=%.5f (traceid threshold %lu)\n", conf->head_sampling_probability, conf->_head_sampling_threshold);
+    printf("  Retroactive sampling p=%.5f (traceid threshold %lu)\n", conf->retroactive_sampling_percentage, conf->_retroactive_sampling_threshold);
 }
 
-HindsightConfig hindsight_load_config(const char* fname) {
-    // Initialize config with defaults
+HindsightConfig hindsight_default_config() {
     HindsightConfig conf;
     conf.pool_capacity = -1; // size_t doesn't have negatives but we won't use comparisons
     conf.buffer_size = -1;
     conf.breadcrumbs_capacity = -1;
     conf.triggers_capacity = -1;
     conf.payload = 1;
-    conf.sample_rate = 1;  
+    conf.retroactive_sampling_percentage = 1.0;
+    conf._retroactive_sampling_threshold = UINT64_MAX;
+    conf.head_sampling_probability = 0.0;
+    conf._head_sampling_threshold = 0;
+    return conf;
+}
+
+HindsightConfig hindsight_load_config(const char* service_name) {
+    // Load Hindsight conf for this service from default location
+    char config_fname[64];
+    strcpy(config_fname, "/etc/hindsight_conf/");
+    strcat(config_fname, service_name);
+    strcat(config_fname, ".conf");
+    return hindsight_load_config_file(config_fname);
+}
+
+HindsightConfig hindsight_load_config_file(const char* fname) {
+    // Initialize config with defaults
+    HindsightConfig conf = hindsight_default_config();
 
     // Addr in the conf file is specified as separate address and port strings
     char* conf_addr = (char*) malloc(32 * sizeof(char));
@@ -87,10 +107,14 @@ HindsightConfig hindsight_load_config(const char* fname) {
 
         if (!strcmp(var, "payload")) {
             conf.payload = atoi(value);
-        }       
+        }
 
-        if (!strcmp(var, "sample_rate")) {
-            conf.sample_rate = atoi(value);
+        if (!strcmp(var, "retroactive_sampling_percentage")) {
+            conf.retroactive_sampling_percentage = atof(value);
+        }
+
+        if (!strcmp(var, "head_sampling_probability")) {
+            conf.head_sampling_probability = atof(value);
         }
     }
     fclose(config_file);
@@ -106,21 +130,19 @@ HindsightConfig hindsight_load_config(const char* fname) {
     strcat(conf.address, ":");
     strncat(conf.address, conf_port, 4);
 
-    if (conf.pool_capacity == -1) conf.pool_capacity = 1;
-    if (conf.buffer_size == -1) conf.buffer_size = 1;
+    if (conf.pool_capacity == -1) conf.pool_capacity = 1000;
+    if (conf.buffer_size == -1) conf.buffer_size = 1000;
     if (conf.breadcrumbs_capacity == -1) conf.breadcrumbs_capacity = conf.pool_capacity;
     if (conf.triggers_capacity == -1) conf.triggers_capacity = conf.pool_capacity;
+
+    conf._retroactive_sampling_threshold = multiply_by(UINT64_MAX, conf.retroactive_sampling_percentage);
+    conf._head_sampling_threshold = multiply_by(UINT64_MAX, conf.head_sampling_probability);
 
     return conf;
 }
 
 void hindsight_init(const char* service_name) {
-    // Load Hindsight conf for this service
-    char config_fname[64];
-    strcpy(config_fname, "/etc/hindsight_conf/");
-    strcat(config_fname, service_name);
-    strcat(config_fname, ".conf");
-    hindsight_init_with_config(service_name, hindsight_load_config(config_fname));
+    hindsight_init_with_config(service_name, hindsight_load_config(service_name));
 }
 
 void hindsight_init_with_config(const char* service_name, HindsightConfig config) {
@@ -147,11 +169,15 @@ void hindsight_init_with_config(const char* service_name, HindsightConfig config
 }
 
 void hindsight_begin(uint64_t trace_id) {
-    tracestate_begin(&hindsight_tls, mgr, trace_id);
+    tracestate_begin_with_sampling(&hindsight_tls, mgr, trace_id, hindsight.config._head_sampling_threshold, hindsight.config._retroactive_sampling_threshold);
+    if (hindsight_get_is_head_sampled()) {
+        hindsight_trigger(TRIGGER_ID_HEAD_BASED_SAMPLING);
+    }
 }
 
-void hindsight_begin_sampling(uint64_t trace_id) {
-    tracestate_begin_sampling(&hindsight_tls, mgr, trace_id, hindsight.config.sample_rate);
+void hindsight_begin_sampled(uint64_t trace_id) {
+    tracestate_begin_with_sampling(&hindsight_tls, mgr, trace_id, UINT64_MAX, hindsight.config._retroactive_sampling_threshold);
+    hindsight_trigger(TRIGGER_ID_HEAD_BASED_SAMPLING);
 }
 
 void hindsight_end() {
@@ -192,6 +218,10 @@ char* hindsight_get_local_address() {
     return hindsight.config.address;
 }
 
+bool hindsight_get_is_head_sampled() {
+    return hindsight_tls.head_sampled;
+}
+
 char* hindsight_serialize() {
     return hindsight_get_local_address();
 }
@@ -204,10 +234,22 @@ int hindsight_payload() {
     return hindsight.config.payload;
 }
 
-int hindsight_sample_rate() {
-    return hindsight.config.sample_rate;
+float hindsight_retroactive_sampling_percentage() {
+    return hindsight.config.retroactive_sampling_percentage;
+}
+
+float hindsight_head_sampling_probability() {
+    return hindsight.config.head_sampling_probability;
 }
 
 int hindsight_null_buffer_count() {
     return hindsight_tls.header.null_buffer_count;
+}
+
+bool hindsight_is_active() {
+    return hindsight_tls.active;
+}
+
+bool hindsight_is_recording() {
+    return hindsight_tls.recording;
 }

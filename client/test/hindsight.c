@@ -18,7 +18,7 @@
 // TODO: configurable number of each thread.  Implement drainer in go. Compare
 
 HindsightConfig config() {
-	HindsightConfig conf;
+	HindsightConfig conf = hindsight_default_config();
 	conf.pool_capacity = 10000;
 	conf.buffer_size = BUFFERSIZE;
 	conf.breadcrumbs_capacity = conf.pool_capacity;

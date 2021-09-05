@@ -5,7 +5,7 @@ package memory
 
 /*
 #cgo CFLAGS: -I${SRCDIR}/../../../client/src
-#cgo LDFLAGS: ${SRCDIR}/../../../client/lib/libtracer.a
+#cgo LDFLAGS: ${SRCDIR}/../../../client/lib/libtracer.a -lm
 
 #include "agentapi.h"
 
@@ -13,11 +13,11 @@ package memory
 import "C"
 
 import (
+	"context"
 	"fmt"
 	"sync"
-    "context"
-    "time"
-    "unsafe"
+	"time"
+	"unsafe"
 )
 
 // BATCHSIZE is #defined in agentapi.h
@@ -36,15 +36,15 @@ type BreadcrumbBatch map[uint64][]string
 type GoAgentAPI struct {
 	agent *AgentAPI
 
-    Available chan []int    // Channel for re-enqueueing buffers to shm available queue
-    Complete chan CompleteBatch // Channel for receiving completed buffers from shm
-    Triggers chan []Trigger // Channel for receiving local triggers from shm
-    Breadcrumbs chan BreadcrumbBatch // Channel for receiving breadcrumbs from shm
+	Available   chan []int           // Channel for re-enqueueing buffers to shm available queue
+	Complete    chan CompleteBatch   // Channel for receiving completed buffers from shm
+	Triggers    chan []Trigger       // Channel for receiving local triggers from shm
+	Breadcrumbs chan BreadcrumbBatch // Channel for receiving breadcrumbs from shm
 }
 
 type CompleteBuffer struct {
 	Request_id uint64
-	Buffer_id int
+	Buffer_id  int
 }
 
 type Trigger struct {
@@ -54,20 +54,20 @@ type Trigger struct {
 
 type Breadcrumb struct {
 	Request_id uint64
-	Address string
+	Address    string
 }
 
 func InitAgentAPI(fname string) *AgentAPI {
 	var agent AgentAPI
-    agent.c_api = C.hindsight_agentapi_init(C.CString(fname))
-    
-    fmt.Println("Initialize buffers: done")
-    fmt.Println("Queue states:")
-    fmt.Print("  Available ")
-    C.queue_print(&agent.c_api.mgr.available)
-    fmt.Print("  Complete ")
-    C.queue_print(&agent.c_api.mgr.complete)
-    return &agent
+	agent.c_api = C.hindsight_agentapi_init(C.CString(fname))
+
+	fmt.Println("Initialize buffers: done")
+	fmt.Println("Queue states:")
+	fmt.Print("  Available ")
+	C.queue_print(&agent.c_api.mgr.available)
+	fmt.Print("  Complete ")
+	C.queue_print(&agent.c_api.mgr.complete)
+	return &agent
 }
 
 func InitGoAgentAPI(fname string) *GoAgentAPI {
@@ -89,34 +89,34 @@ func (api *GoAgentAPI) BufferSize() int {
 }
 
 func (api *GoAgentAPI) Run(ctx context.Context) {
-    fmt.Println("shm queue goroutine running")
-    wg := new(sync.WaitGroup)
-    wg.Add(4)
-    go func() {
-        api.availableLoop(ctx)
-        wg.Done()
-    }()
-    go func() {
-        api.completeLoop(ctx)
-        wg.Done()
-    }()
-    go func() {
-        api.triggerLoop(ctx)
-        wg.Done()
-    }()
-    go func() {
-        api.breadcrumbsLoop(ctx)
-        wg.Done()
-    }()
-    wg.Wait()
+	fmt.Println("shm queue goroutine running")
+	wg := new(sync.WaitGroup)
+	wg.Add(4)
+	go func() {
+		api.availableLoop(ctx)
+		wg.Done()
+	}()
+	go func() {
+		api.completeLoop(ctx)
+		wg.Done()
+	}()
+	go func() {
+		api.triggerLoop(ctx)
+		wg.Done()
+	}()
+	go func() {
+		api.breadcrumbsLoop(ctx)
+		wg.Done()
+	}()
+	wg.Wait()
 }
 
 func (api *GoAgentAPI) availableLoop(ctx context.Context) {
 	for {
 		select {
-		case bufids := <- api.Available:
+		case bufids := <-api.Available:
 			api.agent.PutAvailable(bufids)
-		case <- ctx.Done():
+		case <-ctx.Done():
 			return
 		}
 	}
@@ -127,7 +127,7 @@ func (api *GoAgentAPI) drainBatches(ctx context.Context, min_bs int) int {
 	total = 0
 	for {
 		select {
-		case <- ctx.Done():
+		case <-ctx.Done():
 			return 0
 		default:
 			count, completed := api.agent.GetCompleteBatches()
@@ -145,10 +145,10 @@ func (api *GoAgentAPI) drainBatches(ctx context.Context, min_bs int) int {
 
 func (api *GoAgentAPI) completeLoop(ctx context.Context) {
 	fmt.Println("completeLoop")
-    max_backoff := 100000
-    min_backoff := 10
-    backoff := int(10)
-    min_bs := 20
+	max_backoff := 100000
+	min_backoff := 10
+	backoff := int(10)
+	min_bs := 20
 	for {
 		// Keep processing batches so long as they are BATCHSIZE/2 large
 		total := api.drainBatches(ctx, min_bs)
@@ -161,9 +161,9 @@ func (api *GoAgentAPI) completeLoop(ctx context.Context) {
 		}
 
 		// Keep within bounds
-        if (backoff > max_backoff) {
-            backoff = max_backoff
-        }
+		if backoff > max_backoff {
+			backoff = max_backoff
+		}
 		time.Sleep(time.Duration(backoff) * time.Nanosecond)
 	}
 }
@@ -173,7 +173,7 @@ func (api *GoAgentAPI) drainTriggers(ctx context.Context, min_bs int) int {
 	total = 0
 	for {
 		select {
-		case <- ctx.Done():
+		case <-ctx.Done():
 			return 0
 		default:
 			triggers := api.agent.GetTriggers()
@@ -191,10 +191,10 @@ func (api *GoAgentAPI) drainTriggers(ctx context.Context, min_bs int) int {
 }
 
 func (api *GoAgentAPI) triggerLoop(ctx context.Context) {
-    max_backoff := 100000
-    min_backoff := 10
-    backoff := int(10)
-    min_bs := 20
+	max_backoff := 100000
+	min_backoff := 10
+	backoff := int(10)
+	min_bs := 20
 	for {
 		// Keep processing batches so long as they are BATCHSIZE/2 large
 		total := api.drainTriggers(ctx, min_bs)
@@ -207,9 +207,9 @@ func (api *GoAgentAPI) triggerLoop(ctx context.Context) {
 		}
 
 		// Keep within bounds
-        if (backoff > max_backoff) {
-            backoff = max_backoff
-        }
+		if backoff > max_backoff {
+			backoff = max_backoff
+		}
 		time.Sleep(time.Duration(backoff) * time.Nanosecond)
 	}
 }
@@ -219,7 +219,7 @@ func (api *GoAgentAPI) drainBreadcrumbs(ctx context.Context, min_bs int) int {
 	total = 0
 	for {
 		select {
-		case <- ctx.Done():
+		case <-ctx.Done():
 			return 0
 		default:
 			count, breadcrumbs := api.agent.GetBreadcrumbBatches()
@@ -236,10 +236,10 @@ func (api *GoAgentAPI) drainBreadcrumbs(ctx context.Context, min_bs int) int {
 }
 
 func (api *GoAgentAPI) breadcrumbsLoop(ctx context.Context) {
-    max_backoff := 100000
-    min_backoff := 10
-    backoff := int(10)
-    min_bs := 20
+	max_backoff := 100000
+	min_backoff := 10
+	backoff := int(10)
+	min_bs := 20
 	for {
 		// Keep processing batches so long as they are BATCHSIZE/2 large
 		total := api.drainBreadcrumbs(ctx, min_bs)
@@ -252,9 +252,9 @@ func (api *GoAgentAPI) breadcrumbsLoop(ctx context.Context) {
 		}
 
 		// Keep within bounds
-        if (backoff > max_backoff) {
-            backoff = max_backoff
-        }
+		if backoff > max_backoff {
+			backoff = max_backoff
+		}
 		time.Sleep(time.Duration(backoff) * time.Nanosecond)
 	}
 }
@@ -308,7 +308,7 @@ func (agent *AgentAPI) GetCompleteBatches() (int, CompleteBatch) {
 This is a blocking call; it will wait until all available IDs
 have been enqueued.
 
-In practice this should never block if the queue capacity 
+In practice this should never block if the queue capacity
 is equal to, or exceeds, the buffer pool capacity
 */
 func (agent *AgentAPI) PutAvailable(ids []int) {
@@ -325,12 +325,11 @@ func (agent *AgentAPI) PutAvailable(ids []int) {
 			ab.bufs[i].buffer_id = C.int(ids[i])
 		}
 
-        C.hindsight_agentapi_put_available_blocking(agent.c_api, &ab);
+		C.hindsight_agentapi_put_available_blocking(agent.c_api, &ab)
 
 		ids = ids[size:]
 	}
 }
-
 
 /* Retrieves up to BATCHSIZE triggers from the triggers queue.
 
@@ -353,7 +352,6 @@ func (agent *AgentAPI) GetTriggers() []Trigger {
 	return triggers
 }
 
-
 /* Retrieves up to BATCHSIZE breadcrumbs from the breadcrumbs queue.
 
 BATCHSIZE is hard-coded in agentapi.h
@@ -372,9 +370,8 @@ func (agent *AgentAPI) GetBreadcrumbs() []Breadcrumb {
 		breadcrumb.Address = C.GoString(bb.breadcrumb_addrs[i])
 	}
 
-	return breadcrumbs	
+	return breadcrumbs
 }
-
 
 /* Retrieves up to BATCHSIZE breadcrumbs from the breadcrumbs queue.
 
@@ -404,7 +401,7 @@ func (agent *AgentAPI) GetBuffer(buffer_id int) []byte {
 	start := buffer_id * buffer_size
 	end := start + buffer_size
 	var data []byte
-	data = (*[1<<30]byte)(unsafe.Pointer(agent.c_api.mgr.pool))[start:end]
+	data = (*[1 << 30]byte)(unsafe.Pointer(agent.c_api.mgr.pool))[start:end]
 	return data
 }
 

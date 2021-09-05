@@ -110,7 +110,7 @@ static error_t parse_opt (int key, char *arg, struct argp_state *state) {
 static struct argp argp = { options, parse_opt, args_doc, doc };
 
 void init_hindsight_client(struct arguments *arguments) {
-    HindsightConfig conf;
+    HindsightConfig conf = hindsight_default_config();
     conf.pool_capacity = arguments->buffer_count;
     conf.buffer_size = arguments->buffer_size;
     conf.breadcrumbs_capacity = conf.pool_capacity;

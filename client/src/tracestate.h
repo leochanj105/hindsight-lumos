@@ -19,6 +19,8 @@ typedef struct TraceHeader {
 // TraceState represents an active, ongoing trace in the current process
 typedef struct TraceState {
     bool active;
+    bool head_sampled;   // Is the trace sampled by head-based sampling?
+    bool recording; // Are we actually recording data? true if head-sampled or retro-sampled
     TraceHeader header; // The trace header data. Gets written to every buffer.
     TraceHeader* current; // Header within the current active buffer.
     Buffer buffer; // The current active buffer.
@@ -28,10 +30,12 @@ typedef struct TraceState {
 TraceState tracestate_create();
 
 // Starts a new trace state for the specified trace ID
-// I think currently traceID is the only thing Hindsight should need
+// This call will always enable retroactive sampling, and will never apply head-sampling
 void tracestate_begin(TraceState* trace, BufManager* mgr, uint64_t trace_id);
 
-void tracestate_begin_sampling(TraceState* trace, BufManager* mgr, uint64_t trace_id, int sample_rate);
+// Version of tracestate_begin that will potentially not sample the trace if retroactive_sampling_percentage is set
+// This call will only start a trace if trace_id <= retroactive_sampling_threshold
+void tracestate_begin_with_sampling(TraceState* trace, BufManager* mgr, uint64_t trace_id, uint64_t head_sampling_threshold, uint64_t retroactive_sampling_threshold);
 
 // Ends the current trace state, flushes the buffer
 void tracestate_end(TraceState* trace, BufManager* mgr);

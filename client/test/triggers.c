@@ -14,12 +14,14 @@
 // TODO: configurable number of each thread.  Implement drainer in go. Compare
 
 HindsightConfig config() {
-	HindsightConfig conf;
+	HindsightConfig conf = hindsight_default_config();
 	conf.pool_capacity = 10000;
 	conf.buffer_size = 4000;
 	conf.breadcrumbs_capacity = conf.pool_capacity;
 	conf.triggers_capacity = conf.pool_capacity;
 	conf.address = malloc(32 * sizeof(char));
+	conf.head_sampling_probability = 0.01;
+	conf._head_sampling_threshold = UINT64_MAX / 100;
 	return conf;
 }
 
@@ -136,9 +138,15 @@ void triggers_agent(HindsightAgentAPI* api) {
 	}
 }
 
+uint64_t rand_uint64(void) {
+  uint64_t r = 0;
+  for (int i=0; i<64; i += 15 /*30*/) {
+    r = r*((uint64_t)RAND_MAX + 1) + rand();
+  }
+  return r;
+}
+
 void triggers_client() {
-	printf("Beginning client trace\n");
-	hindsight_begin(700);
 
 
 	printf("Beginning client loop\n");
@@ -158,7 +166,10 @@ void triggers_client() {
 			count = 0;
 		}
 
-		hindsight_trigger((int) v);
+		hindsight_begin(rand_uint64());
+		// let head-based sampling do the trigger
+		// hindsight_trigger((int) v);
+		hindsight_end();
 		count ++;
 	}	
 }
