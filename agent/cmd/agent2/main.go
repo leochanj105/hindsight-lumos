@@ -4,6 +4,9 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"log"
+	"os"
+	"os/signal"
 
 	"github.com/geraldleizhang/hindsight/agent/pkg/agent"
 	"github.com/geraldleizhang/hindsight/agent/pkg/collector_new"
@@ -27,15 +30,24 @@ func main() {
 		return
 	}
 
+	c := make(chan os.Signal, 1)
+	signal.Notify(c, os.Interrupt)
+
+	ctx, cancel := context.WithCancel(context.Background())
+
+	go func() {
+		oscall := <-c
+		log.Printf("system call:%+v", oscall)
+		cancel()
+	}()
+
 	if *isLC == true {
 		fmt.Println("running lc")
 		lc := collector_new.InitLC()
-		ctx, _ := context.WithCancel(context.Background())
 		lc.Run(ctx)
 	} else {
 		fmt.Println("running server")
 		agent := agent.InitAgent(service_name, delay)
-		ctx, _ := context.WithCancel(context.Background())
 		agent.Run(ctx)
 	}
 

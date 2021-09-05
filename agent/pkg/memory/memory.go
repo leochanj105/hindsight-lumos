@@ -109,15 +109,17 @@ func (api *GoAgentAPI) Run(ctx context.Context) {
 		wg.Done()
 	}()
 	wg.Wait()
+	fmt.Println("shm queue goroutine exiting")
 }
 
 func (api *GoAgentAPI) availableLoop(ctx context.Context) {
 	for {
 		select {
+		case <-ctx.Done():
+			fmt.Println("available exiting")
+			return
 		case bufids := <-api.Available:
 			api.agent.PutAvailable(bufids)
-		case <-ctx.Done():
-			return
 		}
 	}
 }
@@ -128,6 +130,7 @@ func (api *GoAgentAPI) drainBatches(ctx context.Context, min_bs int) int {
 	for {
 		select {
 		case <-ctx.Done():
+			fmt.Println("batches exiting")
 			return 0
 		default:
 			count, completed := api.agent.GetCompleteBatches()
@@ -150,21 +153,27 @@ func (api *GoAgentAPI) completeLoop(ctx context.Context) {
 	backoff := int(10)
 	min_bs := 20
 	for {
-		// Keep processing batches so long as they are BATCHSIZE/2 large
-		total := api.drainBatches(ctx, min_bs)
+		select {
+		case <-ctx.Done():
+			fmt.Println("completeLoop exiting")
+			return
+		default:
+			// Keep processing batches so long as they are BATCHSIZE/2 large
+			total := api.drainBatches(ctx, min_bs)
 
-		if total < min_bs {
-			// Back off exponentially
-			backoff *= 2
-		} else {
-			backoff = min_backoff
-		}
+			if total < min_bs {
+				// Back off exponentially
+				backoff *= 2
+			} else {
+				backoff = min_backoff
+			}
 
-		// Keep within bounds
-		if backoff > max_backoff {
-			backoff = max_backoff
+			// Keep within bounds
+			if backoff > max_backoff {
+				backoff = max_backoff
+			}
+			time.Sleep(time.Duration(backoff) * time.Nanosecond)
 		}
-		time.Sleep(time.Duration(backoff) * time.Nanosecond)
 	}
 }
 
@@ -196,21 +205,27 @@ func (api *GoAgentAPI) triggerLoop(ctx context.Context) {
 	backoff := int(10)
 	min_bs := 20
 	for {
-		// Keep processing batches so long as they are BATCHSIZE/2 large
-		total := api.drainTriggers(ctx, min_bs)
+		select {
+		case <-ctx.Done():
+			fmt.Println("triggers exiting")
+			return
+		default:
+			// Keep processing batches so long as they are BATCHSIZE/2 large
+			total := api.drainTriggers(ctx, min_bs)
 
-		if total < min_bs {
-			// Back off exponentially
-			backoff *= 2
-		} else {
-			backoff = min_backoff
-		}
+			if total < min_bs {
+				// Back off exponentially
+				backoff *= 2
+			} else {
+				backoff = min_backoff
+			}
 
-		// Keep within bounds
-		if backoff > max_backoff {
-			backoff = max_backoff
+			// Keep within bounds
+			if backoff > max_backoff {
+				backoff = max_backoff
+			}
+			time.Sleep(time.Duration(backoff) * time.Nanosecond)
 		}
-		time.Sleep(time.Duration(backoff) * time.Nanosecond)
 	}
 }
 
@@ -220,6 +235,7 @@ func (api *GoAgentAPI) drainBreadcrumbs(ctx context.Context, min_bs int) int {
 	for {
 		select {
 		case <-ctx.Done():
+			fmt.Println("breadcrumbs exiting")
 			return 0
 		default:
 			count, breadcrumbs := api.agent.GetBreadcrumbBatches()
@@ -241,21 +257,27 @@ func (api *GoAgentAPI) breadcrumbsLoop(ctx context.Context) {
 	backoff := int(10)
 	min_bs := 20
 	for {
-		// Keep processing batches so long as they are BATCHSIZE/2 large
-		total := api.drainBreadcrumbs(ctx, min_bs)
+		select {
+		case <-ctx.Done():
+			fmt.Println("breadcrumbs exiting")
+			return
+		default:
+			// Keep processing batches so long as they are BATCHSIZE/2 large
+			total := api.drainBreadcrumbs(ctx, min_bs)
 
-		if total < min_bs {
-			// Back off exponentially
-			backoff *= 2
-		} else {
-			backoff = min_backoff
-		}
+			if total < min_bs {
+				// Back off exponentially
+				backoff *= 2
+			} else {
+				backoff = min_backoff
+			}
 
-		// Keep within bounds
-		if backoff > max_backoff {
-			backoff = max_backoff
+			// Keep within bounds
+			if backoff > max_backoff {
+				backoff = max_backoff
+			}
+			time.Sleep(time.Duration(backoff) * time.Nanosecond)
 		}
-		time.Sleep(time.Duration(backoff) * time.Nanosecond)
 	}
 }
 
