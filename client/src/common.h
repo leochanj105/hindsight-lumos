@@ -12,4 +12,6 @@ uint64_t multiply_by(uint64_t v, float f);
 
 uint64_t nanos();
 
+uint64_t rand_uint64();
+
 #endif // _HINDSIGHT_CLIENT_COMMON_H_

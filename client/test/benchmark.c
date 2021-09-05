@@ -28,6 +28,8 @@ static struct argp_option options[] = {
   {"payload_size",  'w', "NUM",  0,  "Payload size written by each tracepoint" },
   {"tracepoints", 'n', "NUM", 0, "Number of tracepoints per trace"},
   {"trigger", 'p', "NUM", 0, "Trigger probability, default 0, float"},
+  {"headsampling", 'H', "NUM", 0, "Head-based sampling probability between 0 and 1, default 0, float"},
+  {"retroactive", 'R', "NUM", 0, "Retroactive sampling percentage between 0 and 1, default 1, float"},
   {"duration", 'd', "NUM", 0, "Duration in seconds before exiting. 0 to run forever"},
   {"output",   'o', "FILE", 0, "Output stats to FILE" },
   { 0 }
@@ -50,6 +52,8 @@ struct arguments {
   int tracepoints_per_request;
   bool trigger_enabled;
   float trigger_probability;
+  float head_sampling_probability;
+  float retroactive_sampling_percentage;
   uint64_t duration;
   char* output_file;
   char* process_name;
@@ -78,6 +82,12 @@ static error_t parse_opt (int key, char *arg, struct argp_state *state) {
     case 'p':
       arguments->trigger_enabled = true;
       arguments->trigger_probability = atof(arg);
+      break;
+    case 'H':
+      arguments->head_sampling_probability = atof(arg);
+      break;
+    case 'R':
+      arguments->retroactive_sampling_percentage = atof(arg);
       break;
     case 'd':
       arguments->duration = atoll(arg);
@@ -116,6 +126,10 @@ void init_hindsight_client(struct arguments *arguments) {
     conf.breadcrumbs_capacity = conf.pool_capacity;
     conf.triggers_capacity = conf.pool_capacity;
     conf.address = malloc(32 * sizeof(char));
+    conf.retroactive_sampling_percentage = arguments->retroactive_sampling_percentage;
+    conf.head_sampling_probability = arguments->head_sampling_probability;
+    conf._retroactive_sampling_threshold = multiply_by(UINT64_MAX, conf.retroactive_sampling_percentage);
+    conf._head_sampling_threshold = multiply_by(UINT64_MAX, conf.head_sampling_probability);
 
     hindsight_init_with_config(arguments->process_name, conf);
 }
@@ -161,7 +175,6 @@ void client_thread_main(volatile int *alive,
       payload_ints[i] = rand();
     }
 
-    uint64_t trace_id = 1000000LL * client_id;
     int tracepoints_per_request = arguments->tracepoints_per_request;
     uint64_t ts[4];
 
@@ -177,7 +190,7 @@ void client_thread_main(volatile int *alive,
     uint64_t tbegin = getticks();
     while (*alive) {
         ts[0] = getticks();
-        hindsight_begin(++trace_id);
+        hindsight_begin(rand_uint64());
         ts[1] = getticks();
         for (int i = 0; i < tracepoints_per_request; i++) {
             hindsight_tracepoint(payload, payload_src_size);
@@ -378,6 +391,8 @@ int main (int argc, char **argv) {
   arguments.tracepoints_per_request = 100;
   arguments.trigger_enabled = false;
   arguments.trigger_probability = 0;
+  arguments.head_sampling_probability = 0.0;
+  arguments.retroactive_sampling_percentage = 1.0;
   arguments.duration = 0;
 
 

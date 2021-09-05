@@ -16,6 +16,8 @@ parser.add_argument('-c', "--buffer_count", metavar="NUM", type=int, default="25
 parser.add_argument('-w', "--payload_size", metavar="NUM", type=int, default="1000", help='Payload size')
 parser.add_argument('-n', "--tracepoints", metavar="NUM", type=int, default="100", help='Number of tracepoints per trace')
 parser.add_argument('-p', "--trigger", metavar="NUM", type=float, default="0", help='Trigger probability')
+parser.add_argument('-H', "--headsampling", metavar="NUM", type=float, default="0", help='Head-based sampling probability')
+parser.add_argument('-R', "--retroactive", metavar="NUM", type=float, default="1", help='Retroactive tracing probability')
 parser.add_argument('-d', "--duration", metavar="NUM", type=int, default="60", help='Experiment duration')
 parser.add_argument('-silent', "--silent", action='store_true', help='Prompt before proceeding')
 
@@ -45,8 +47,10 @@ def make_client_cmd(args):
         "--buffer_count", args.buffer_count,
         "--payload_size", args.payload_size,
         "--tracepoints", args.tracepoints,
-        "--trigger", 0,
+        "--trigger", args.trigger,
         "--duration", args.duration,
+        "--headsampling", args.headsampling,
+        "--retroactive", args.retroactive,
         args.name
     ]]
     print(" ".join(cmd))
