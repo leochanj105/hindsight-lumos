@@ -84,8 +84,8 @@ def run(args):
         for line in lines:
             f.write(line + "\n")
 
-    agent.terminate()
-    # os.killpg(os.getpgid(agent.pid), signal.SIGTERM)
+    # agent.terminate()     # for some reason no longer working
+    os.killpg(os.getpgid(agent.pid), signal.SIGINT)
 
 if __name__ == '__main__':
     args = parser.parse_args()
