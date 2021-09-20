@@ -27,6 +27,7 @@ HindsightConfig hindsight_default_config() {
     conf.breadcrumbs_capacity = -1;
     conf.triggers_capacity = -1;
     conf.payload = 1;
+    conf.sample_rate = 1;
     conf.retroactive_sampling_percentage = 1.0;
     conf._retroactive_sampling_threshold = UINT64_MAX;
     conf.head_sampling_probability = 0.0;
@@ -109,6 +110,10 @@ HindsightConfig hindsight_load_config_file(const char* fname) {
             conf.payload = atoi(value);
         }
 
+        if (!strcmp(var, "sample_rate")) {
+            conf.sample_rate = atoi(value);
+        }
+
         if (!strcmp(var, "retroactive_sampling_percentage")) {
             conf.retroactive_sampling_percentage = atof(value);
         }
@@ -164,8 +169,6 @@ void hindsight_init_with_config(const char* service_name, HindsightConfig config
         hindsight.config.triggers_capacity);
 
     mgr = &hindsight.mgr;
-
-    tail_init();
 }
 
 void hindsight_begin(uint64_t trace_id) {
@@ -180,11 +183,23 @@ void hindsight_begin_sampled(uint64_t trace_id) {
     hindsight_trigger(TRIGGER_ID_HEAD_BASED_SAMPLING);
 }
 
+// TODO: Merge this with hindsight_begin_sampled
+void hindsight_begin_sampling(uint64_t trace_id) {
+    tracestate_begin_sampling(&hindsight_tls, mgr, trace_id, hindsight.config.sample_rate);
+}
+
 void hindsight_end() {
     tracestate_end(&hindsight_tls, mgr);
 }
 
 void hindsight_tracepoint(char* buf, size_t buf_size) {
+    if (tracestate_try_write(&hindsight_tls, buf, buf_size)) return;
+    tracestate_write(&hindsight_tls, mgr, buf, buf_size);
+}
+
+// TODO: This might be unnecessary, merge with tracepoint API
+void hindsight_tracepoint_sampling(char* buf, size_t buf_size) {
+    if (hindsight.config.sample_rate != 1 && hindsight_tls.active == false) return;
     if (tracestate_try_write(&hindsight_tls, buf, buf_size)) return;
     tracestate_write(&hindsight_tls, mgr, buf, buf_size);
 }
@@ -234,6 +249,10 @@ int hindsight_payload() {
     return hindsight.config.payload;
 }
 
+int hindsight_sample_rate() {
+    return hindsight.config.sample_rate;
+}
+
 float hindsight_retroactive_sampling_percentage() {
     return hindsight.config.retroactive_sampling_percentage;
 }
@@ -252,4 +271,51 @@ bool hindsight_is_active() {
 
 bool hindsight_is_recording() {
     return hindsight_tls.recording;
+}
+
+void hindsight_inject() {
+    return tail_inject();
+}
+
+void hindsight_tail(int64_t latency, int trigger_id) {
+    printf("[HINDSIGHT TEST] Req: %ld Latency: %ld\n", hindsight_tls.header.trace_id, latency);
+    if (tail_latency(hindsight_tls.header.trace_id, latency)){
+        triggers_fire(&hindsight.triggers, trigger_id, hindsight_tls.header.trace_id);
+    }
+    return;
+}
+
+bool hindsight_exception(int trigger_id) {
+    printf("[HINDSIGHT TEST] Req: %ld\n", hindsight_tls.header.trace_id);
+    if(exception_throw(hindsight_tls.header.trace_id)) {
+        if (exception_rate_limit() == false) return true;
+        printf("[HINDSIGHT TEST] Req: %ld Sampled\n", hindsight_tls.header.trace_id);
+        triggers_fire(&hindsight.triggers, trigger_id, hindsight_tls.header.trace_id);
+    } else {
+        return false;
+    }
+    return true;
+}
+
+void hindsight_trigger_sampling_tail(int64_t latency, int trigger_id) {
+    printf("[SAMPLING TEST] Req: %ld Latency: %ld\n", hindsight_tls.header.trace_id, latency);
+    if(hindsight_tls.header.trace_id % 10000000 > 10000000 / hindsight.config.sample_rate) return;
+    printf("[SAMPLING TEST] Req: %ld Sampled\n", hindsight_tls.header.trace_id);
+    if (tail_latency(hindsight_tls.header.trace_id, latency)) {
+        triggers_fire(&hindsight.triggers, trigger_id, hindsight_tls.header.trace_id);
+    }
+
+    return;
+}
+
+bool hindsight_trigger_sampling_exception(int trigger_id) {
+    printf("[SAMPLING TEST] Req: %ld\n", hindsight_tls.header.trace_id);
+    if(exception_throw(hindsight_tls.header.trace_id)) {
+        if(hindsight_tls.header.trace_id % 10000000 > 10000000 / hindsight.config.sample_rate) return true;
+        printf("[SAMPLING TEST] Req: %ld Sampled\n", hindsight_tls.header.trace_id);
+        triggers_fire(&hindsight.triggers, trigger_id, hindsight_tls.header.trace_id);       
+    } else {
+        return false;
+    }
+    return true;
 }
