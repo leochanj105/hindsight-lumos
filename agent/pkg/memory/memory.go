@@ -204,14 +204,23 @@ func (api *GoAgentAPI) triggerLoop(ctx context.Context) {
 	min_backoff := 10
 	backoff := int(10)
 	min_bs := 20
+	count := 0
+	// next_print := time.NewTimer(1 * time.Millisecond)
 	for {
 		select {
 		case <-ctx.Done():
 			fmt.Println("triggers exiting")
 			return
+		// case <-next_print.C:
+		// 	{
+		// 		log.Println("Drained", count, "triggers")
+		// 		count = 0
+		// 		next_print.Reset(1000 * time.Millisecond)
+		// 	}
 		default:
 			// Keep processing batches so long as they are BATCHSIZE/2 large
 			total := api.drainTriggers(ctx, min_bs)
+			count += total
 
 			if total < min_bs {
 				// Back off exponentially

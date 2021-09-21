@@ -1,269 +1,523 @@
 package agent
 
 import (
-    "container/list"
-    "context"
-    "fmt"
-    "log"
-    "net"
-    "sync"
-    "time"
+	"container/list"
+	"context"
+	"fmt"
+	"sync"
+	"time"
 
-    "github.com/emirpasic/gods/sets/treeset"
-    "github.com/geraldleizhang/hindsight/agent/pkg/datapb"
-    "github.com/geraldleizhang/hindsight/agent/pkg/memory"
-    "github.com/geraldleizhang/hindsight/agent/pkg/util"
-    "google.golang.org/grpc"
+	"github.com/geraldleizhang/hindsight/agent/pkg/memory"
+	"github.com/geraldleizhang/hindsight/agent/pkg/util"
+	"github.com/juju/ratelimit"
 )
 
+/* All-in-one agent implementation */
+
 type TraceData struct {
-    Request_id  uint64
-    Buffers     []int
-    Breadcrumbs []string
+	trace_id    uint64
+	buffers     []int
+	breadcrumbs []string
+
+	needs_reporting bool
+	triggered_by    []*TriggeredTrace
+
+	last_modified time.Time
+
+	e *list.Element // Node in regular LRU
 }
 
-func (trace *TraceData) Add(other *TraceData) {
-    if other == nil {
-        return
-    }
-    trace.Buffers = append(trace.Buffers, other.Buffers...)
-    trace.Breadcrumbs = append(trace.Breadcrumbs, other.Breadcrumbs...)
+type TriggeredTrace struct {
+	trigger *TriggerState
+	e       *list.Element // Node in trigger's LRU
+}
+
+type TriggerState struct {
+	trigger_id int
+	lru        *list.List // LRU of traces triggered by this trigger
+	unreported *util.TreeNode
+	size       int // Number of unreported buffers
+	vt         int // Virtual time used for fair sharing
+
+	limiter *ratelimit.Bucket // Rate limiter
+
+	metrics TriggerMetrics
 }
 
 type Agent struct {
-    api             *memory.GoAgentAPI // API to the shared memory
-    trigger_delay   uint64             // Used for experiments; hard-coded delay before trigger fires
-    cache           *TraceCache
-    trigger_manager *TriggerManager
+	api       *memory.GoAgentAPI // API to the shared memory
+	reporting *Reporting         // Interface to LogCollector
+
+	// Constants for deciding when to evict
+	cache_capacity int // Above this threshold, we should evict
+	cache_size     int // Current number of cached buffers.
+
+	triggered_capacity int // Above this threshold we evict
+	triggered_size     int // Current number of triggered buffers.
+
+	lru *list.List // LRU of untriggered traces
+
+	triggered              map[int]*TriggerState
+	triggered_lru_size     int // Number of triggered traces
+	triggered_lru_capacity int // Maximum number of triggered traces
+
+	buffer_size         int // Size of buffers in the cache
+	eviction_batch_size int // Each eviction should aim for this many buffers
+
+	// TraceData stored and managed by the TraceCache
+	data map[uint64]*TraceData // e.Value.(*TraceData)
+
+	/* Wraps api.Triggers, possibly adding a delay */
+	triggers <-chan []memory.Trigger // triggers from shm
+
+	metrics AgentMetrics
+
+	vc int // Virtual clock used for fair sharing
+
+	now time.Time
 }
 
-/*
-Trigger manager manages all state to do with triggers
-that are fired both locally and received from the log
-collector
-*/
-type TriggerManager struct {
-    api *memory.GoAgentAPI // API to the shared memory
+func (agent *Agent) getOrCreateTriggerState(trigger_id int) *TriggerState {
+	if trigger, ok := agent.triggered[trigger_id]; ok {
+		return trigger
+	}
 
-    // Incoming from grpc handler
-    remote_triggers chan uint64
+	var trigger TriggerState
+	trigger.trigger_id = trigger_id
+	trigger.lru = list.New()
+	trigger.unreported = util.InitPartialPriorityTree()
+	trigger.vt = agent.vc
+	agent.triggered[trigger_id] = &trigger
 
-    // Channel for receiving triggered trace data from cache
-    new_trace_data chan *TraceData
-
-    /* Every triggered trace will initiate a timer that eventually evicts the trace
-       from the trigger manager.  These channels are used to reset the timeout when
-       new trace data arrives */
-    triggered map[uint64](chan struct{})
-    timeouts  chan uint64
-
-    /* Stores the trace IDs of all triggered traces, until they expire.
-       These are sorted, in case triggering becomes a bottleneck; low trace IDs
-       get reported first*/
-    unreported_trace_ids     *treeset.Set
-    has_unreported_trace_ids chan struct{}
-
-    /* TraceData that hasn't been reported yet.  A trace ID will remain in
-       this map until it expires, but any reported buffers get immediately
-       cleared from the list */
-    unreported_data map[uint64]*TraceData
-
-    // Incoming from shm (GoAgentAPI)
-    available chan<- []int            // to send evicted buffers to shm available queue
-    triggers  <-chan []memory.Trigger // triggers from shm
-
-    /* Used by the TriggerManager to tell the cache of triggered traces and freed bufs */
-    cache_triggers                 chan<- uint64 // From TraceCache
-    cache_expired_triggers         chan<- uint64 // From TraceCache
-    cache_notify_available_buffers chan<- int    // From TraceCache
+	return &trigger
 }
 
-type CacheStats struct {
-    complete_batches int
-    complete_buffers int
-    triggers         int
+func InitAgent(fname string, trigger_delay uint64, rate_limit float64, per_trigger_rate_limits map[int]float64) *Agent {
+	fmt.Println("Init agent", fname)
+	fmt.Printf("  Trigger delay %d nanoseconds\n", trigger_delay)
+	fmt.Printf("  Reporting rate limit %.2f MB/s\n", rate_limit)
+	for trigger_id, rate := range per_trigger_rate_limits {
+		fmt.Printf("    -Trigger %d rate limit %.2f MB/s\n", trigger_id, rate)
+	}
+
+	var agent Agent
+	agent.api = memory.InitGoAgentAPI(fname)
+	agent.reporting = InitReporting(agent.api, rate_limit)
+
+	agent.cache_capacity = (4 * agent.api.Capacity()) / 5 // TODO: not hardcoded
+	agent.cache_size = 0
+
+	agent.triggered_capacity = agent.cache_capacity / 2 // TODO: not hardcoded
+	agent.triggered_size = 0
+
+	agent.lru = list.New()
+	agent.triggered = make(map[int]*TriggerState)
+	agent.triggered_lru_capacity = agent.cache_capacity
+
+	agent.buffer_size = agent.api.BufferSize()
+	agent.eviction_batch_size = agent.cache_capacity / 100 // Hard code to some value for now
+
+	agent.data = make(map[uint64]*TraceData)
+
+	if trigger_delay == 0 {
+		agent.triggers = agent.api.Triggers
+	} else {
+		proxy := make(chan []memory.Trigger, 10000)
+		agent.triggers = proxy
+		go func() {
+			for {
+				select {
+				case fired := <-agent.api.Triggers:
+					go func() {
+						time.Sleep(time.Duration(trigger_delay) * time.Nanosecond)
+						proxy <- fired
+					}()
+				}
+			}
+		}()
+	}
+
+	/* Eagerly create trigger state for specified rate limits */
+	for trigger_id, limit := range per_trigger_rate_limits {
+		trigger := agent.getOrCreateTriggerState(trigger_id)
+		limit_bytes := limit * 1024 * 1024
+		trigger.limiter = ratelimit.NewBucketWithRate(limit_bytes, int64(limit_bytes))
+	}
+
+	fmt.Println("Go Agent cache capacity", agent.cache_capacity)
+
+	return &agent
 }
 
-/*
-TraceCache simply caches and evicts buffers.  If the TriggerManager triggers
-a trace ID, the TraceCache will send all data to the TriggerManager and
-redirect all future buffers to the TriggerManager until told otherwise
-*/
-type TraceCache struct {
-    // Constants for deciding when to evict
-    capacity            int // Above this threshold, we should evict
-    buffer_size         int // Size of buffers in the cache
-    eviction_batch_size int // Each eviction should aim for this many buffers
-    buf_count           int // Current number of cached buffers. Not the same
+/* Should we drop unused trace IDs from trigger history? */
+func (agent *Agent) maybeEvictTriggeredLRU() {
+	if agent.triggered_lru_size <= agent.triggered_lru_capacity {
+		return
+	}
 
-    // TraceData stored and managed by the TraceCache
-    lru  *list.List
-    data map[uint64]*list.Element // e.Value.(*TraceData)
+	// Find the trigger consuming the most LRU capacity
+	var trigger *TriggerState
+	for _, candidate := range agent.triggered {
+		if trigger == nil || candidate.lru.Len() > trigger.lru.Len() {
+			trigger = candidate
+		}
+	}
 
-    // Incoming from shm (GoAgentAPI)
-    available   chan<- []int                  // to send evicted buffers to shm available queue
-    complete    <-chan memory.CompleteBatch   // buffers from shm complete queue
-    breadcrumbs <-chan memory.BreadcrumbBatch // breadcrumbs from shm
+	// Figure out how much should be evicted
+	target_lru_size := agent.triggered_lru_capacity - agent.eviction_batch_size
 
-    // Used internally to trigger eviction
-    eviction_required chan struct{}
+	// Only evict from largest trigger each time; don't try to be clever
+	for agent.triggered_lru_size > target_lru_size && trigger.lru.Len() > 0 {
+		// Get our victim
+		entry := trigger.lru.Back()
+		trace := entry.Value.(*TraceData)
 
-    // Stats for logging
-    stats       CacheStats
-    last_print  uint64
-    print_every uint64
-    next_print  *time.Timer
-
-    // Triggered and expired traces
-    triggered                map[uint64]struct{} // Trace IDs that have been triggered
-    triggers                 chan uint64         // Receive new triggered trace IDs
-    expired_triggers         chan uint64         // Trace IDs that are now expired
-    triggered_data           chan<- *TraceData   //   From TriggerManager
-    notify_available_buffers chan int            // Notify of change in cache capacity
+		// Untrigger and possibly delete; this should never return buffers
+		agent.untriggered(trace, trigger)
+	}
 }
 
-func InitAgent(fname string, trigger_delay uint64) *Agent {
-    var api *memory.GoAgentAPI
-    api = memory.InitGoAgentAPI(fname)
+/* Check if the cache is over capacity, and evict some buffers if so */
+func (agent *Agent) maybeEvictTriggered() {
+	agent.maybeEvictTriggeredLRU()
 
-    var cache TraceCache
-    cache.capacity = (4 * api.Capacity()) / 5 // TODO: not hardcoded
-    cache.buffer_size = api.BufferSize()
-    cache.eviction_batch_size = 20 // Hard code to some value for now
-    cache.buf_count = 0
-    cache.lru = list.New()
-    cache.data = make(map[uint64]*list.Element)
-    cache.triggered = make(map[uint64]struct{})
-    cache.triggers = make(chan uint64, 10000)
-    cache.expired_triggers = make(chan uint64, 10000)
-    cache.notify_available_buffers = make(chan int, 10000)
-    cache.eviction_required = make(chan struct{}, 1)
-    cache.print_every = 5000
-    cache.next_print = time.NewTimer(1 * time.Millisecond)
+	if agent.triggered_size <= agent.triggered_capacity {
+		return
+	}
 
-    var triggers TriggerManager
-    triggers.api = api
-    triggers.remote_triggers = make(chan uint64, 1000)
-    triggers.new_trace_data = make(chan *TraceData, 10000)
-    triggers.triggered = make(map[uint64](chan struct{}))
-    triggers.timeouts = make(chan uint64, 10000)
-    triggers.unreported_trace_ids = treeset.NewWithIntComparator()
-    triggers.has_unreported_trace_ids = make(chan struct{}, 1)
-    triggers.unreported_data = make(map[uint64]*TraceData)
+	// Find the trigger consuming the most capacity
+	var trigger *TriggerState
+	for _, candidate := range agent.triggered {
+		if trigger == nil || candidate.size > trigger.size {
+			trigger = candidate
+		}
+	}
 
-    //// Link up channels
+	// Figure out how much should be evicted
+	to_evict := agent.triggered_size - agent.triggered_capacity
+	if to_evict < agent.eviction_batch_size {
+		to_evict = agent.eviction_batch_size
+	}
 
-    cache.triggered_data = triggers.new_trace_data
-    cache.available = api.Available
-    cache.complete = api.Complete
-    cache.breadcrumbs = api.Breadcrumbs
+	// Only evict from largest trigger each time; don't try to be clever
+	var evicted_buffers []int
+	for len(evicted_buffers) < to_evict && trigger.unreported.Size() > 0 {
+		// Get our victim
+		trace_id := trigger.unreported.PopNearMax()
 
-    triggers.available = api.Available
-    triggers.cache_triggers = cache.triggers
-    triggers.cache_expired_triggers = cache.expired_triggers
-    triggers.cache_notify_available_buffers = cache.notify_available_buffers
+		if trace, ok := agent.data[trace_id]; ok {
+			bufs := agent.untriggered(trace, trigger)
+			evicted_buffers = append(evicted_buffers, bufs...)
+		}
+	}
 
-    // Hack-ish here to delay triggers
-    if trigger_delay == 0 {
-        triggers.triggers = api.Triggers
-    } else {
-        proxy := make(chan []memory.Trigger, 10000)
-        triggers.triggers = proxy
-        go func() {
-            for {
-                select {
-                case fired := <-api.Triggers:
-                    {
-                        go func() {
-                            time.Sleep(time.Duration(trigger_delay) * time.Nanosecond)
-                            proxy <- fired
-                        }()
-                    }
-                }
-            }
-        }()
-    }
-
-    //// Create final agent
-
-    var agent Agent
-    agent.api = api
-    agent.trigger_delay = trigger_delay
-    agent.cache = &cache
-    agent.trigger_manager = &triggers
-
-    fmt.Println("Go Agent cache capacity", cache.capacity)
-
-    return &agent
+	// Make the evicted buffers available
+	if len(evicted_buffers) > 0 {
+		agent.api.Available <- evicted_buffers
+	}
 }
 
-func (agent *Agent) Run(ctx context.Context) {
-    wg := new(sync.WaitGroup)
-    wg.Add(4)
-    go func() {
-        agent.cache.Run(ctx)
-        wg.Done()
-    }()
-    go func() {
-        agent.trigger_manager.Run(ctx)
-        wg.Done()
-    }()
-    go func() {
-        agent.trigger_manager.RunGRPCServer(ctx)
-        wg.Done()
-    }()
-    go func() {
-        agent.api.Run(ctx)
-        wg.Done()
-    }()
-    // LEI TODO: grpc server for remote triggers
-    wg.Wait()
+func (agent *Agent) maybeEvict() {
+	// Evict triggered first
+	agent.maybeEvictTriggered()
+
+	if agent.cache_size < agent.cache_capacity {
+		return
+	}
+
+	// Figure out how much should be evicted
+	to_evict := agent.cache_size - agent.cache_capacity
+	if to_evict < agent.eviction_batch_size {
+		to_evict = agent.eviction_batch_size
+	}
+
+	var evicted_buffers []int
+	for len(evicted_buffers) < to_evict && agent.lru.Len() > 0 {
+		// Get our victim
+		entry := agent.lru.Back()
+		trace := entry.Value.(*TraceData)
+
+		// Remove
+		delete(agent.data, trace.trace_id)
+		agent.lru.Remove(entry)
+		agent.metrics.event_horizon = agent.now.Sub(trace.last_modified)
+
+		// Manage buffers
+		evicted_buffers = append(evicted_buffers, trace.buffers...)
+	}
+
+	// Make the evicted buffers available
+	if len(evicted_buffers) > 0 {
+		agent.cache_size -= len(evicted_buffers)
+		agent.api.Available <- evicted_buffers
+	}
 }
 
-func (tm *TriggerManager) addTraceData(trace *TraceData) {
-    trace_id := trace.Request_id
+func (agent *Agent) addBuffersToTrace(trace *TraceData, buffers []int) {
+	if len(trace.triggered_by) > 0 {
+		/* The trace is triggered and got some new buffers.
+		It's not currently slated for reporting, but now needs to be */
+		for _, ts := range trace.triggered_by {
+			if !trace.needs_reporting {
+				ts.trigger.lru.Remove(ts.e)
+				agent.triggered_lru_size -= 1
+				ts.e = nil
+				ts.trigger.unreported.Insert(trace.trace_id)
+			}
+			ts.trigger.size += len(buffers)
+		}
+		agent.triggered_size += len(buffers)
+	} else {
+		agent.lru.MoveToFront(trace.e)
+		trace.last_modified = agent.now
+	}
 
-    if canceller, ok := tm.triggered[trace_id]; ok {
-        /* This trace is still triggered. Cancel the old timer */
-        canceller <- struct{}{}
-    } else {
-        /* This trace is not triggered. Ditch the buffers, remind
-           the cache it's not triggered, and leave */
-        tm.cache_notify_available_buffers <- len(trace.Buffers)
-        tm.available <- trace.Buffers
-        tm.cache_expired_triggers <- trace_id
-        return
-    }
+	trace.needs_reporting = true
+	trace.buffers = append(trace.buffers, buffers...)
+	agent.cache_size += len(buffers)
+}
 
-    if existing, ok := tm.unreported_data[trace_id]; ok {
-        /* There's some unreported data for this trace */
-        existing.Add(trace)
-    } else {
-        /* Add the new trace data */
-        tm.unreported_data[trace_id] = trace
-        tm.unreported_trace_ids.Add(int(trace_id))
-        select {
-        case tm.has_unreported_trace_ids <- struct{}{}:
-            {
-            }
-        default:
-            {
-            }
-        }
-    }
+/* Add some buffers to the cache */
+func (agent *Agent) processCompletedBuffers(batch memory.CompleteBatch) {
 
-    // Set a new timeout for the trace
-    canceller := make(chan struct{})
-    tm.triggered[trace_id] = canceller
-    go func() {
-        // TODO this timeout can be much higher, e.g. minutes
-        select {
-        case <-time.After(3 * time.Second):
-            tm.timeouts <- trace_id
-        case <-canceller:
-            return
-        }
-    }()
+	var freed_buffers []int
+
+	for trace_id, buffers := range batch {
+		/* Update agent metrics */
+		agent.metrics.complete_buffers += len(buffers)
+
+		/* Ignore trace ID 0 */
+		if trace_id == 0 {
+			freed_buffers = append(freed_buffers, buffers...)
+			continue
+		}
+
+		if trace, ok := agent.data[trace_id]; ok {
+			agent.addBuffersToTrace(trace, buffers)
+		} else {
+			/* Buffers for a trace not seen yet */
+			var trace TraceData
+			trace.trace_id = trace_id
+			trace.e = agent.lru.PushFront(&trace)
+			trace.last_modified = agent.now
+			agent.data[trace_id] = &trace
+
+			agent.addBuffersToTrace(&trace, buffers)
+		}
+	}
+
+	/* Trigger eviction if above threshold */
+	agent.maybeEvict()
+
+	/* Send freed buffers */
+	if len(freed_buffers) > 0 {
+		agent.api.Available <- freed_buffers
+	}
+
+	agent.metrics.complete_batches++
+}
+
+func (agent *Agent) addBreadcrumbsToTrace(trace *TraceData, breadcrumbs []string) {
+	if len(trace.triggered_by) > 0 {
+		if !trace.needs_reporting {
+			/* The trace is triggered and got some new breadcrumbs.
+			It's not currently slated for reporting, but now needs to be */
+			for _, ts := range trace.triggered_by {
+				ts.trigger.lru.Remove(ts.e)
+				agent.triggered_lru_size -= 1
+				ts.e = nil
+				ts.trigger.unreported.Insert(trace.trace_id)
+			}
+		}
+	} else {
+		/* Trace isn't triggered; update LRU */
+		agent.lru.MoveToFront(trace.e)
+		trace.last_modified = agent.now
+	}
+	trace.needs_reporting = true
+	trace.breadcrumbs = append(trace.breadcrumbs, breadcrumbs...)
+}
+
+/* Add some breadcrumbs to the cache */
+func (agent *Agent) processBreadcrumbs(batch memory.BreadcrumbBatch) {
+	for trace_id, breadcrumbs := range batch {
+		if trace, ok := agent.data[trace_id]; ok {
+			agent.addBreadcrumbsToTrace(trace, breadcrumbs)
+		} else {
+			/* Breadcrumbs for a trace not seen yet */
+			var trace TraceData
+			trace.trace_id = trace_id
+			trace.e = agent.lru.PushFront(&trace)
+			agent.data[trace_id] = &trace
+
+			agent.addBreadcrumbsToTrace(&trace, breadcrumbs)
+		}
+	}
+}
+
+func (agent *Agent) trigger(trace *TraceData, trigger *TriggerState) {
+	/* Remove from the LRU if it's in it */
+	if trace.e != nil {
+		agent.lru.Remove(trace.e)
+		trace.e = nil
+	}
+
+	/* The first time a trace is triggered, report it regardless of content */
+	if len(trace.triggered_by) == 0 {
+		trace.needs_reporting = true
+		agent.triggered_size += len(trace.buffers)
+	}
+
+	/* Has this trigger already fired for this trace? */
+	var tt *TriggeredTrace
+	for _, candidate := range trace.triggered_by {
+		if candidate.trigger == trigger {
+			tt = candidate
+			break
+		}
+	}
+
+	if tt == nil {
+		/* A new trigger for this trace */
+
+		tt = &TriggeredTrace{}
+		tt.trigger = trigger
+
+		if trace.needs_reporting {
+			tt.e = nil
+			trigger.unreported.Insert(trace.trace_id)
+			trigger.size += len(trace.buffers)
+		} else {
+			tt.e = tt.trigger.lru.PushFront(trace)
+			agent.triggered_lru_size += 1
+		}
+
+		trace.triggered_by = append(trace.triggered_by, tt)
+	}
+}
+
+/* Drop the specified trace.  Requires that the trace isn't
+currently triggered */
+func (agent *Agent) drop(trace *TraceData) []int {
+	if len(trace.triggered_by) != 0 {
+		fmt.Println("Warning - dropping a triggered trace")
+	}
+
+	if trace.e != nil {
+		agent.lru.Remove(trace.e)
+		trace.e = nil
+	}
+
+	delete(agent.data, trace.trace_id)
+
+	agent.cache_size -= len(trace.buffers)
+
+	return trace.buffers
+}
+
+/* Untrigger the specified trigger for a trace.  If there are no triggers
+remaining for the trace, then drop the trace. */
+func (agent *Agent) untriggered(trace *TraceData, trigger *TriggerState) []int {
+	for i, ts := range trace.triggered_by {
+		if ts.trigger == trigger {
+			/* Remove the trigger from the trace */
+			l := len(trace.triggered_by) - 1
+			trace.triggered_by[i] = trace.triggered_by[l]
+			trace.triggered_by = trace.triggered_by[:l]
+
+			/* Update trigger state */
+			if ts.e != nil {
+				trigger.lru.Remove(ts.e)
+				ts.e = nil
+				agent.triggered_lru_size -= 1
+			} else {
+				trigger.size -= len(trace.buffers)
+			}
+
+			trigger.metrics.evicted_buffers += len(trace.buffers)
+
+			break
+		}
+	}
+
+	/* If this was the last trigger, drop the trace */
+	if len(trace.triggered_by) == 0 {
+		agent.triggered_size -= len(trace.buffers)
+		return agent.drop(trace)
+	} else {
+		return nil
+	}
+}
+
+func (agent *Agent) getReport(trace *TraceData) *TraceData {
+	/* Extract the data to report */
+	var report TraceData
+	report.trace_id = trace.trace_id
+	report.buffers = trace.buffers
+	report.breadcrumbs = trace.breadcrumbs
+
+	size := len(report.buffers)
+
+	/* Update the trace state */
+	trace.buffers = nil
+	trace.breadcrumbs = nil
+	trace.needs_reporting = false
+
+	for _, tt := range trace.triggered_by {
+		tt.e = tt.trigger.lru.PushFront(trace)
+		agent.triggered_lru_size += 1
+		tt.trigger.size -= size
+	}
+
+	agent.triggered_size -= size
+	agent.cache_size -= size
+
+	return &report
+}
+
+func (agent *Agent) nextTraceToReport() *TraceData {
+	for {
+		var trigger *TriggerState
+		for _, candidate := range agent.triggered {
+			if candidate.unreported.Size() == 0 {
+				candidate.vt = agent.vc // Catch up clock
+			} else {
+				/* Apply rate limiting */
+				if candidate.limiter != nil && candidate.limiter.Available() < 0 {
+					candidate.vt = agent.vc // Catch up clock
+					continue
+				}
+
+				/* Apply fair sharing */
+				if trigger == nil || candidate.vt < trigger.vt {
+					trigger = candidate
+				}
+			}
+		}
+
+		if trigger == nil {
+			return nil
+		}
+
+		// Report next trace for this trigger
+		trace_id := trigger.unreported.PopMin()
+
+		if trace, ok := agent.data[trace_id]; ok {
+			if trace.needs_reporting {
+				trigger.vt += len(trace.buffers)
+				agent.vc = trigger.vt // Not quite correct; but enough for now
+
+				/* Update rate limiter */
+				if trigger.limiter != nil {
+					trigger.limiter.Take(int64(len(trace.buffers) * agent.buffer_size))
+				}
+
+				trigger.metrics.reported_buffers += len(trace.buffers)
+
+				return agent.getReport(trace)
+			}
+		}
+	}
 }
 
 /* Sets a trace as triggered.  This is called by the client
@@ -271,363 +525,92 @@ invoking trigger over shm, and by the collector sending a
 trigger to us.  We will send all current and future data
 for this trace ID to the collector.  We will stop sending
 data for this trace after 60 seconds.  */
-func (tm *TriggerManager) addTrigger(trace_id uint64) {
-    // fmt.Println("Received trigger for", trace_id)
-    if canceller, ok := tm.triggered[trace_id]; ok {
-        /* Already triggered; cancel old timeout */
-        canceller <- struct{}{}
-    }
+func (agent *Agent) processTriggers(triggers []memory.Trigger) {
+	for _, t := range triggers {
+		trace_id := t.Request_id
+		trigger := agent.getOrCreateTriggerState(t.Trigger_id)
 
-    // Set a new timeout for the trace
-    canceller := make(chan struct{})
-    tm.triggered[trace_id] = canceller
-    go func() {
-        // TODO this timeout can be much higher, e.g. minutes
-        select {
-        case <-time.After(3 * time.Second):
-            tm.timeouts <- trace_id
-        case <-canceller:
-            return
-        }
-    }()
+		if trace, ok := agent.data[trace_id]; ok {
+			/* Trigger for a trace already in cache */
+			agent.trigger(trace, trigger)
+		} else {
+			/* Trigger for a trace not seen yet */
+			var trace TraceData
+			trace.trace_id = trace_id
+			trace.e = nil
+			agent.data[trace_id] = &trace
 
-    // Notify cache
-    tm.cache_triggers <- trace_id
+			agent.trigger(&trace, trigger)
+		}
+
+		trigger.metrics.count++
+	}
 }
 
-/* Sets a trace as untriggered and stops collecting its data */
-func (tm *TriggerManager) unTrigger(trace_id uint64) {
-    if _, ok := tm.triggered[trace_id]; ok {
-        /* Delete the trigger */
-        delete(tm.triggered, trace_id)
-    }
+func (agent *Agent) RunProcessingLoop(ctx context.Context) {
+	fmt.Println("Agent goroutine running")
+	var trace_to_report *TraceData
+	for {
+		agent.now = time.Now()
 
-    if trace, ok := tm.unreported_data[trace_id]; ok {
-        /* Return the buffers */
-        tm.cache_notify_available_buffers <- len(trace.Buffers)
-        tm.available <- trace.Buffers
+	Reporting:
+		for {
+			/* Attempt to send the report to the reporter.  The reporter
+			has only a very short blocking queue, so this will often fail */
+			if trace_to_report != nil {
+				select {
+				case agent.reporting.queue <- trace_to_report:
+					trace_to_report = nil
+				default:
+					// Queue of pending reports is full
+					break Reporting
+				}
+			}
 
-        /* Delete */
-        delete(tm.unreported_data, trace_id)
-        tm.unreported_trace_ids.Remove(int(trace_id))
-    }
+			// Prepare the next report
+			trace_to_report = agent.nextTraceToReport()
 
-    /* Notify the cache to untrigger */
-    tm.cache_expired_triggers <- trace_id
+			if trace_to_report == nil {
+				break Reporting
+			}
+		}
+
+		select {
+		case <-ctx.Done():
+			fmt.Println("Agent goroutine exiting")
+			return
+		case triggers := <-agent.triggers:
+			/* Received some triggers from the shm triggers queue */
+			agent.processTriggers(triggers)
+		case buffers := <-agent.api.Complete:
+			/* Received some buffers from the shm complete queue */
+			agent.processCompletedBuffers(buffers)
+		case breadcrumbs := <-agent.api.Breadcrumbs:
+			/* Received some breadcrumbs from the shm breadcrumbs queue */
+			agent.processBreadcrumbs(breadcrumbs)
+		default:
+			/* Do nothing; try reporting again */
+		}
+	}
 }
 
-/* Reports trace data to the collector */
-func (tm *TriggerManager) reportNext(lc datapb.CollectorClient) {
-    it := tm.unreported_trace_ids.Iterator()
-    if !it.First() {
-        return
-    }
-
-    // Get the next trace to report
-    trace_id := uint64(it.Value().(int))
-    trace := tm.unreported_data[trace_id]
-
-    // Remove from unreported data
-    tm.unreported_trace_ids.Remove(int(trace_id))
-    delete(tm.unreported_data, trace_id)
-
-    fmt.Printf("Reporting trace %d with %d buffers, breadcrumbs: ", trace_id, len(trace.Buffers))
-    for i, addr := range trace.Breadcrumbs {
-        fmt.Printf("(%d: %s) ", i, addr)
-    }
-    fmt.Printf("\n")
-
-    var entry []int32
-    var trace_data []byte
-    var addrs []string
-    addrs = append(addrs, util.Server_addr+":"+util.Server_port)
-
-    for _, buffer_id := range trace.Buffers {
-        entry = append(entry, int32(buffer_id))
-        data := tm.api.GetBuffer(buffer_id)
-        trace_data = append(trace_data, data...)
-        addrs = append(addrs, trace.Breadcrumbs...)
-    }
-
-    ctx, cancel := context.WithTimeout(context.Background(), 1000000000*time.Nanosecond)
-    defer cancel()
-
-    _, err := lc.Report(ctx, &datapb.Trace{
-        RequestId: int64(trace_id),
-        Entry:     entry,
-        Trace:     trace_data,
-        Addrs:     addrs})
-
-    if err != nil {
-        fmt.Println("report", err)
-        // return
-    }
-
-    // Return the buffers
-    tm.available <- trace.Buffers
-    tm.cache_notify_available_buffers <- len(trace.Buffers)
+func (agent *Agent) Run(ctx context.Context) {
+	wg := new(sync.WaitGroup)
+	wg.Add(4)
+	go func() {
+		agent.RunProcessingLoop(ctx)
+	}()
+	go func() {
+		agent.reporting.Run(ctx)
+		wg.Done()
+	}()
+	go func() {
+		agent.api.Run(ctx)
+		wg.Done()
+	}()
+	go func() {
+		agent.printLoop(ctx)
+		wg.Done()
+	}()
+	wg.Wait()
 }
-
-/* gRPC requests from Log collector */
-func (tm *TriggerManager) Request(ctx context.Context, in *datapb.RequestID) (*datapb.CallRet, error) {
-    request_ids := in.Rid
-    for _, request_id := range request_ids {
-        tm.remote_triggers <- uint64(request_id)
-    }
-    return &datapb.CallRet{Callret: true}, nil
-}
-
-func (tm *TriggerManager) Run(ctx context.Context) {
-    fmt.Println("TriggerManager goroutine running")
-    conn, err := grpc.Dial(util.LC_addr+":"+util.LC_port,
-        grpc.WithInsecure(),
-        grpc.WithTimeout(100000000*time.Nanosecond))
-    if err != nil {
-        fmt.Println("dial", util.LC_addr+":"+util.LC_port, err)
-        return
-    }
-    fmt.Println("TriggerManager connected to", util.LC_addr+":"+util.LC_port)
-    defer conn.Close()
-
-    collector := datapb.NewCollectorClient(conn)
-    for {
-        select {
-        case <-ctx.Done():
-            return
-        case triggers := <-tm.triggers:
-            for _, trigger := range triggers {
-                tm.addTrigger(trigger.Request_id)
-            }
-        case trace_id := <-tm.remote_triggers:
-            tm.addTrigger(trace_id)
-        case trace_data := <-tm.new_trace_data:
-            tm.addTraceData(trace_data)
-        case trace_id := <-tm.timeouts:
-            tm.unTrigger(trace_id)
-        case <-tm.has_unreported_trace_ids:
-            tm.reportNext(collector)
-        }
-    }
-}
-
-func (tm *TriggerManager) RunGRPCServer(ctx context.Context) {
-    for true {
-        lis, err := net.Listen("tcp", ":"+util.Server_port)
-        if err != nil {
-            log.Fatalf("failed to listen: %v", err)
-        }
-        s := grpc.NewServer()
-        datapb.RegisterAgentServer(s, tm)
-
-        go func() {
-            select {
-            case <-ctx.Done():
-                s.Stop()
-            }
-        }()
-
-        if err := s.Serve(lis); err != nil {
-            log.Fatalf("GRPC Server: %v", err)
-        }
-    }
-}
-
-func (cache *TraceCache) evictionRequired() bool {
-    return cache.buf_count > cache.capacity
-}
-
-/* Check if the cache is over capacity, and evict some buffers if so */
-func (cache *TraceCache) checkEviction() bool {
-    if !cache.evictionRequired() {
-        return false
-    }
-
-    // Figure out what should be evicted
-    var evicted_buffers []int
-    for cache.buf_count > cache.capacity {
-        // Get our victim
-        entry := cache.lru.Back()
-        trace := entry.Value.(*TraceData)
-
-        // Remove
-        delete(cache.data, trace.Request_id)
-        cache.lru.Remove(entry)
-
-        // Manage buffers
-        cache.buf_count -= len(trace.Buffers)
-        evicted_buffers = append(evicted_buffers, trace.Buffers...)
-    }
-
-    // Make the evicted buffers available
-    cache.available <- evicted_buffers
-
-    return true
-}
-
-/* Add some buffers to the cache */
-func (cache *TraceCache) addCompletedBuffers(batch memory.CompleteBatch) {
-    for trace_id, buffer_ids := range batch {
-        /* Ignore trace ID 0 */
-        if trace_id == 0 {
-            cache.available <- buffer_ids
-            continue
-        }
-
-        cache.buf_count += len(buffer_ids)
-        cache.stats.complete_buffers += len(buffer_ids)
-
-        if _, ok := cache.triggered[trace_id]; ok {
-            /* Buffer for a triggered request */
-            td := &TraceData{trace_id, buffer_ids, nil}
-            cache.triggered_data <- td
-            continue
-        }
-
-        if entry, ok := cache.data[trace_id]; ok {
-            /* Buffer for a trace already in cache */
-            td := entry.Value.(*TraceData)
-            td.Buffers = append(td.Buffers, buffer_ids...)
-            cache.lru.MoveToFront(entry)
-            continue
-        }
-
-        /* Buffer for a trace not in cache */
-        td := &TraceData{trace_id, buffer_ids, nil}
-        entry := cache.lru.PushFront(td)
-        cache.data[trace_id] = entry
-    }
-
-    /* Trigger eviction if above threshold */
-    if cache.evictionRequired() {
-        select {
-        case cache.eviction_required <- struct{}{}:
-            {
-            }
-        default:
-            {
-            }
-        }
-    }
-
-    cache.stats.complete_batches++
-}
-
-func (cache *TraceCache) print() {
-    now := uint64(time.Now().UnixNano())
-    count := cache.stats.complete_batches
-    sum := cache.stats.complete_buffers
-    tput := float32(uint64(sum)*1000000000) / float32(now-cache.last_print)
-    tput_mb := (tput * float32(cache.buffer_size)) / (1024 * 1024)
-    var batchsize float32
-    if count == 0 {
-        batchsize = 0
-    } else {
-        batchsize = float32(sum) / float32(count)
-    }
-    log.Printf("%.3f MB/s (%.0f bufs/s, %d bufs total), Avg batch %.1f; %d triggers\n", tput_mb, tput, sum, batchsize, cache.stats.triggers)
-    cache.last_print = now
-    cache.stats.complete_batches = 0
-    cache.stats.complete_buffers = 0
-    cache.stats.triggers = 0
-}
-
-/* Add some breadcrumbs to the cache */
-func (cache *TraceCache) addBreadcrumbs(batch memory.BreadcrumbBatch) {
-    for trace_id, breadcrumbs := range batch {
-        if _, ok := cache.triggered[trace_id]; ok {
-            /* Buffer for a triggered request */
-            td := &TraceData{trace_id, nil, breadcrumbs}
-            cache.triggered_data <- td
-            continue
-        }
-
-        if entry, ok := cache.data[trace_id]; ok {
-            /* Buffer for a trace already in cache */
-            td := entry.Value.(*TraceData)
-            td.Breadcrumbs = append(td.Breadcrumbs, breadcrumbs...)
-            cache.lru.MoveToFront(entry)
-            continue
-        }
-
-        /* Buffer for a trace not in cache */
-        td := &TraceData{trace_id, nil, breadcrumbs}
-        entry := cache.lru.PushFront(td)
-        cache.data[trace_id] = entry
-    }
-}
-
-func (cache *TraceCache) Run(ctx context.Context) {
-    fmt.Println("TraceCache goroutine running")
-    for {
-        select {
-        case <-ctx.Done():
-            {
-                fmt.Println("Tracecache goroutine exiting")
-                return
-            }
-        case delta := <-cache.notify_available_buffers:
-            {
-                /* The trigger manager notifies us that it returned `delta`
-                   buffers to the available queue, and we can increase cache capacity
-                   as a result */
-                cache.buf_count -= delta
-            }
-        case trace_id := <-cache.triggers:
-            {
-                /* The trigger manager notifies us that `trace_id` is triggered.
-                   The cache stops caching buffers for this trace_id, sends any
-                   existing buffers to the trigger manager, and forwards all future
-                   buffers directly to the trigger manager */
-
-                cache.stats.triggers += 1
-
-                // Ignore any trace_ids that are already triggered
-                if _, ok := cache.triggered[trace_id]; ok {
-                    continue
-                }
-
-                // Mark as cached
-                cache.triggered[trace_id] = struct{}{}
-
-                // If any data exists, send to the trigger manager
-                if entry, ok := cache.data[trace_id]; ok {
-                    trace_data := entry.Value.(*TraceData)
-
-                    delete(cache.data, trace_id)
-                    cache.lru.Remove(entry)
-
-                    cache.triggered_data <- trace_data
-                }
-
-            }
-        case trace_id := <-cache.expired_triggers:
-            {
-                /* The trigger manager notifies us that `trace_id` is no longer
-                   triggered.  The cache reverts to the standard handling, if this
-                   `trace_id` is seen again */
-
-                delete(cache.triggered, trace_id)
-            }
-        case buffers := <-cache.complete:
-            {
-                /* Received some buffers from the shm complete queue */
-                cache.addCompletedBuffers(buffers)
-            }
-        case breadcrumbs := <-cache.breadcrumbs:
-            {
-                /* Received some breadcrumbs from the shm breadcrumbs queue */
-                cache.addBreadcrumbs(breadcrumbs)
-            }
-        case <-cache.eviction_required:
-            {
-                cache.checkEviction()
-            }
-        case <-cache.next_print.C:
-            {
-                cache.print()
-                cache.next_print.Reset(1000 * time.Millisecond)
-            }
-        }
-    }
-}
-
