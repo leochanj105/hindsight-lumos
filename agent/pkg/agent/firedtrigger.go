@@ -1,0 +1,201 @@
+package agent
+
+import (
+	"container/list"
+	"log"
+	"time"
+)
+
+/*
+A fired trigger represents a specific instance of a trigger going off.
+We represent a fired trigger with a simple state machine that can transition
+between triggered (no data to report) and reporting (some traces have data to report)
+
+The trace IDs specified by the fired trigger will now be reported.
+
+The trigger will remain fired until it is either reported or untriggered;
+this process is driven by the TriggerManager.
+*/
+type FiredTrigger struct {
+	/* Each fired trigger has an ID that typically corresponds to a 'base' trace ID
+	responsible for firing the trigger.  The ID is used as the trigger's reporting priority */
+	id uint64
+
+	/* The queue that this FiredTrigger belongs to */
+	queue *TriggerQueue
+
+	/* Each fired trigger specifies one or more traces that should be reported.
+	The traces are all reported with the same priority as the FiredTrigger's ID.
+	Note that any given trace can appear in multiple different FiredTriggers.
+	These traces are the 'lateral traces' discussed in the Hindsight paper. */
+	traces map[uint64]*Trace
+
+	buffer_count int
+
+	/* We use a simple state machine for fired triggers */
+	state firedtriggerstate
+}
+
+/* Implements state machine transitions of a trace.  States are:
+     * reportingTrigger
+		 * idleTrigger
+		 * nil (invalid)
+*/
+type firedtriggerstate interface {
+	buffersAdded(f *FiredTrigger) firedtriggerstate
+	getBuffersForReport(dm *DataManager, f *FiredTrigger) (firedtriggerstate, []int)
+	evictTrigger(dm *DataManager, f *FiredTrigger) (firedtriggerstate, []int)
+}
+
+/*
+Adds a trace to this trigger; the trace's data will now be reported.  The trace's
+data will share fate with the 'base' traceID of the FiredTrigger.
+If the trace has data pending, then this will transition to reportingTrigger.
+It returns any breadcrumbs that need to be immediately reported.
+*/
+func (f *FiredTrigger) AddTrace(dm *DataManager, trace *Trace) []string {
+	f.traces[trace.id] = trace
+	return trace.AddTrigger(dm, f)
+}
+
+/*
+Takes any buffers from this trigger that are ready to be reported.
+This potentially transitions the firedtrigger into idle state
+*/
+func (f *FiredTrigger) GetBuffersForReport(dm *DataManager) []int {
+	var buffers []int
+	f.state, buffers = f.state.getBuffersForReport(dm, f)
+	return buffers
+}
+
+/*
+Called by the TriggerManager to evict a low priority fired trigger.
+Returns any evicted buffers
+*/
+func (f *FiredTrigger) Evict(dm *DataManager) []int {
+	var buffers []int
+	f.state, buffers = f.state.evictTrigger(dm, f)
+	return buffers
+}
+
+/*
+Informs the trigger that one of its traces has received new data
+that should be reported.  This transitions the firedtrigger
+into reporting state if it is not already reporting.
+*/
+func (f *FiredTrigger) buffersAdded(count int) {
+	f.buffer_count += count
+	f.queue.buffer_count += count
+	f.state = f.state.buffersAdded(f)
+}
+
+/*
+Informs the trigger that one of its traces has reported some
+of its data.  This might be because TakeBuffers was called on this
+trigger, or because TakeBuffers was called on a different trigger
+that shares a trace ID.  We do not transition into idle state here,
+even if there are no buffers remaining.
+*/
+func (f *FiredTrigger) buffersRemoved(count int) {
+	f.buffer_count -= count
+	f.queue.buffer_count -= count
+	// No state transition -- handled by TakeBuffers
+}
+
+/*
+A trigger is idle when all trace data has been reported.  It remains idle
+for a period of time until either new data arrives, or it times out and is
+removed.
+*/
+type idleTrigger struct {
+	last_modified  time.Time
+	tq_lru_element *list.Element
+}
+
+/*
+Most of the time, when a trigger fires, it does not already exist, and we create
+an idle FiredTrigger
+*/
+func initIdleTrigger(dm *DataManager, id uint64, queue *TriggerQueue) *FiredTrigger {
+	var f FiredTrigger
+	f.id = id
+	f.queue = queue
+	f.traces = make(map[uint64]*Trace)
+	f.buffer_count = 0
+
+	var it idleTrigger
+	it.last_modified = dm.now
+	it.tq_lru_element = queue.idle.PushFront(&f)
+	f.state = it
+
+	return &f
+}
+
+/* Transition to reporting */
+func (it idleTrigger) buffersAdded(f *FiredTrigger) firedtriggerstate {
+	f.queue.idle.Remove(it.tq_lru_element)
+	f.queue.reporting.Insert(f.id)
+
+	var rt reportingTrigger
+	return rt
+}
+
+func (it idleTrigger) getBuffersForReport(dm *DataManager, f *FiredTrigger) (firedtriggerstate, []int) {
+	log.Fatal("Attempted to takeBuffers for idleTrigger")
+	return nil, nil
+}
+
+func (it idleTrigger) evictTrigger(dm *DataManager, f *FiredTrigger) (firedtriggerstate, []int) {
+	log.Fatal("idleTrigger cannot be evicted")
+	return nil, nil
+}
+
+/*
+A trigger transitions to reporting when one or more of its traces
+has data to be reported.  A reportingTrigger may remain in this state
+despite data being reported already, because traces can belong to more
+than one trigger
+*/
+type reportingTrigger struct {
+}
+
+/* This trigger is already in a reporting state, so more buffers doesn't
+change our state */
+func (rt reportingTrigger) buffersAdded(f *FiredTrigger) firedtriggerstate {
+	return rt
+}
+
+/* Get all buffers pending for report, then transition to idle.
+TODO: no reason why we have to do ALL traces at a time, could do a subset */
+func (rt reportingTrigger) getBuffersForReport(dm *DataManager, f *FiredTrigger) (firedtriggerstate, []int) {
+	var buffers []int
+	for _, t := range f.traces {
+		buffers = append(buffers, t.TakeBuffers(dm)...)
+	}
+
+	if f.buffer_count != 0 {
+		log.Fatal("Buffers remain after takeBuffers")
+		return nil, nil
+	}
+
+	var it idleTrigger
+	it.last_modified = dm.now
+	it.tq_lru_element = f.queue.idle.PushFront(f)
+	return it, buffers
+}
+
+/* Get any buffers that should be evicted.  No transition after this, trigger
+becomes invalid */
+func (rt reportingTrigger) evictTrigger(dm *DataManager, f *FiredTrigger) (firedtriggerstate, []int) {
+	var buffers []int
+	for _, t := range f.traces {
+		buffers = append(buffers, t.RemoveTrigger(dm, f)...)
+	}
+
+	// No more buffers should be associated with this trigger
+	if f.buffer_count != 0 {
+		log.Fatal("Buffers remain after eviction")
+	}
+
+	return nil, buffers
+}
