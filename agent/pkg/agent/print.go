@@ -46,7 +46,7 @@ func (t *TriggeredData) String() string {
 
 func (q *TriggerQueue) String() string {
 	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("queue %d with %d fired, %d buffers total:", q.id, len(q.fired), q.buffer_count))
+	sb.WriteString(fmt.Sprintf("queue %d with %d fired %d reporting, %d buffers total:", q.id, len(q.fired), q.reporting.Size(), q.buffer_count))
 	for _, trigger := range q.fired {
 		sb.WriteString(fmt.Sprintf("\n   %v", trigger))
 	}

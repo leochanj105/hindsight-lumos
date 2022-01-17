@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"fmt"
 	"math/rand"
 	"testing"
 
@@ -117,7 +118,7 @@ func TestDataManagerFromScratch(t *testing.T) {
 	assert.NotNil(q.fired[75], "FiredTrigger exists")
 
 	trigger := q.fired[75]
-	assert.Equal(trigger.id, uint64(75), "FiredTrigger ID")
+	assert.Equal(trigger.id, TriggerID{1, uint64(75)}, "FiredTrigger ID")
 	assert.Equal(trigger.buffer_count, 4, "FiredTrigger buffer count")
 	assert.Equal(trigger.queue, q, "FiredTrigger queue")
 	assert.Equal(len(trigger.traces), 1, "Trace was added to FiredTrigger")
@@ -143,7 +144,15 @@ Creates a data manager used by most tests.
 
 Trace IDs:
  * [0, 10) have 1, 2, 3, 4, ... buffers respectively, are untriggered
- *
+ * [100, 110) have no buffers and are triggered
+ * [200, 210) have no buffers and are triggered by multiple
+ * [300, 310) have no buffers and are all triggered by one trigger
+ * [400, 410) have no buffers and are all triggered by two triggers
+ * [500, 510) have buffers and are reporting
+ * [600, 610) have buffers and are reporting by multiple
+ * [700, 710) have buffers and are all reporting by one trigger
+ * [800, 810) have buffers and are all reporting by two triggers
+ * [900, 910) are all triggered by one trigger, with [900, 905) reporting and [905, 910) have no buffers
 */
 func initDataManagerForTest() *DataManager {
 	dm := InitDataManager()
@@ -155,8 +164,6 @@ func initDataManagerForTest() *DataManager {
 		}
 		dm.AddBuffers(uint64(i), buffers)
 	}
-
-	// fmt.Println(dm)
 
 	return dm
 }
@@ -314,4 +321,143 @@ func TestTriggeredArentEvicted(t *testing.T) {
 	assert.Equal(buf_count_before, dm.buffer_count, "Total buffers remains unchanged")
 	assert.Equal(dm.trace_count, dm.triggered.trace_count, "All traces are triggered")
 	assert.Equal(dm.buffer_count, dm.triggered.buffer_count, "All buffers are triggered")
+}
+
+func TestMultipleTriggers(t *testing.T) {
+	assert := assert.New(t)
+
+	dm := initDataManagerForTest()
+
+	dm.AddBuffers(uint64(75), []int{1, 2, 3, 4, 5})
+
+	/*
+		Trigger on two queues, multiple times
+	*/
+
+	dm.Trigger(1, uint64(75), []uint64{uint64(75)})
+	dm.Trigger(1, uint64(75), []uint64{uint64(75)})
+	dm.Trigger(1, uint64(75), []uint64{uint64(75)})
+	dm.Trigger(1, uint64(75), []uint64{uint64(75)})
+	dm.Trigger(2, uint64(75), []uint64{uint64(75)})
+	dm.Trigger(2, uint64(75), []uint64{uint64(75)})
+	dm.Trigger(2, uint64(75), []uint64{uint64(75)})
+	dm.Trigger(2, uint64(75), []uint64{uint64(75)})
+
+	assert.Equal(2, len(dm.triggered.queues), "Two queues exist")
+	assert.Equal(1, dm.triggered.queues[1].trace_count, "Trace is in first queue")
+	assert.Equal(5, dm.triggered.queues[1].buffer_count, "Trace buffers are in first queue")
+	assert.Equal(1, dm.triggered.queues[2].trace_count, "Trace is in second queue")
+	assert.Equal(5, dm.triggered.queues[2].buffer_count, "Trace buffers are in second queue")
+	assert.Equal(1, dm.triggered.trace_count, "Only one trace is triggered")
+	assert.Equal(5, dm.triggered.buffer_count, "Only 5 buffers are triggered")
+
+	assert.Equal(0, len(dm.EvictNext(dm.triggered.queues[1])), "First trigger eviction doesn't drop buffers")
+	assert.Equal(5, len(dm.EvictNext(dm.triggered.queues[2])), "Second trigger eviction drops buffers")
+}
+
+func TestMultipleTriggers2(t *testing.T) {
+	assert := assert.New(t)
+
+	dm := initDataManagerForTest()
+
+	dm.AddBuffers(uint64(75), []int{1, 2, 3, 4, 5})
+	dm.AddBuffers(uint64(76), []int{7, 8, 9})
+
+	/*
+		Trigger on two queues, multiple times
+	*/
+
+	dm.Trigger(1, uint64(75), []uint64{uint64(75)})
+	dm.Trigger(2, uint64(76), []uint64{uint64(75), uint64(76)})
+	dm.Trigger(3, uint64(76), []uint64{uint64(76)})
+
+	q := dm.triggered.queues
+
+	assert.Equal(3, len(dm.triggered.queues), "Two queues exist")
+	assert.Equal(1, q[1].trace_count, "Trace is in first queue")
+	assert.Equal(5, q[1].buffer_count, "Trace buffers are in first queue")
+	assert.Equal(2, q[2].trace_count, "Traces are in second queue")
+	assert.Equal(8, q[2].buffer_count, "Trace buffers are in second queue")
+	assert.Equal(1, q[3].trace_count, "Trace is in third queue")
+	assert.Equal(3, q[3].buffer_count, "Trace buffers are in third queue")
+	assert.Equal(2, dm.triggered.trace_count, "Only two traces are triggered")
+	assert.Equal(8, dm.triggered.buffer_count, "Only 8 buffers are triggered")
+
+	dm.ReportNext(dm.triggered.queues[1])
+	assert.Equal(1, q[1].trace_count, "Trace remains in first queue")
+	assert.Equal(0, q[1].buffer_count, "No buffers to report for first queue")
+	assert.Equal(0, q[1].reporting.Size(), "No triggers to report in first queue")
+	assert.Equal(2, q[2].trace_count, "Traces are in second queue")
+	assert.Equal(3, q[2].buffer_count, "Some trace buffers remain in second queue")
+	assert.Equal(1, q[2].reporting.Size(), "1 triggers to report in first queue")
+	assert.Equal(1, q[3].trace_count, "Trace is in third queue")
+	assert.Equal(3, q[3].buffer_count, "Trace buffers are in third queue")
+	assert.Equal(1, q[3].reporting.Size(), "1 trigger to report in third queue")
+	assert.Equal(2, dm.triggered.trace_count, "Only two traces are triggered")
+	assert.Equal(3, dm.triggered.buffer_count, "Only 3 buffers are triggered")
+
+	dm.ReportNext(dm.triggered.queues[3])
+	assert.Equal(1, q[1].trace_count, "Trace remains in first queue")
+	assert.Equal(0, q[1].buffer_count, "No buffers to report for first queue")
+	assert.Equal(0, q[1].reporting.Size(), "No triggers to report in first queue")
+	assert.Equal(2, q[2].trace_count, "Traces are in second queue")
+	assert.Equal(0, q[2].buffer_count, "No buffers to report in second queue")
+	assert.Equal(1, q[2].reporting.Size(), "1 trigger to report in second queue")
+	assert.Equal(1, q[3].trace_count, "Trace is in third queue")
+	assert.Equal(0, q[3].buffer_count, "No buffers to report in third queue")
+	assert.Equal(0, q[3].reporting.Size(), "No triggers to report in third queue")
+	assert.Equal(2, dm.triggered.trace_count, "Only two traces are triggered")
+	assert.Equal(0, dm.triggered.buffer_count, "No buffers are triggered")
+
+	dm.ReportNext(dm.triggered.queues[2])
+	assert.Equal(1, q[1].trace_count, "Trace remains in first queue")
+	assert.Equal(0, q[1].buffer_count, "No buffers to report for first queue")
+	assert.Equal(0, q[1].reporting.Size(), "No triggers to report in first queue")
+	assert.Equal(2, q[2].trace_count, "Traces are in second queue")
+	assert.Equal(0, q[2].buffer_count, "No buffers to report in second queue")
+	assert.Equal(0, q[2].reporting.Size(), "1 trigger to report in second queue")
+	assert.Equal(1, q[3].trace_count, "Trace is in third queue")
+	assert.Equal(0, q[3].buffer_count, "No buffers to report in third queue")
+	assert.Equal(0, q[3].reporting.Size(), "No triggers to report in third queue")
+	assert.Equal(2, dm.triggered.trace_count, "Only two traces are triggered")
+	assert.Equal(0, dm.triggered.buffer_count, "No buffers are triggered")
+
+	dm.AddBuffers(uint64(75), []int{1, 2, 3, 4, 5})
+	assert.Equal(1, q[1].trace_count, "Trace is in first queue")
+	assert.Equal(5, q[1].buffer_count, "Buffers are in first queue")
+	assert.Equal(1, q[1].reporting.Size(), "No triggers to report in first queue")
+	assert.Equal(2, q[2].trace_count, "Traces are in second queue")
+	assert.Equal(5, q[2].buffer_count, "Buffers to report in second queue")
+	assert.Equal(1, q[2].reporting.Size(), "1 trigger to report in second queue")
+	assert.Equal(1, q[3].trace_count, "Trace is in third queue")
+	assert.Equal(0, q[3].buffer_count, "No buffers to report in third queue")
+	assert.Equal(0, q[3].reporting.Size(), "No triggers to report in third queue")
+	assert.Equal(2, dm.triggered.trace_count, "Only two traces are triggered")
+	assert.Equal(5, dm.triggered.buffer_count, "5 buffers are triggered")
+
+	dm.AddBuffers(uint64(76), []int{7, 8, 9})
+	assert.Equal(3, len(dm.triggered.queues), "Two queues exist")
+	assert.Equal(1, q[1].trace_count, "Trace is in first queue")
+	assert.Equal(5, q[1].buffer_count, "Trace buffers are in first queue")
+	assert.Equal(2, q[2].trace_count, "Traces are in second queue")
+	assert.Equal(8, q[2].buffer_count, "Trace buffers are in second queue")
+	assert.Equal(1, q[3].trace_count, "Trace is in third queue")
+	assert.Equal(3, q[3].buffer_count, "Trace buffers are in third queue")
+	assert.Equal(2, dm.triggered.trace_count, "Only two traces are triggered")
+	assert.Equal(8, dm.triggered.buffer_count, "Only 8 buffers are triggered")
+
+	dm.ReportNext(dm.triggered.queues[2])
+	assert.Equal(1, q[1].trace_count, "Trace remains in first queue")
+	assert.Equal(0, q[1].buffer_count, "No buffers to report for first queue")
+	assert.Equal(1, q[1].reporting.Size(), "1 trigger to report in first queue")
+	assert.Equal(2, q[2].trace_count, "Traces are in second queue")
+	assert.Equal(0, q[2].buffer_count, "No buffers to report in second queue")
+	assert.Equal(0, q[2].reporting.Size(), "No triggers to report in second queue")
+	assert.Equal(1, q[3].trace_count, "Trace is in third queue")
+	assert.Equal(0, q[3].buffer_count, "No buffers to report in third queue")
+	assert.Equal(1, q[3].reporting.Size(), "1 trigger to report in third queue")
+	assert.Equal(2, dm.triggered.trace_count, "Only two traces are triggered")
+	assert.Equal(0, dm.triggered.buffer_count, "No buffers are triggered")
+
+	fmt.Println(dm)
 }

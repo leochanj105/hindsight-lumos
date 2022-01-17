@@ -138,12 +138,12 @@ func (ut untriggeredTrace) addTrigger(dm *DataManager, trace *Trace, fired *Fire
 		fired.buffersAdded(len(ut.buffers))
 		var t reportingTrace
 		t.buffers = ut.buffers
-		t.triggers = map[uint64]*FiredTrigger{fired.id: fired}
+		t.triggers = map[TriggerID]*FiredTrigger{fired.id: fired}
 		return t, ut.breadcrumbs
 	} else {
 		// If there are no buffers then we transition to triggered
 		var t triggeredTrace
-		t.triggers = map[uint64]*FiredTrigger{fired.id: fired}
+		t.triggers = map[TriggerID]*FiredTrigger{fired.id: fired}
 		return t, ut.breadcrumbs
 	}
 }
@@ -174,7 +174,7 @@ Eventually the trigger manager might untrigger the trace, in which case it will
 transition to untriggeredTrace */
 type triggeredTrace struct {
 	/* The triggers that include this trace */
-	triggers map[uint64]*FiredTrigger
+	triggers map[TriggerID]*FiredTrigger
 }
 
 /* If a trace is triggered, adding buffers means we must transition to reporting */
@@ -247,7 +247,7 @@ type reportingTrace struct {
 	buffers []int
 
 	/* The triggers that include this trace */
-	triggers map[uint64]*FiredTrigger
+	triggers map[TriggerID]*FiredTrigger
 }
 
 /* If a trace is reporting, adding buffers simply adds to the data pending

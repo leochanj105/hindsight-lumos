@@ -6,6 +6,11 @@ import (
 	"time"
 )
 
+type TriggerID struct {
+	queue_id      int
+	base_trace_id uint64
+}
+
 /*
 A fired trigger represents a specific instance of a trigger going off.
 We represent a fired trigger with a simple state machine that can transition
@@ -19,7 +24,7 @@ this process is driven by the TriggerManager.
 type FiredTrigger struct {
 	/* Each fired trigger has an ID that typically corresponds to a 'base' trace ID
 	responsible for firing the trigger.  The ID is used as the trigger's reporting priority */
-	id uint64
+	id TriggerID
 
 	/* The queue that this FiredTrigger belongs to */
 	queue *TriggerQueue
@@ -116,9 +121,10 @@ type idleTrigger struct {
 Most of the time, when a trigger fires, it does not already exist, and we create
 an idle FiredTrigger
 */
-func initIdleTrigger(dm *DataManager, id uint64, queue *TriggerQueue) *FiredTrigger {
+func initIdleTrigger(dm *DataManager, base_trace_id uint64, queue *TriggerQueue) *FiredTrigger {
 	var f FiredTrigger
-	f.id = id
+	f.id.base_trace_id = base_trace_id
+	f.id.queue_id = queue.id
 	f.queue = queue
 	f.traces = make(map[uint64]*Trace)
 	f.buffer_count = 0
@@ -128,13 +134,15 @@ func initIdleTrigger(dm *DataManager, id uint64, queue *TriggerQueue) *FiredTrig
 	it.tq_lru_element = queue.idle.PushFront(&f)
 	f.state = it
 
+	queue.fired[base_trace_id] = &f
+
 	return &f
 }
 
 /* Transition to reporting */
 func (it idleTrigger) buffersAdded(f *FiredTrigger) firedtriggerstate {
 	f.queue.idle.Remove(it.tq_lru_element)
-	f.queue.reporting.Insert(f.id)
+	f.queue.reporting.Insert(f.id.base_trace_id)
 
 	var rt reportingTrigger
 	return rt
@@ -196,6 +204,8 @@ func (rt reportingTrigger) evictTrigger(dm *DataManager, f *FiredTrigger) (fired
 	if f.buffer_count != 0 {
 		log.Fatal("Buffers remain after eviction")
 	}
+
+	delete(f.queue.fired, f.id.base_trace_id)
 
 	return nil, buffers
 }

@@ -130,9 +130,19 @@ func (dm *DataManager) getOrCreateTrigger(queue_id int, id uint64) *FiredTrigger
 
 	if trigger, ok := queue.fired[id]; ok {
 		return trigger
+	} else {
+		return initIdleTrigger(dm, id, queue)
 	}
+}
 
-	trigger := initIdleTrigger(dm, id, queue)
-	queue.fired[id] = trigger
-	return trigger
+func (dm *DataManager) EvictNext(queue *TriggerQueue) []int {
+	id := queue.reporting.PopNearMax()
+	trigger := queue.fired[id]
+	return trigger.Evict(dm)
+}
+
+func (dm *DataManager) ReportNext(queue *TriggerQueue) []int {
+	id := queue.reporting.PopMin()
+	trigger := queue.fired[id]
+	return trigger.GetBuffersForReport(dm)
 }
