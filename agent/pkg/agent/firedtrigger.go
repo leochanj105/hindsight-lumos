@@ -48,9 +48,9 @@ type FiredTrigger struct {
 */
 type firedtriggerstate interface {
 	buffersAdded(f *FiredTrigger) firedtriggerstate
-	getBuffersForReport(dm *DataManager, f *FiredTrigger) (firedtriggerstate, []int)
-	evictTrigger(dm *DataManager, f *FiredTrigger) (firedtriggerstate, []int)
-	checkTimeout(dm *DataManager, f *FiredTrigger, before time.Time) (firedtriggerstate, bool)
+	getBuffersForReport(f *FiredTrigger) (firedtriggerstate, []int)
+	evictTrigger(f *FiredTrigger) (firedtriggerstate, []int)
+	checkTimeout(f *FiredTrigger, before time.Time) (firedtriggerstate, bool)
 }
 
 /*
@@ -59,18 +59,18 @@ data will share fate with the 'base' traceID of the FiredTrigger.
 If the trace has data pending, then this will transition to reportingTrigger.
 It returns any breadcrumbs that need to be immediately reported.
 */
-func (f *FiredTrigger) AddTrace(dm *DataManager, trace *Trace) []string {
+func (f *FiredTrigger) AddTrace(trace *Trace) []string {
 	f.traces[trace.id] = trace
-	return trace.AddTrigger(dm, f)
+	return trace.AddTrigger(f.queue.dm, f)
 }
 
 /*
 Takes any buffers from this trigger that are ready to be reported.
 This potentially transitions the firedtrigger into idle state
 */
-func (f *FiredTrigger) GetBuffersForReport(dm *DataManager) []int {
+func (f *FiredTrigger) GetBuffersForReport() []int {
 	var buffers []int
-	f.state, buffers = f.state.getBuffersForReport(dm, f)
+	f.state, buffers = f.state.getBuffersForReport(f)
 	return buffers
 }
 
@@ -78,9 +78,9 @@ func (f *FiredTrigger) GetBuffersForReport(dm *DataManager) []int {
 Called by the TriggerManager to evict a low priority fired trigger.
 Returns any evicted buffers
 */
-func (f *FiredTrigger) Evict(dm *DataManager) []int {
+func (f *FiredTrigger) Evict() []int {
 	var buffers []int
-	f.state, buffers = f.state.evictTrigger(dm, f)
+	f.state, buffers = f.state.evictTrigger(f)
 	return buffers
 }
 
@@ -88,9 +88,9 @@ func (f *FiredTrigger) Evict(dm *DataManager) []int {
 Evicts an idle trigger if it was last modified before the specified time.
 Returns true if timed out.
 */
-func (f *FiredTrigger) CheckTimeout(dm *DataManager, before time.Time) bool {
+func (f *FiredTrigger) CheckTimeout(before time.Time) bool {
 	var timedout bool
-	f.state, timedout = f.state.checkTimeout(dm, f, before)
+	f.state, timedout = f.state.checkTimeout(f, before)
 	return timedout
 }
 
@@ -132,7 +132,7 @@ type idleTrigger struct {
 Most of the time, when a trigger fires, it does not already exist, and we create
 an idle FiredTrigger
 */
-func initIdleTrigger(dm *DataManager, base_trace_id uint64, queue *TriggerQueue) *FiredTrigger {
+func (queue *TriggerQueue) initIdleTrigger(base_trace_id uint64) *FiredTrigger {
 	var f FiredTrigger
 	f.id.base_trace_id = base_trace_id
 	f.id.queue_id = queue.id
@@ -141,7 +141,7 @@ func initIdleTrigger(dm *DataManager, base_trace_id uint64, queue *TriggerQueue)
 	f.buffer_count = 0
 
 	var it idleTrigger
-	it.last_modified = dm.now
+	it.last_modified = queue.dm.now
 	it.tq_lru_element = queue.idle.PushFront(&f)
 	f.state = it
 
@@ -159,24 +159,24 @@ func (it idleTrigger) buffersAdded(f *FiredTrigger) firedtriggerstate {
 	return rt
 }
 
-func (it idleTrigger) getBuffersForReport(dm *DataManager, f *FiredTrigger) (firedtriggerstate, []int) {
+func (it idleTrigger) getBuffersForReport(f *FiredTrigger) (firedtriggerstate, []int) {
 	log.Fatal("Attempted to takeBuffers for idleTrigger")
 	return nil, nil
 }
 
-func (it idleTrigger) evictTrigger(dm *DataManager, f *FiredTrigger) (firedtriggerstate, []int) {
+func (it idleTrigger) evictTrigger(f *FiredTrigger) (firedtriggerstate, []int) {
 	log.Fatal("idleTrigger cannot be evicted")
 	return nil, nil
 }
 
-func (it idleTrigger) checkTimeout(dm *DataManager, f *FiredTrigger, before time.Time) (firedtriggerstate, bool) {
+func (it idleTrigger) checkTimeout(f *FiredTrigger, before time.Time) (firedtriggerstate, bool) {
 	if it.last_modified.After(before) {
 		return it, false // Hasn't timed out yet
 	}
 
 	// Unhook from all traces
 	for _, t := range f.traces {
-		t.RemoveTrigger(dm, f) // Shouldn't return any buffers
+		t.RemoveTrigger(f.queue.dm, f) // Shouldn't return any buffers
 	}
 
 	// Delete the fired trigger
@@ -203,10 +203,10 @@ func (rt reportingTrigger) buffersAdded(f *FiredTrigger) firedtriggerstate {
 
 /* Get all buffers pending for report, then transition to idle.
 TODO: no reason why we have to do ALL traces at a time, could do a subset */
-func (rt reportingTrigger) getBuffersForReport(dm *DataManager, f *FiredTrigger) (firedtriggerstate, []int) {
+func (rt reportingTrigger) getBuffersForReport(f *FiredTrigger) (firedtriggerstate, []int) {
 	var buffers []int
 	for _, t := range f.traces {
-		buffers = append(buffers, t.TakeBuffers(dm)...)
+		buffers = append(buffers, t.TakeBuffers(f.queue.dm)...)
 	}
 
 	if f.buffer_count != 0 {
@@ -215,17 +215,17 @@ func (rt reportingTrigger) getBuffersForReport(dm *DataManager, f *FiredTrigger)
 	}
 
 	var it idleTrigger
-	it.last_modified = dm.now
+	it.last_modified = f.queue.dm.now
 	it.tq_lru_element = f.queue.idle.PushFront(f)
 	return it, buffers
 }
 
 /* Get any buffers that should be evicted.  No transition after this, trigger
 becomes invalid */
-func (rt reportingTrigger) evictTrigger(dm *DataManager, f *FiredTrigger) (firedtriggerstate, []int) {
+func (rt reportingTrigger) evictTrigger(f *FiredTrigger) (firedtriggerstate, []int) {
 	var buffers []int
 	for _, t := range f.traces {
-		buffers = append(buffers, t.RemoveTrigger(dm, f)...)
+		buffers = append(buffers, t.RemoveTrigger(f.queue.dm, f)...)
 	}
 
 	// No more buffers should be associated with this trigger
@@ -238,6 +238,6 @@ func (rt reportingTrigger) evictTrigger(dm *DataManager, f *FiredTrigger) (fired
 	return nil, buffers
 }
 
-func (rt reportingTrigger) checkTimeout(dm *DataManager, f *FiredTrigger, before time.Time) (firedtriggerstate, bool) {
+func (rt reportingTrigger) checkTimeout(f *FiredTrigger, before time.Time) (firedtriggerstate, bool) {
 	return rt, false // Not allowed to time out reportingTriggers
 }

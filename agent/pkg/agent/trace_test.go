@@ -352,8 +352,8 @@ func TestMultipleTriggers(t *testing.T) {
 	assert.Equal(1, dm.triggered.trace_count, "Only one trace is triggered")
 	assert.Equal(5, dm.triggered.buffer_count, "Only 5 buffers are triggered")
 
-	assert.Equal(0, len(dm.EvictNext(dm.triggered.queues[1])), "First trigger eviction doesn't drop buffers")
-	assert.Equal(5, len(dm.EvictNext(dm.triggered.queues[2])), "Second trigger eviction drops buffers")
+	assert.Equal(0, len(dm.triggered.queues[1].EvictNext()), "First trigger eviction doesn't drop buffers")
+	assert.Equal(5, len(dm.triggered.queues[2].EvictNext()), "Second trigger eviction drops buffers")
 }
 
 func TestMultipleTriggers2(t *testing.T) {
@@ -384,7 +384,7 @@ func TestMultipleTriggers2(t *testing.T) {
 	assert.Equal(2, dm.triggered.trace_count, "Only two traces are triggered")
 	assert.Equal(8, dm.triggered.buffer_count, "Only 8 buffers are triggered")
 
-	dm.ReportNext(q[1])
+	q[1].ReportNext()
 	assert.Equal(1, q[1].trace_count, "Trace remains in first queue")
 	assert.Equal(0, q[1].buffer_count, "No buffers to report for first queue")
 	assert.Equal(0, q[1].reporting.Size(), "No triggers to report in first queue")
@@ -397,7 +397,7 @@ func TestMultipleTriggers2(t *testing.T) {
 	assert.Equal(2, dm.triggered.trace_count, "Only two traces are triggered")
 	assert.Equal(3, dm.triggered.buffer_count, "Only 3 buffers are triggered")
 
-	dm.ReportNext(q[3])
+	q[3].ReportNext()
 	assert.Equal(1, q[1].trace_count, "Trace remains in first queue")
 	assert.Equal(0, q[1].buffer_count, "No buffers to report for first queue")
 	assert.Equal(0, q[1].reporting.Size(), "No triggers to report in first queue")
@@ -410,7 +410,7 @@ func TestMultipleTriggers2(t *testing.T) {
 	assert.Equal(2, dm.triggered.trace_count, "Only two traces are triggered")
 	assert.Equal(0, dm.triggered.buffer_count, "No buffers are triggered")
 
-	dm.ReportNext(q[2])
+	q[2].ReportNext()
 	assert.Equal(1, q[1].trace_count, "Trace remains in first queue")
 	assert.Equal(0, q[1].buffer_count, "No buffers to report for first queue")
 	assert.Equal(0, q[1].reporting.Size(), "No triggers to report in first queue")
@@ -446,7 +446,7 @@ func TestMultipleTriggers2(t *testing.T) {
 	assert.Equal(2, dm.triggered.trace_count, "Only two traces are triggered")
 	assert.Equal(8, dm.triggered.buffer_count, "Only 8 buffers are triggered")
 
-	evicted := dm.EvictNext(q[2])
+	evicted := q[2].EvictNext()
 	assert.Equal(0, len(evicted), "No buffers were evicted yet")
 	assert.Equal(1, q[1].trace_count, "Trace remains in first queue")
 	assert.Equal(5, q[1].buffer_count, "5 buffers to report for first queue")
@@ -460,7 +460,7 @@ func TestMultipleTriggers2(t *testing.T) {
 	assert.Equal(2, dm.triggered.trace_count, "Only two traces are triggered")
 	assert.Equal(8, dm.triggered.buffer_count, "8 buffers are triggered")
 
-	evicted = dm.EvictNext(q[1])
+	evicted = q[1].EvictNext()
 	assert.Equal(5, len(evicted), "5 buffers were evicted")
 	assert.Equal(0, q[1].trace_count, "Trace is not in first queue")
 	assert.Equal(0, q[1].buffer_count, "No buffers to report for first queue")
@@ -474,7 +474,7 @@ func TestMultipleTriggers2(t *testing.T) {
 	assert.Equal(1, dm.triggered.trace_count, "Only one trace is triggered")
 	assert.Equal(3, dm.triggered.buffer_count, "3 buffers are triggered")
 
-	evicted = dm.EvictNext(q[3])
+	evicted = q[3].EvictNext()
 	assert.Equal(3, len(evicted), "3 buffers were evicted")
 	assert.Equal(0, q[1].trace_count, "Trace is not in first queue")
 	assert.Equal(0, q[1].buffer_count, "No buffers to report for first queue")
@@ -503,17 +503,17 @@ func TestDataManagerEvictionToTargetCapacity(t *testing.T) {
 	assert.Equal(1000, dm.triggered.buffer_count, "1000 triggered buffers")
 
 	for i := 0; i < 10; i++ {
-		bufs := dm.ReportNext(dm.triggered.queues[1])
+		bufs := dm.triggered.queues[1].ReportNext()
 		assert.Equal([]int{i}, bufs, fmt.Sprintf("Report trace %d", i))
 	}
 
-	evicted := dm.EvictQueueToCapacity(dm.triggered.queues[1], 900)
+	evicted := dm.triggered.queues[1].EvictToCapacity(900)
 	assert.Equal(90, len(evicted), "Evicted 90 buffers")
 
-	evicted = dm.EvictQueueToCapacity(dm.triggered.queues[1], 801)
+	evicted = dm.triggered.queues[1].EvictToCapacity(801)
 	assert.Equal(99, len(evicted), "Evicted 99 buffers")
 
-	evicted = dm.EvictQueueToCapacity(dm.triggered.queues[1], 800)
+	evicted = dm.triggered.queues[1].EvictToCapacity(800)
 	assert.Equal(8, len(evicted), "Evicted 8 buffers")
 	assert.Equal(793, dm.triggered.buffer_count, "792 buffers remain")
 
@@ -533,10 +533,10 @@ func TestDataManagerEvictionPriority(t *testing.T) {
 	assert.Equal(1000, dm.triggered.buffer_count, "1000 triggered buffers")
 
 	for i := 0; i < 400; i++ {
-		bufs := dm.ReportNext(dm.triggered.queues[1])
+		bufs := dm.triggered.queues[1].ReportNext()
 		assert.Equal([]int{i}, bufs, fmt.Sprintf("Report trace %d", i))
 
-		evicted := dm.EvictNext(dm.triggered.queues[1])
+		evicted := dm.triggered.queues[1].EvictNext()
 		assert.Greater(evicted[0], 500, "Evict a trace with ID > 500")
 	}
 }
@@ -569,7 +569,7 @@ func TestDataManagerReportingPriority(t *testing.T) {
 	assert.Equal(23, dm.triggered.buffer_count, "Buffers are all triggered")
 	assert.Equal(0, dm.triggered.queues[1].idle.Len(), "No idle triggers")
 
-	bufs := dm.ReportNext(dm.triggered.queues[1])
+	bufs := dm.triggered.queues[1].ReportNext()
 	assert.Equal([]int{1, 2, 3, 4, 5}, bufs, "Expect trace ID 75 to be reported first")
 	assert.Equal(5, dm.triggered.trace_count, "Traces are all triggered")
 	assert.Equal(5, len(dm.triggered.queues[1].fired), "5 Fired triggers")
@@ -577,7 +577,7 @@ func TestDataManagerReportingPriority(t *testing.T) {
 	assert.Equal(18, dm.triggered.buffer_count, "Buffers are all triggered")
 	assert.Equal(1, dm.triggered.queues[1].idle.Len(), "Reported trigger is now idle")
 
-	bufs = dm.ReportNext(dm.triggered.queues[1])
+	bufs = dm.triggered.queues[1].ReportNext()
 	assert.Equal([]int{6}, bufs, "Expect trace ID 76 to be reported next")
 	assert.Equal(5, dm.triggered.trace_count, "Traces are all triggered")
 	assert.Equal(5, len(dm.triggered.queues[1].fired), "5 Fired triggers")
@@ -585,7 +585,7 @@ func TestDataManagerReportingPriority(t *testing.T) {
 	assert.Equal(17, dm.triggered.buffer_count, "Buffers are all triggered")
 	assert.Equal(2, dm.triggered.queues[1].idle.Len(), "Reported trigger is now idle")
 
-	bufs = dm.ReportNext(dm.triggered.queues[1])
+	bufs = dm.triggered.queues[1].ReportNext()
 	assert.Equal([]int{7, 8, 9}, bufs, "Expect trace ID 77 to be reported next")
 	assert.Equal(5, dm.triggered.trace_count, "Traces are all triggered")
 	assert.Equal(5, len(dm.triggered.queues[1].fired), "5 Fired triggers")
@@ -601,7 +601,7 @@ func TestDataManagerReportingPriority(t *testing.T) {
 	assert.Equal(19, dm.triggered.buffer_count, "Buffers are all triggered")
 	assert.Equal(3, dm.triggered.queues[1].idle.Len(), "Reported trigger is now idle")
 
-	bufs = dm.ReportNext(dm.triggered.queues[1])
+	bufs = dm.triggered.queues[1].ReportNext()
 	assert.Equal([]int{10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20}, bufs, "Expect trace ID 78 to be reported next")
 	assert.Equal(6, dm.triggered.trace_count, "Traces are all triggered")
 	assert.Equal(6, len(dm.triggered.queues[1].fired), "5 Fired triggers")
@@ -616,7 +616,7 @@ func TestDataManagerReportingPriority(t *testing.T) {
 	assert.Equal(10, dm.triggered.buffer_count, "Buffers are all triggered")
 	assert.Equal(3, dm.triggered.queues[1].idle.Len(), "Reported trigger is no longer idle")
 
-	bufs = dm.ReportNext(dm.triggered.queues[1])
+	bufs = dm.triggered.queues[1].ReportNext()
 	assert.Equal([]int{29, 30}, bufs, "Expect trace ID 75 to be reported next")
 	assert.Equal(6, dm.triggered.trace_count, "Traces are all triggered")
 	assert.Equal(6, len(dm.triggered.queues[1].fired), "5 Fired triggers")
@@ -626,7 +626,7 @@ func TestDataManagerReportingPriority(t *testing.T) {
 
 	dm.AddBuffers(70, []int{31, 32, 33})
 	dm.Trigger(1, uint64(70), []uint64{uint64(70)})
-	bufs = dm.ReportNext(dm.triggered.queues[1])
+	bufs = dm.triggered.queues[1].ReportNext()
 	assert.Equal([]int{31, 32, 33}, bufs, "Expect trace ID 70 to be reported next")
 	assert.Equal(7, dm.triggered.trace_count, "Traces are all triggered")
 	assert.Equal(7, len(dm.triggered.queues[1].fired), "5 Fired triggers")
@@ -649,7 +649,7 @@ func TestDataManagerEvictIdleTriggers(t *testing.T) {
 	assert.Equal(10, len(dm.triggered.queues[1].fired), "10 triggers")
 
 	for i := 0; i < 5; i++ {
-		bufs := dm.ReportNext(dm.triggered.queues[1])
+		bufs := dm.triggered.queues[1].ReportNext()
 		assert.Equal([]int{i}, bufs, fmt.Sprintf("Trace %d was reported", i))
 	}
 
@@ -657,18 +657,18 @@ func TestDataManagerEvictIdleTriggers(t *testing.T) {
 	assert.Equal(5, dm.triggered.buffer_count, "5 Buffers are triggered")
 	assert.Equal(10, len(dm.triggered.queues[1].fired), "10 triggers")
 
-	dm.EvictIdleTriggersFromQueue(dm.triggered.queues[1], time.Now().Add(time.Duration(-1)*time.Hour))
+	dm.triggered.queues[1].CheckIdleTriggers(time.Now().Add(time.Duration(-1) * time.Hour))
 	assert.Equal(5, dm.triggered.queues[1].idle.Len(), "5 idle triggers still, eviction time hasn't been reached")
 	assert.Equal(5, dm.triggered.buffer_count, "5 Buffers are triggered")
 	assert.Equal(10, len(dm.triggered.queues[1].fired), "10 triggers")
 
-	dm.EvictIdleTriggersFromQueue(dm.triggered.queues[1], time.Now().Add(time.Duration(1)*time.Hour))
+	dm.triggered.queues[1].CheckIdleTriggers(time.Now().Add(time.Duration(1) * time.Hour))
 	assert.Equal(0, dm.triggered.queues[1].idle.Len(), "No idle triggers remain")
 	assert.Equal(5, dm.triggered.buffer_count, "5 Buffers are triggered")
 	assert.Equal(5, len(dm.triggered.queues[1].fired), "5 triggers")
 
 	for i := 5; i < 10; i++ {
-		bufs := dm.ReportNext(dm.triggered.queues[1])
+		bufs := dm.triggered.queues[1].ReportNext()
 		assert.Equal([]int{i}, bufs, fmt.Sprintf("Trace %d was reported", i))
 	}
 
@@ -676,12 +676,12 @@ func TestDataManagerEvictIdleTriggers(t *testing.T) {
 	assert.Equal(0, dm.triggered.buffer_count, "0 Buffers are triggered")
 	assert.Equal(5, len(dm.triggered.queues[1].fired), "5 triggers")
 
-	dm.EvictIdleTriggersFromQueue(dm.triggered.queues[1], time.Now().Add(time.Duration(-1)*time.Hour))
+	dm.triggered.queues[1].CheckIdleTriggers(time.Now().Add(time.Duration(-1) * time.Hour))
 	assert.Equal(5, dm.triggered.queues[1].idle.Len(), "5 idle triggers still, eviction time hasn't been reached")
 	assert.Equal(0, dm.triggered.buffer_count, "0 Buffers are triggered")
 	assert.Equal(5, len(dm.triggered.queues[1].fired), "5 triggers")
 
-	dm.EvictIdleTriggersFromQueue(dm.triggered.queues[1], time.Now().Add(time.Duration(1)*time.Hour))
+	dm.triggered.queues[1].CheckIdleTriggers(time.Now().Add(time.Duration(1) * time.Hour))
 	assert.Equal(0, dm.triggered.queues[1].idle.Len(), "No idle triggers remain")
 	assert.Equal(0, dm.triggered.buffer_count, "0 Buffers are triggered")
 	assert.Equal(0, len(dm.triggered.queues[1].fired), "0 triggers")

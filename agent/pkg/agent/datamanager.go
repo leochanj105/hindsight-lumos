@@ -3,8 +3,6 @@ package agent
 import (
 	"container/list"
 	"time"
-
-	"github.com/geraldleizhang/hindsight/agent/pkg/util"
 )
 
 /*
@@ -33,15 +31,6 @@ type TriggeredData struct {
 	queues       map[int]*TriggerQueue
 }
 
-type TriggerQueue struct {
-	id           int
-	trace_count  int
-	buffer_count int
-	fired        map[uint64]*FiredTrigger
-	reporting    *util.TreeNode // queue for FiredTriggers with data to report
-	idle         *list.List     // LRU for idle FiredTriggers
-}
-
 /* Called upon agent startup */
 func InitDataManager() *DataManager {
 	var dm DataManager
@@ -55,6 +44,22 @@ func InitDataManager() *DataManager {
 	dm.untriggered.buffer_count = 0
 
 	return &dm
+}
+
+/*
+We only create the trigger metadata the first time a trigger fires for a
+queue ID.  A trigger is never destroyed, for now.
+
+TODO: a buggy trigger could fire for random queueIds resulting in too many
+queues being created.  A future fix would be to limit the number of
+allowed empty queues and tear them down on an LRU basis.
+*/
+func (dm *DataManager) GetQueue(queue_id int) *TriggerQueue {
+	if queue, ok := dm.triggered.queues[queue_id]; ok {
+		return queue
+	} else {
+		return dm.initTriggerQueue(queue_id)
+	}
 }
 
 /* Buffers received from the shm queues */
@@ -71,16 +76,20 @@ func (dm *DataManager) AddBreadcrumbs(trace_id uint64, breadcrumbs []string) {
 
 /* A trigger has fired. */
 func (dm *DataManager) Trigger(queue_id int, trigger_id uint64, trace_ids []uint64) []string {
-	trigger := dm.getOrCreateTrigger(queue_id, trigger_id)
+	queue := dm.GetQueue(queue_id)
+	trigger := queue.getOrCreateTrigger(trigger_id)
 	var breadcrumbs []string
 	for _, trace_id := range trace_ids {
 		trace := dm.getOrCreateTrace(trace_id)
-		breadcrumbs = append(breadcrumbs, trigger.AddTrace(dm, trace)...)
+		breadcrumbs = append(breadcrumbs, trigger.AddTrace(trace)...)
 	}
 	return breadcrumbs
 }
 
-/* Evict the LRU untriggered trace; returns its buffers */
+/*
+Evicts one untriggered trace according to the least-recently-used policy.
+Returns any buffers of this trace, that must then be freed by the caller.
+*/
 func (dm *DataManager) Evict() []int {
 	if dm.untriggered.trace_count == 0 {
 		return nil
@@ -90,8 +99,11 @@ func (dm *DataManager) Evict() []int {
 	return trace.TakeBuffers(dm)
 }
 
-/* Evicts multiple LRU untriggered traces to reach the target number of buffers.
-Returns the evicted buffers to be freed */
+/*
+Repeatedly evicts untriggered traces until the buffer_count of the DataManager
+is below the specified target_capacity.  Returns all evicted buffers that must
+then be freed by the caller.
+*/
 func (dm *DataManager) EvictToCapacity(target_capacity int) []int {
 	if dm.buffer_count <= target_capacity || target_capacity < 0 {
 		return nil
@@ -118,8 +130,11 @@ func (dm *DataManager) EvictToCapacity(target_capacity int) []int {
 	return evicted
 }
 
-/* Evicts multiple triggers to reach the target number of triggered buffers.
-Returns the evicted buffers to be freed */
+/*
+Repeatedly evicts triggers until the buffer_count of dm.triggered is below
+the specified target_capacity.  Returns all evicted buffers that must
+then be freed by the caller.
+*/
 func (dm *DataManager) EvictedTriggeredToCapacity(target_capacity int) []int {
 	if dm.triggered.buffer_count <= target_capacity || target_capacity < 0 {
 		return nil
@@ -135,13 +150,18 @@ func (dm *DataManager) EvictedTriggeredToCapacity(target_capacity int) []int {
 			queue = candidate
 		}
 	}
-	return dm.EvictQueueToCapacity(queue, target_capacity)
+	return queue.EvictToCapacity(target_capacity)
 }
 
-/* Evicts idle triggers that haven't been used since before the specified time */
-func (dm *DataManager) EvictIdleTriggers(before time.Time) {
+/*
+Time-out any triggers that have been idle since before the specified time.
+Idle triggers don't have any buffers, therefore this simply untriggers them.
+If new data arrives in future for the same trace IDs, it will behave like
+we've never seen those trace IDs before.
+*/
+func (dm *DataManager) CheckIdleTriggers(before time.Time) {
 	for _, queue := range dm.triggered.queues {
-		dm.EvictIdleTriggersFromQueue(queue, before)
+		queue.CheckIdleTriggers(before)
 	}
 }
 
@@ -151,100 +171,4 @@ func (dm *DataManager) getOrCreateTrace(trace_id uint64) *Trace {
 	} else {
 		return initUntriggeredTrace(dm, trace_id)
 	}
-}
-
-/*
-We only create the trigger metadata the first time a trigger fires for a
-queue ID.  A trigger is never destroyed, for now.
-
-TODO: a buggy trigger could fire for random queueIds resulting in too many
-queues being created.  A future fix would be to limit the number of
-allowed empty queues and tear them down on an LRU basis.
-*/
-func (dm *DataManager) GetOrCreateQueue(queue_id int) *TriggerQueue {
-	if queue, ok := dm.triggered.queues[queue_id]; ok {
-		return queue
-	}
-
-	var queue TriggerQueue
-	queue.id = queue_id
-	queue.buffer_count = 0
-	queue.fired = make(map[uint64]*FiredTrigger)
-	queue.reporting = util.InitPartialPriorityTree()
-	queue.idle = list.New()
-	dm.triggered.queues[queue_id] = &queue
-	return &queue
-}
-
-/*
-When a trigger fires locally or remotely, we call this method to create
-the metadata related to the trigger
-*/
-func (dm *DataManager) getOrCreateTrigger(queue_id int, id uint64) *FiredTrigger {
-	queue := dm.GetOrCreateQueue(queue_id)
-
-	if trigger, ok := queue.fired[id]; ok {
-		return trigger
-	} else {
-		return initIdleTrigger(dm, id, queue)
-	}
-}
-
-/* Evicts one fired trigger from the specified queue, and returns buffers to be freed */
-func (dm *DataManager) EvictNext(queue *TriggerQueue) []int {
-	id := queue.reporting.PopNearMax()
-	trigger := queue.fired[id]
-	return trigger.Evict(dm)
-}
-
-/* Evicts triggers from the specified queue until the total number of triggered buffers is
-reduced below the specified target_capacity */
-func (dm *DataManager) EvictQueueToCapacity(queue *TriggerQueue, target_capacity int) []int {
-	if dm.triggered.buffer_count <= target_capacity || target_capacity < 0 {
-		return nil
-	}
-
-	/*
-		We evict in batches for efficiency rather than one at a time; here
-		calculate the number to actually evict, rounding up
-	*/
-	num_to_evict := dm.triggered.buffer_count - target_capacity
-	min_to_evict := target_capacity / 100
-	if num_to_evict < min_to_evict {
-		num_to_evict = min_to_evict
-	}
-
-	/*
-		Do the eviction; it's possible this can completely drain a queue without
-		reaching the target_capacity, which is OK
-	*/
-	var evicted []int
-	for len(evicted) < num_to_evict && queue.reporting.Size() > 0 {
-		id := queue.reporting.PopNearMax()
-		trigger := queue.fired[id]
-		evicted = append(evicted, trigger.Evict(dm)...)
-	}
-	return evicted
-}
-
-/* Pops one fired trigger from the specified queue, and returns buffers to be reported and freed */
-func (dm *DataManager) ReportNext(queue *TriggerQueue) []int {
-	id := queue.reporting.PopMin()
-	trigger := queue.fired[id]
-	return trigger.GetBuffersForReport(dm)
-}
-
-/* Evict triggers that have been idle since before the specified time.
-Since they are idle, this should not return any buffers; instead returns the number
-of idle triggers that were evicted (used only for testing) */
-func (dm *DataManager) EvictIdleTriggersFromQueue(queue *TriggerQueue, before time.Time) int {
-	eviction_count := 0
-	for queue.idle.Len() > 0 {
-		oldest := queue.idle.Back().Value.(*FiredTrigger)
-		if !oldest.CheckTimeout(dm, before) {
-			break
-		}
-		eviction_count += 1
-	}
-	return eviction_count
 }
