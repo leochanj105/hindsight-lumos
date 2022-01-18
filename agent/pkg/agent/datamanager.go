@@ -118,6 +118,33 @@ func (dm *DataManager) EvictToCapacity(target_capacity int) []int {
 	return evicted
 }
 
+/* Evicts multiple triggers to reach the target number of triggered buffers.
+Returns the evicted buffers to be freed */
+func (dm *DataManager) EvictedTriggeredToCapacity(target_capacity int) []int {
+	if dm.triggered.buffer_count <= target_capacity || target_capacity < 0 {
+		return nil
+	}
+
+	/*
+		Evict from the current largest queue.  Only evict from the largest queue
+		each time; don't try to be clever
+	*/
+	var queue *TriggerQueue
+	for _, candidate := range dm.triggered.queues {
+		if queue == nil || candidate.buffer_count > queue.buffer_count {
+			queue = candidate
+		}
+	}
+	return dm.EvictQueueToCapacity(queue, target_capacity)
+}
+
+/* Evicts idle triggers that haven't been used since before the specified time */
+func (dm *DataManager) EvictIdleTriggers(before time.Time) {
+	for _, queue := range dm.triggered.queues {
+		dm.EvictIdleTriggersFromQueue(queue, before)
+	}
+}
+
 func (dm *DataManager) getOrCreateTrace(trace_id uint64) *Trace {
 	if trace, ok := dm.traces[trace_id]; ok {
 		return trace
