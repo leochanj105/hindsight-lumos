@@ -65,6 +65,11 @@ Created queue capacity=10 element_size=16 element_total_size=20 at /dev/shm/test
 test_tracestate_nullbuffer passed
 ```
 
+You can run golang unit tests by navigating to the appropriate folder and running:
+```
+go test *.go -v
+```
+
 ## Integration Tests
 
 There are several integration tests that use different combinations of C and Go agents

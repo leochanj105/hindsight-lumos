@@ -12,7 +12,7 @@
 #define PROCESS_NAME "hs_integration_test"
 #define BUFFERSIZE 128000
 #define TRACEPOINTSPERTRACE 3000
-#define WRITESIZE 32000
+#define WRITESIZE 1000
 #define CHECKEVERY 3000
 
 // TODO: configurable number of each thread.  Implement drainer in go. Compare
@@ -105,7 +105,7 @@ void drain_forever_client() {
 
 	while (true) {
 		hindsight_begin(++trace_id);
-		for (int i = 0; i < tracepoints_per_trace; i++) {
+		for (int i = 0; i < tracepoints_per_trace; i+=check_every) {
 			uint64_t now = nanos();
 			// printf("nanos %ld\n", now);
 			if ((now - last_print) > print_every) {
