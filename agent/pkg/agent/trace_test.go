@@ -755,3 +755,86 @@ func TestDataManagerEvictUntriggeredLRU(t *testing.T) {
 	assert.Equal(0, dm.buffer_count, "Buffer count")
 
 }
+
+func TestDataManagerEvictFromLargestQueue(t *testing.T) {
+	assert := assert.New(t)
+
+	dm := InitDataManager()
+
+	for j := 0; j < 2; j++ {
+		for i := 0; i < 1000; i++ {
+			dm.AddBuffers(uint64(i), []int{2 * i, 2*i + 1})
+			dm.Trigger(1, uint64(i), []uint64{uint64(i)})
+		}
+
+		for i := 1000; i < 2000; i++ {
+			dm.AddBuffers(uint64(i), []int{2 * i})
+			dm.Trigger(2, uint64(i), []uint64{uint64(i)})
+		}
+
+		assert.Equal(dm.trace_count, 2000, "2000 traces")
+		assert.Equal(dm.buffer_count, 3000, "3000 buffers")
+		assert.Equal(dm.triggered.queues[1].trace_count, 1000, "1000 traces in queue 1")
+		assert.Equal(dm.triggered.queues[2].trace_count, 1000, "1000 traces in queue 2")
+		assert.Equal(dm.triggered.queues[1].buffer_count, 2000, "2000 buffers in queue 1")
+		assert.Equal(dm.triggered.queues[2].buffer_count, 1000, "1000 buffers in queue 2")
+
+		evicted := dm.EvictedTriggeredToCapacity(3000)
+		assert.Equal(0, len(evicted), "Nothing evicted yet")
+
+		evicted = dm.EvictedTriggeredToCapacity(2500)
+		assert.Equal(500, len(evicted), "500 buffers / 250 traces evicted, all from queue 1")
+		assert.Equal(1750, dm.trace_count, "1750 traces")
+		assert.Equal(2500, dm.buffer_count, "2500 buffers")
+		assert.Equal(750, dm.triggered.queues[1].trace_count, "750 traces in queue 1")
+		assert.Equal(1000, dm.triggered.queues[2].trace_count, "1000 traces in queue 2")
+		assert.Equal(1500, dm.triggered.queues[1].buffer_count, "1500 buffers in queue 1")
+		assert.Equal(1000, dm.triggered.queues[2].buffer_count, "1000 buffers in queue 2")
+
+		evicted = dm.EvictedTriggeredToCapacity(2100)
+		assert.Equal(400, len(evicted), "400 buffers / 200 traces evicted, all from queue 1")
+		assert.Equal(1550, dm.trace_count, "1550 traces")
+		assert.Equal(2100, dm.buffer_count, "2100 buffers")
+		assert.Equal(550, dm.triggered.queues[1].trace_count, "550 traces in queue 1")
+		assert.Equal(1000, dm.triggered.queues[2].trace_count, "1000 traces in queue 2")
+		assert.Equal(1100, dm.triggered.queues[1].buffer_count, "1100 buffers in queue 1")
+		assert.Equal(1000, dm.triggered.queues[2].buffer_count, "1000 buffers in queue 2")
+
+		evicted = dm.EvictedTriggeredToCapacity(1900)
+		assert.Equal(200, len(evicted), "200 buffers / 100 traces evicted, all from queue 1")
+		assert.Equal(1450, dm.trace_count, "1450 traces")
+		assert.Equal(1900, dm.buffer_count, "1900 buffers")
+		assert.Equal(450, dm.triggered.queues[1].trace_count, "450 traces in queue 1")
+		assert.Equal(1000, dm.triggered.queues[2].trace_count, "1000 traces in queue 2")
+		assert.Equal(900, dm.triggered.queues[1].buffer_count, "900 buffers in queue 1")
+		assert.Equal(1000, dm.triggered.queues[2].buffer_count, "1000 buffers in queue 2")
+
+		evicted = dm.EvictedTriggeredToCapacity(1700)
+		assert.Equal(200, len(evicted), "200 buffers / 200 traces evicted, all from queue 2")
+		assert.Equal(1250, dm.trace_count, "1250 traces")
+		assert.Equal(1700, dm.buffer_count, "1700 buffers")
+		assert.Equal(450, dm.triggered.queues[1].trace_count, "450 traces in queue 1")
+		assert.Equal(800, dm.triggered.queues[2].trace_count, "800 traces in queue 2")
+		assert.Equal(900, dm.triggered.queues[1].buffer_count, "900 buffers in queue 1")
+		assert.Equal(800, dm.triggered.queues[2].buffer_count, "800 buffers in queue 2")
+
+		evicted = dm.EvictedTriggeredToCapacity(0)
+		assert.Equal(900, len(evicted), "900 buffers / 450 traces evicted, all from queue 1")
+		assert.Equal(800, dm.trace_count, "800 traces")
+		assert.Equal(800, dm.buffer_count, "800 buffers")
+		assert.Equal(0, dm.triggered.queues[1].trace_count, "0 traces in queue 1")
+		assert.Equal(800, dm.triggered.queues[2].trace_count, "800 traces in queue 2")
+		assert.Equal(0, dm.triggered.queues[1].buffer_count, "0 buffers in queue 1")
+		assert.Equal(800, dm.triggered.queues[2].buffer_count, "800 buffers in queue 2")
+
+		evicted = dm.EvictedTriggeredToCapacity(0)
+		assert.Equal(800, len(evicted), "800 buffers / 800 traces evicted, all from queue 2")
+		assert.Equal(0, dm.trace_count, "0 traces")
+		assert.Equal(0, dm.buffer_count, "0 buffers")
+		assert.Equal(0, dm.triggered.queues[1].trace_count, "0 traces in queue 1")
+		assert.Equal(0, dm.triggered.queues[2].trace_count, "0 traces in queue 2")
+		assert.Equal(0, dm.triggered.queues[1].buffer_count, "0 buffers in queue 1")
+		assert.Equal(0, dm.triggered.queues[2].buffer_count, "0 buffers in queue 2")
+	}
+
+}
