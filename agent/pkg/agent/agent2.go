@@ -154,7 +154,9 @@ func (agent *Agent2) processBreadcrumbs(batch memory.BreadcrumbBatch) {
 	/* Forward breadcrumbs as needed */
 	// TODO HERE
 	// FORWARD TO COORDINATOR
-	fmt.Printf("Forwarding crumbs %v\n", to_report)
+	if len(to_report) > 0 {
+		fmt.Printf("Forwarding crumbs %v\n", to_report)
+	}
 }
 
 func (agent *Agent2) processTriggers(batch []memory.Trigger) {
@@ -170,7 +172,7 @@ func (agent *Agent2) processTriggers(batch []memory.Trigger) {
 		/* Forward breadcrumbs as needed */
 		// TODO HERE
 		// FORWARD TO COORDINATOR
-		if breadcrumbs != nil {
+		if len(breadcrumbs) > 0 {
 			fmt.Printf("Forwarding tcrumbs %v\n", breadcrumbs)
 		}
 	}
