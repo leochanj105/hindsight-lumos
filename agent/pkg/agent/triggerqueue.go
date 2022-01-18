@@ -15,6 +15,7 @@ type TriggerQueue struct {
 	reporting    *util.TreeNode // queue for FiredTriggers with data to report
 	idle         *list.List     // LRU for idle FiredTriggers
 	dm           *DataManager
+	metrics      TriggerMetrics
 }
 
 /*
@@ -85,6 +86,9 @@ func (queue *TriggerQueue) EvictToCapacity(target_capacity int) []int {
 		trigger := queue.fired[id]
 		evicted = append(evicted, trigger.Evict()...)
 	}
+
+	queue.metrics.evicted_buffers += len(evicted)
+
 	return evicted
 }
 
@@ -92,7 +96,12 @@ func (queue *TriggerQueue) EvictToCapacity(target_capacity int) []int {
 func (queue *TriggerQueue) ReportNext() []int {
 	id := queue.reporting.PopMin()
 	if trigger, ok := queue.fired[id]; ok {
-		return trigger.GetBuffersForReport()
+		buffers := trigger.GetBuffersForReport()
+
+		queue.metrics.reported_buffers += len(buffers)
+
+		return buffers
+
 	} else {
 		return nil
 	}
@@ -111,4 +120,18 @@ func (queue *TriggerQueue) CheckIdleTriggers(before time.Time) int {
 		eviction_count += 1
 	}
 	return eviction_count
+}
+
+/* Add a new trigger to the queue or update an existing trigger if it already exist */
+func (queue *TriggerQueue) Trigger(trigger_id uint64, trace_ids []uint64) map[uint64][]string {
+	trigger := queue.getOrCreateTrigger(trigger_id)
+	breadcrumbs := make(map[uint64][]string)
+	for _, trace_id := range trace_ids {
+		trace := queue.dm.getOrCreateTrace(trace_id)
+		to_report := trigger.AddTrace(trace)
+		if len(to_report) > 0 {
+			breadcrumbs[trace_id] = to_report
+		}
+	}
+	return breadcrumbs
 }

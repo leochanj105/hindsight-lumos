@@ -11,8 +11,10 @@ type TriggerManager struct {
 	queues map[int]*ManagedQueue
 	vc     int // Virtual clock used for fair sharing reporting across queues
 
+	buffer_size     int     // Size of buffers in the cache
 	trigger_limit   float64 // Default limit an individual queue can trigger per second
 	reporting_limit float64 // Default limit an individual queue can report per second
+	batch_size      int     // The number of buffers per report
 }
 
 /*
@@ -27,12 +29,14 @@ type ManagedQueue struct {
 	metrics           TriggerMetrics
 }
 
-func (tm *TriggerManager) Init(dm *DataManager) {
+func (tm *TriggerManager) Init(dm *DataManager, buffer_size int) {
 	tm.dm = dm
 	tm.queues = make(map[int]*ManagedQueue)
 	tm.vc = 0
+	tm.buffer_size = buffer_size
 	tm.trigger_limit = 10000                     // TODO: not hardcoded, configured per trigger, or adaptive based on eviction rates
 	tm.reporting_limit = 10 * 1024 * 1024 * 1024 // TODO: not hardcoded
+	tm.batch_size = 100
 }
 
 /*
@@ -62,4 +66,70 @@ func (tm *TriggerManager) getQueue(queue_id int) *ManagedQueue {
 
 	tm.queues[queue_id] = &mq
 	return &mq
+}
+
+func (mq *ManagedQueue) TriggerLocal(trigger_id uint64, trace_ids []uint64) map[uint64][]string {
+	// Rate limit local triggers
+	if mq.trigger_limiter.Available() < 0 {
+		return nil
+	}
+	mq.trigger_limiter.Take(1)
+
+	// Send to DataManager, return any breadcrumbs that must be reported
+	return mq.queue.Trigger(trigger_id, trace_ids)
+}
+
+func (mq *ManagedQueue) TriggerRemote(trigger_id uint64, trace_ids []uint64) map[uint64][]string {
+	// TODO: consume tokens for remote triggers?
+	// mq.trigger_limiter.Take(1)
+
+	// Send to DataManager, return any breadcrumbs that must be reported
+	return mq.queue.Trigger(trigger_id, trace_ids)
+}
+
+/*
+Get the next batch of buffers to be reported, up to the specified batch size
+*/
+func (tm *TriggerManager) GetNextBatchToReport() []int {
+	var buffers []int
+	for len(buffers) < tm.batch_size && tm.dm.triggered.buffer_count > 0 {
+		buffers = append(buffers, tm.getNextBuffersToReport()...)
+	}
+	return buffers
+}
+
+/*
+Get the next buffers to be reported
+*/
+func (tm *TriggerManager) getNextBuffersToReport() []int {
+	// Find the next queue to report from based on fair sharing
+	var mq *ManagedQueue
+	for _, candidate := range tm.queues {
+		if candidate.queue.buffer_count == 0 {
+			candidate.vt = tm.vc // Catch up virtual clock
+		} else {
+			/* Apply rate limiting */
+			if candidate.reporting_limiter.Available() < 0 {
+				candidate.vt = tm.vc
+				continue
+			}
+
+			/* Apply fair sharing -- pick the queue with lowest virtual time */
+			if mq == nil || candidate.vt < mq.vt {
+				mq = candidate
+			}
+		}
+	}
+
+	if mq == nil {
+		return nil
+	}
+
+	buffers := mq.queue.ReportNext()
+	if len(buffers) > 0 {
+		mq.vt += len(buffers)
+		tm.vc = mq.vt // Not fully correct but enough for now
+		mq.reporting_limiter.Take(int64(len(buffers) * tm.buffer_size))
+	}
+	return buffers
 }

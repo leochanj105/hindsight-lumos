@@ -157,6 +157,7 @@ func (ut untriggeredTrace) takeBuffers(dm *DataManager, trace *Trace) (tracestat
 	dm.untriggered.trace_count -= 1
 	dm.untriggered.buffer_count -= len(buffers)
 	dm.untriggered.lru.Remove(ut.dm_lru_element)
+	dm.untriggered.event_horizion = ut.last_modified
 	delete(dm.traces, trace.id)
 	return ut, buffers
 }

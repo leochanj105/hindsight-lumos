@@ -20,9 +20,10 @@ type DataManager struct {
 }
 
 type UntriggeredData struct {
-	lru          *list.List // LRU of untriggered traces
-	trace_count  int
-	buffer_count int
+	lru            *list.List // LRU of untriggered traces
+	trace_count    int
+	buffer_count   int
+	event_horizion time.Time
 }
 
 type TriggeredData struct {
@@ -72,21 +73,15 @@ func (dm *DataManager) AddBuffers(trace_id uint64, buffers []int) {
 }
 
 /* Breadcrumbs received from the shm queues */
-func (dm *DataManager) AddBreadcrumbs(trace_id uint64, breadcrumbs []string) {
+func (dm *DataManager) AddBreadcrumbs(trace_id uint64, breadcrumbs []string) []string {
 	trace := dm.getOrCreateTrace(trace_id)
-	trace.AddBreadcrumbs(dm, breadcrumbs)
+	return trace.AddBreadcrumbs(dm, breadcrumbs)
 }
 
 /* A trigger has fired. */
-func (dm *DataManager) Trigger(queue_id int, trigger_id uint64, trace_ids []uint64) []string {
+func (dm *DataManager) Trigger(queue_id int, trigger_id uint64, trace_ids []uint64) map[uint64][]string {
 	queue := dm.GetQueue(queue_id)
-	trigger := queue.getOrCreateTrigger(trigger_id)
-	var breadcrumbs []string
-	for _, trace_id := range trace_ids {
-		trace := dm.getOrCreateTrace(trace_id)
-		breadcrumbs = append(breadcrumbs, trigger.AddTrace(trace)...)
-	}
-	return breadcrumbs
+	return queue.Trigger(trigger_id, trace_ids)
 }
 
 /*

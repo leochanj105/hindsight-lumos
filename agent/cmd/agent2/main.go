@@ -70,7 +70,7 @@ func main() {
 		lc.Run(ctx)
 	} else {
 		fmt.Println("running server")
-		agent := agent.InitAgent(service_name, delay, *ratelimit, per_trigger_limits)
+		agent := agent.InitAgent2(service_name, delay, *ratelimit, per_trigger_limits)
 		agent.Run(ctx)
 	}
 

@@ -146,6 +146,7 @@ func (queue *TriggerQueue) initIdleTrigger(base_trace_id uint64) *FiredTrigger {
 	f.state = it
 
 	queue.fired[base_trace_id] = &f
+	queue.metrics.count++
 
 	return &f
 }

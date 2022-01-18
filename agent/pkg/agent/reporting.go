@@ -18,7 +18,7 @@ import (
 type Reporting struct {
 	api       *memory.GoAgentAPI // API to the shared memory
 	collector datapb.CollectorClient
-	queue     chan *TraceData
+	queue     chan []int
 	enabled   bool
 
 	rate_limit  float64
@@ -35,7 +35,7 @@ func InitReporting(api *memory.GoAgentAPI, rate_limit_mb float64) *Reporting {
 func (r *Reporting) Init(api *memory.GoAgentAPI, rate_limit_mb float64) {
 	r.api = api
 	// r.collector set after run
-	r.queue = make(chan *TraceData, 100)       // 100 somewhat arbitrary
+	r.queue = make(chan []int, 4)              // 4 somewhat arbitrary
 	r.enabled = true                           // used for testing/dev
 	r.rate_limit = rate_limit_mb * 1024 * 1024 // rate limit in bytes/s
 	r.buffer_size = r.api.BufferSize()
@@ -46,7 +46,7 @@ func (r *Reporting) Init(api *memory.GoAgentAPI, rate_limit_mb float64) {
 }
 
 /* Reports trace data to the collector */
-func (r *Reporting) report(trace *TraceData) {
+func (r *Reporting) report(buffers []int) {
 	// fmt.Printf("Reporting trace %d with %d buffers, breadcrumbs: ", trace_id, len(trace.Buffers))
 	// for i, addr := range trace.Breadcrumbs {
 	// 	fmt.Printf("(%d: %s) ", i, addr)
@@ -54,7 +54,7 @@ func (r *Reporting) report(trace *TraceData) {
 	// fmt.Printf("\n")
 
 	if r.bucket != nil {
-		r.bucket.Wait(int64(len(trace.buffers) * r.buffer_size))
+		r.bucket.Wait(int64(len(buffers) * r.buffer_size))
 	}
 
 	if r.enabled {
@@ -63,18 +63,19 @@ func (r *Reporting) report(trace *TraceData) {
 		var addrs []string
 		addrs = append(addrs, util.Server_addr+":"+util.Server_port)
 
-		for _, buffer_id := range trace.buffers {
+		for _, buffer_id := range buffers {
 			entry = append(entry, int32(buffer_id))
 			data := r.api.GetBuffer(buffer_id)
 			trace_data = append(trace_data, data...)
-			addrs = append(addrs, trace.breadcrumbs...)
 		}
 
 		ctx, cancel := context.WithTimeout(context.Background(), 1000000000*time.Nanosecond)
 		defer cancel()
 
+		// TODO: report differently; not as RPC, and buffers only
+		// TODO: configurable whether to actually report or not.
 		r.collector.Report(ctx, &datapb.Trace{
-			RequestId: int64(trace.trace_id),
+			RequestId: int64(0),
 			Entry:     entry,
 			Trace:     trace_data,
 			Addrs:     addrs})
@@ -86,8 +87,8 @@ func (r *Reporting) report(trace *TraceData) {
 	// }
 
 	// Return the buffers
-	if len(trace.buffers) > 0 {
-		r.api.Available <- trace.buffers
+	if len(buffers) > 0 {
+		r.api.Available <- buffers
 	}
 }
 
@@ -141,8 +142,8 @@ func (r *Reporting) Run(ctx context.Context) {
 		case <-ctx.Done():
 			s.Stop()
 			return
-		case trace := <-r.queue:
-			r.report(trace)
+		case buffers := <-r.queue:
+			r.report(buffers)
 		}
 	}
 }

@@ -29,31 +29,31 @@ type Stats struct {
 	mean_batchsize       float64
 	event_horizon        time.Duration
 
-	trigger_totals TriggerStats
-	trigger_ids    []int
-	triggers       []TriggerStats
+	queue_totals QueueStats
+	queue_ids    []int
+	queues       []QueueStats
 
 	diagnostics *Diagnostics
 }
 
-type TriggerStats struct {
+type QueueStats struct {
 	trigger_count                 int
 	reported_buffers              int
 	evicted_buffers               int
-	trigger_throughput            float64
+	queue_throughput              float64
 	reported_buffer_throughput    float64
 	reported_buffer_throughput_mb float64
 	evicted_buffer_throughput     float64
 	evicted_buffer_throughput_mb  float64
 	eviction_percent              float64
 
-	diagnostics *TriggerDiagnostics
+	diagnostics *QueueDiagnostics
 }
 
-func (stats *TriggerStats) add(other *TriggerStats) {
+func (stats *QueueStats) add(other *QueueStats) {
 	stats.trigger_count += other.trigger_count
 	stats.reported_buffers += other.reported_buffers
-	stats.trigger_throughput += other.trigger_throughput
+	stats.queue_throughput += other.queue_throughput
 	stats.reported_buffer_throughput += other.reported_buffer_throughput
 	stats.reported_buffer_throughput_mb += other.reported_buffer_throughput_mb
 	stats.evicted_buffer_throughput += other.evicted_buffer_throughput
@@ -65,9 +65,9 @@ func (stats *TriggerStats) add(other *TriggerStats) {
 	}
 }
 
-func (s *TriggerStats) Str() string {
+func (s *QueueStats) Str() string {
 	var b strings.Builder
-	fmt.Fprintf(&b, " %.1f trigs/s ", s.trigger_throughput)
+	fmt.Fprintf(&b, " %.1f trigs/s ", s.queue_throughput)
 	fmt.Fprintf(&b, " %.1f MB/s ", s.reported_buffer_throughput_mb)
 	fmt.Fprintf(&b, "(%.0f bufs/s, %d total) ", s.reported_buffer_throughput, s.reported_buffers)
 	fmt.Fprintf(&b, "%.0f%% loss (%.1f MB/s)", s.eviction_percent, s.evicted_buffer_throughput_mb)
@@ -87,10 +87,10 @@ func (s *Stats) Str() string {
 		fmt.Fprintf(&b, "  ||  %v", s.diagnostics.Str())
 	}
 	fmt.Fprintf(&b, "\n")
-	fmt.Fprintf(&b, "  -- Triggers %v\n", s.trigger_totals.Str())
+	fmt.Fprintf(&b, "  -- Triggers %v\n", s.queue_totals.Str())
 
-	for i, trigger_id := range s.trigger_ids {
-		ts := s.triggers[i]
+	for i, trigger_id := range s.queue_ids {
+		ts := s.queues[i]
 		fmt.Fprintf(&b, "            %d - ", trigger_id)
 		fmt.Fprintf(&b, "%v\n", ts.Str())
 	}
@@ -99,7 +99,7 @@ func (s *Stats) Str() string {
 }
 
 /* Calculates agent stats and resets for next iteration */
-func (agent *Agent) calculateAgentStats(duration_nanos float64, debug bool) Stats {
+func (agent *Agent2) calculateAgentStats(duration_nanos float64, debug bool) Stats {
 	/* Get and reset the agent's metrics */
 	metrics := agent.metrics
 	agent.metrics = AgentMetrics{}
@@ -109,7 +109,7 @@ func (agent *Agent) calculateAgentStats(duration_nanos float64, debug bool) Stat
 	stats.complete_batches = metrics.complete_batches
 	stats.complete_buffers = metrics.complete_buffers
 	stats.buffer_throughput = float64(uint64(metrics.complete_buffers)*1000000000) / duration_nanos
-	stats.buffer_throughput_mb = (stats.buffer_throughput * float64(agent.buffer_size)) / (1024 * 1024)
+	stats.buffer_throughput_mb = (stats.buffer_throughput * float64(agent.tm.buffer_size)) / (1024 * 1024)
 	if metrics.complete_batches > 0 {
 		stats.mean_batchsize = float64(metrics.complete_buffers) / float64(metrics.complete_batches)
 	}
@@ -118,46 +118,46 @@ func (agent *Agent) calculateAgentStats(duration_nanos float64, debug bool) Stat
 	if debug {
 		diagnostics := agent.calculateDiagnostics()
 		stats.diagnostics = &diagnostics
-		stats.trigger_totals.diagnostics = &TriggerDiagnostics{}
+		stats.queue_totals.diagnostics = &QueueDiagnostics{}
 	}
 
-	/* Get and sort trigger ids */
-	for trigger_id := range agent.triggered {
-		stats.trigger_ids = append(stats.trigger_ids, trigger_id)
+	/* Get and sort queue ids */
+	for queue_id := range agent.tm.queues {
+		stats.queue_ids = append(stats.queue_ids, queue_id)
 	}
-	sort.Ints(stats.trigger_ids)
+	sort.Ints(stats.queue_ids)
 
 	/* Calculate stats for each trigger, plus totals */
-	for _, trigger_id := range stats.trigger_ids {
-		trigger := agent.triggered[trigger_id]
-		trigger_stats := agent.calculateTriggerStats(duration_nanos, trigger)
+	for _, queue_id := range stats.queue_ids {
+		queue := agent.tm.queues[queue_id]
+		queue_stats := agent.calculateQueueStats(duration_nanos, queue)
 
 		if debug {
-			trigger_diagnostics := agent.calculateTriggerDiagnostics(trigger)
-			trigger_stats.diagnostics = &trigger_diagnostics
+			queue_diagnostics := agent.calculateQueueDiagnostics(queue)
+			queue_stats.diagnostics = &queue_diagnostics
 		}
 
-		stats.triggers = append(stats.triggers, trigger_stats)
-		stats.trigger_totals.add(&trigger_stats)
+		stats.queues = append(stats.queues, queue_stats)
+		stats.queue_totals.add(&queue_stats)
 	}
 
 	return stats
 }
 
-func (agent *Agent) calculateTriggerStats(duration_nanos float64, trigger *TriggerState) TriggerStats {
+func (agent *Agent2) calculateQueueStats(duration_nanos float64, queue *ManagedQueue) QueueStats {
 	/* Get and reset the trigger's metrics */
-	metrics := trigger.metrics
-	trigger.metrics = TriggerMetrics{}
+	metrics := queue.queue.metrics
+	queue.queue.metrics = TriggerMetrics{}
 
 	/* Calculate stats */
-	var stats TriggerStats
+	var stats QueueStats
 	stats.trigger_count = metrics.count
 	stats.reported_buffers = metrics.reported_buffers
-	stats.trigger_throughput = float64(metrics.count*1000000000) / duration_nanos
+	stats.queue_throughput = float64(metrics.count*1000000000) / duration_nanos
 	stats.reported_buffer_throughput = float64(metrics.reported_buffers*1000000000) / duration_nanos
-	stats.reported_buffer_throughput_mb = (stats.reported_buffer_throughput * float64(agent.buffer_size)) / (1024 * 1024)
+	stats.reported_buffer_throughput_mb = (stats.reported_buffer_throughput * float64(agent.tm.buffer_size)) / (1024 * 1024)
 	stats.evicted_buffer_throughput = float64(metrics.evicted_buffers*1000000000) / duration_nanos
-	stats.evicted_buffer_throughput_mb = (stats.evicted_buffer_throughput * float64(agent.buffer_size)) / (1024 * 1024)
+	stats.evicted_buffer_throughput_mb = (stats.evicted_buffer_throughput * float64(agent.tm.buffer_size)) / (1024 * 1024)
 	stats.eviction_percent = 100 * stats.evicted_buffer_throughput / (stats.reported_buffer_throughput + stats.evicted_buffer_throughput)
 
 	return stats
@@ -171,7 +171,7 @@ type Diagnostics struct {
 	lru_size          int
 }
 
-type TriggerDiagnostics struct {
+type QueueDiagnostics struct {
 	buffers         int
 	buffers_percent float64
 	pending_reports int
@@ -179,7 +179,7 @@ type TriggerDiagnostics struct {
 	lru_percent     float64
 }
 
-func (d *TriggerDiagnostics) Str() string {
+func (d *QueueDiagnostics) Str() string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "%d buffers (%.0f%%) ", d.buffers, d.buffers_percent)
 	fmt.Fprintf(&b, "%d pending, ", d.pending_reports)
@@ -195,7 +195,7 @@ func (d *Diagnostics) Str() string {
 	return b.String()
 }
 
-func (d *TriggerDiagnostics) add(other *TriggerDiagnostics) {
+func (d *QueueDiagnostics) add(other *QueueDiagnostics) {
 	d.buffers += other.buffers
 	d.buffers_percent += other.buffers_percent
 	d.pending_reports += other.pending_reports
@@ -203,27 +203,27 @@ func (d *TriggerDiagnostics) add(other *TriggerDiagnostics) {
 	d.lru_percent += other.lru_percent
 }
 
-func (agent *Agent) calculateTriggerDiagnostics(trigger *TriggerState) TriggerDiagnostics {
-	var d TriggerDiagnostics
-	d.buffers = trigger.size
+func (agent *Agent2) calculateQueueDiagnostics(queue *ManagedQueue) QueueDiagnostics {
+	var d QueueDiagnostics
+	d.buffers = queue.queue.buffer_count
 	d.buffers_percent = 100 * float64(d.buffers) / float64(agent.triggered_capacity)
-	d.pending_reports = trigger.unreported.Size()
-	d.lru_size = trigger.lru.Len()
-	d.lru_percent = 100 * float64(d.lru_size) / float64(agent.triggered_lru_capacity)
+	d.pending_reports = queue.queue.reporting.Size()
+	d.lru_size = queue.queue.idle.Len()
+	d.lru_percent = 0.001 // Deprecated
 	return d
 }
 
-func (agent *Agent) calculateDiagnostics() Diagnostics {
+func (agent *Agent2) calculateDiagnostics() Diagnostics {
 	var d Diagnostics
-	d.cache_size = agent.cache_size
+	d.cache_size = agent.dm.buffer_count
 	d.cache_percent = 100 * float64(d.cache_size) / float64(agent.cache_capacity)
-	d.triggered_size = agent.triggered_size
+	d.triggered_size = agent.dm.triggered.buffer_count
 	d.triggered_percent = 100 * float64(d.triggered_size) / float64(agent.triggered_capacity)
-	d.lru_size = agent.lru.Len()
+	d.lru_size = agent.dm.untriggered.lru.Len()
 	return d
 }
 
-func (agent *Agent) printLoop(ctx context.Context) {
+func (agent *Agent2) printLoop(ctx context.Context) {
 	print_every := time.Duration(1000 * time.Millisecond)
 	next_print := time.NewTimer(1 * time.Millisecond)
 	var last_print uint64
