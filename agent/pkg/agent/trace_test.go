@@ -487,6 +487,98 @@ func TestMultipleTriggers2(t *testing.T) {
 	assert.Equal(0, dm.triggered.buffer_count, "No buffers are triggered")
 }
 
+func TestDataManagerEvictReportingPriority(t *testing.T) {
+	assert := assert.New(t)
+
+	dm := InitDataManager()
+
+	dm.AddBuffers(77, []int{7, 8, 9})
+	dm.Trigger(1, uint64(77), []uint64{uint64(77)})
+
+	dm.AddBuffers(79, []int{21, 22, 23})
+	dm.Trigger(1, uint64(79), []uint64{uint64(79)})
+
+	dm.AddBuffers(75, []int{1, 2, 3, 4, 5})
+	dm.Trigger(1, uint64(75), []uint64{uint64(75)})
+
+	dm.AddBuffers(76, []int{6})
+	dm.Trigger(1, uint64(76), []uint64{uint64(76)})
+
+	dm.AddBuffers(78, []int{10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20})
+	dm.Trigger(1, uint64(78), []uint64{uint64(78)})
+
+	assert.Equal(1, len(dm.triggered.queues), "One queue exists")
+	assert.Equal(5, len(dm.triggered.queues[1].fired), "5 Fired triggers")
+	assert.Equal(5, dm.triggered.queues[1].trace_count, "Traces are all in queue")
+	assert.Equal(23, dm.triggered.queues[1].buffer_count, "Buffers are all in queue")
+	assert.Equal(5, dm.triggered.trace_count, "Traces are all triggered")
+	assert.Equal(23, dm.triggered.buffer_count, "Buffers are all triggered")
+	assert.Equal(0, dm.triggered.queues[1].idle.Len(), "No idle triggers")
+
+	bufs := dm.ReportNext(dm.triggered.queues[1])
+	assert.Equal([]int{1, 2, 3, 4, 5}, bufs, "Expect trace ID 75 to be reported first")
+	assert.Equal(5, dm.triggered.trace_count, "Traces are all triggered")
+	assert.Equal(5, len(dm.triggered.queues[1].fired), "5 Fired triggers")
+	assert.Equal(18, dm.triggered.queues[1].buffer_count, "Buffers are all in queue")
+	assert.Equal(18, dm.triggered.buffer_count, "Buffers are all triggered")
+	assert.Equal(1, dm.triggered.queues[1].idle.Len(), "Reported trigger is now idle")
+
+	bufs = dm.ReportNext(dm.triggered.queues[1])
+	assert.Equal([]int{6}, bufs, "Expect trace ID 76 to be reported next")
+	assert.Equal(5, dm.triggered.trace_count, "Traces are all triggered")
+	assert.Equal(5, len(dm.triggered.queues[1].fired), "5 Fired triggers")
+	assert.Equal(17, dm.triggered.queues[1].buffer_count, "Buffers are all in queue")
+	assert.Equal(17, dm.triggered.buffer_count, "Buffers are all triggered")
+	assert.Equal(2, dm.triggered.queues[1].idle.Len(), "Reported trigger is now idle")
+
+	bufs = dm.ReportNext(dm.triggered.queues[1])
+	assert.Equal([]int{7, 8, 9}, bufs, "Expect trace ID 77 to be reported next")
+	assert.Equal(5, dm.triggered.trace_count, "Traces are all triggered")
+	assert.Equal(5, len(dm.triggered.queues[1].fired), "5 Fired triggers")
+	assert.Equal(14, dm.triggered.queues[1].buffer_count, "Buffers are all in queue")
+	assert.Equal(14, dm.triggered.buffer_count, "Buffers are all triggered")
+	assert.Equal(3, dm.triggered.queues[1].idle.Len(), "Reported trigger is now idle")
+
+	dm.AddBuffers(80, []int{24, 25, 26, 27, 28})
+	dm.Trigger(1, uint64(80), []uint64{uint64(80)})
+	assert.Equal(6, dm.triggered.trace_count, "Traces are all triggered")
+	assert.Equal(6, len(dm.triggered.queues[1].fired), "5 Fired triggers")
+	assert.Equal(19, dm.triggered.queues[1].buffer_count, "Buffers are all in queue")
+	assert.Equal(19, dm.triggered.buffer_count, "Buffers are all triggered")
+	assert.Equal(3, dm.triggered.queues[1].idle.Len(), "Reported trigger is now idle")
+
+	bufs = dm.ReportNext(dm.triggered.queues[1])
+	assert.Equal([]int{10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20}, bufs, "Expect trace ID 78 to be reported next")
+	assert.Equal(6, dm.triggered.trace_count, "Traces are all triggered")
+	assert.Equal(6, len(dm.triggered.queues[1].fired), "5 Fired triggers")
+	assert.Equal(8, dm.triggered.queues[1].buffer_count, "Buffers are all in queue")
+	assert.Equal(8, dm.triggered.buffer_count, "Buffers are all triggered")
+	assert.Equal(4, dm.triggered.queues[1].idle.Len(), "Reported trigger is now idle")
+
+	dm.AddBuffers(75, []int{29, 30})
+	assert.Equal(6, dm.triggered.trace_count, "Traces are all triggered")
+	assert.Equal(6, len(dm.triggered.queues[1].fired), "5 Fired triggers")
+	assert.Equal(10, dm.triggered.queues[1].buffer_count, "Buffers are all in queue")
+	assert.Equal(10, dm.triggered.buffer_count, "Buffers are all triggered")
+	assert.Equal(3, dm.triggered.queues[1].idle.Len(), "Reported trigger is no longer idle")
+
+	bufs = dm.ReportNext(dm.triggered.queues[1])
+	assert.Equal([]int{29, 30}, bufs, "Expect trace ID 75 to be reported next")
+	assert.Equal(6, dm.triggered.trace_count, "Traces are all triggered")
+	assert.Equal(6, len(dm.triggered.queues[1].fired), "5 Fired triggers")
+	assert.Equal(8, dm.triggered.queues[1].buffer_count, "Buffers are all in queue")
+	assert.Equal(8, dm.triggered.buffer_count, "Buffers are all triggered")
+	assert.Equal(4, dm.triggered.queues[1].idle.Len(), "Reported trigger is now idle")
+
+	dm.AddBuffers(70, []int{31, 32, 33})
+	dm.Trigger(1, uint64(70), []uint64{uint64(70)})
+	bufs = dm.ReportNext(dm.triggered.queues[1])
+	assert.Equal([]int{31, 32, 33}, bufs, "Expect trace ID 70 to be reported next")
+	assert.Equal(7, dm.triggered.trace_count, "Traces are all triggered")
+	assert.Equal(7, len(dm.triggered.queues[1].fired), "5 Fired triggers")
+	assert.Equal(5, dm.triggered.queues[1].idle.Len(), "Reported trigger is now idle")
+}
+
 func TestDataManagerEvictIdleTriggers(t *testing.T) {
 	assert := assert.New(t)
 	assert.Equal(1, 1, "hello world")

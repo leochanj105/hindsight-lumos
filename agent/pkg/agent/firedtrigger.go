@@ -50,6 +50,7 @@ type firedtriggerstate interface {
 	buffersAdded(f *FiredTrigger) firedtriggerstate
 	getBuffersForReport(dm *DataManager, f *FiredTrigger) (firedtriggerstate, []int)
 	evictTrigger(dm *DataManager, f *FiredTrigger) (firedtriggerstate, []int)
+	checkTimeout(dm *DataManager, f *FiredTrigger, before time.Time) (firedtriggerstate, bool)
 }
 
 /*
@@ -81,6 +82,16 @@ func (f *FiredTrigger) Evict(dm *DataManager) []int {
 	var buffers []int
 	f.state, buffers = f.state.evictTrigger(dm, f)
 	return buffers
+}
+
+/*
+Evicts an idle trigger if it was last modified before the specified time.
+Returns true if timed out.
+*/
+func (f *FiredTrigger) CheckTimeout(dm *DataManager, before time.Time) bool {
+	var timedout bool
+	f.state, timedout = f.state.checkTimeout(dm, f, before)
+	return timedout
 }
 
 /*
@@ -158,6 +169,23 @@ func (it idleTrigger) evictTrigger(dm *DataManager, f *FiredTrigger) (firedtrigg
 	return nil, nil
 }
 
+func (it idleTrigger) checkTimeout(dm *DataManager, f *FiredTrigger, before time.Time) (firedtriggerstate, bool) {
+	if it.last_modified.After(before) {
+		return it, false // Hasn't timed out yet
+	}
+
+	// Unhook from all traces
+	for _, t := range f.traces {
+		t.RemoveTrigger(dm, f) // Shouldn't return any buffers
+	}
+
+	// Delete the fired trigger
+	f.queue.idle.Remove(it.tq_lru_element)
+	delete(f.queue.fired, f.id.base_trace_id)
+
+	return nil, true
+}
+
 /*
 A trigger transitions to reporting when one or more of its traces
 has data to be reported.  A reportingTrigger may remain in this state
@@ -208,4 +236,8 @@ func (rt reportingTrigger) evictTrigger(dm *DataManager, f *FiredTrigger) (fired
 	delete(f.queue.fired, f.id.base_trace_id)
 
 	return nil, buffers
+}
+
+func (rt reportingTrigger) checkTimeout(dm *DataManager, f *FiredTrigger, before time.Time) (firedtriggerstate, bool) {
+	return rt, false // Not allowed to time out reportingTriggers
 }

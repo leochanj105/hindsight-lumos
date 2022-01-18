@@ -178,7 +178,16 @@ func (dm *DataManager) ReportNext(queue *TriggerQueue) []int {
 }
 
 /* Evict triggers that have been idle since before the specified time.
-Since they are idle, this should not return any buffers */
-func (dm *DataManager) EvictIdleTriggers(ft *FiredTrigger, expiration time.Duration) {
-	// TODO
+Since they are idle, this should not return any buffers; instead returns the number
+of idle triggers that were evicted (used only for testing) */
+func (dm *DataManager) EvictIdleTriggersFromQueue(queue *TriggerQueue, before time.Time) int {
+	eviction_count := 0
+	for queue.idle.Len() > 0 {
+		oldest := queue.idle.Back().Value.(*FiredTrigger)
+		if !oldest.CheckTimeout(dm, before) {
+			break
+		}
+		eviction_count += 1
+	}
+	return eviction_count
 }
