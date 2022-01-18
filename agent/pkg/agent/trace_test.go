@@ -489,6 +489,36 @@ func TestMultipleTriggers2(t *testing.T) {
 	assert.Equal(0, dm.triggered.buffer_count, "No buffers are triggered")
 }
 
+func TestDataManagerEvictionToTargetCapacity(t *testing.T) {
+	assert := assert.New(t)
+
+	dm := InitDataManager()
+
+	for i := 0; i < 1000; i++ {
+		dm.AddBuffers(uint64(i), []int{i})
+		dm.Trigger(1, uint64(i), []uint64{uint64(i)})
+	}
+
+	assert.Equal(1000, dm.triggered.trace_count, "1000 triggered traces")
+	assert.Equal(1000, dm.triggered.buffer_count, "1000 triggered buffers")
+
+	for i := 0; i < 10; i++ {
+		bufs := dm.ReportNext(dm.triggered.queues[1])
+		assert.Equal([]int{i}, bufs, fmt.Sprintf("Report trace %d", i))
+	}
+
+	evicted := dm.EvictQueueToCapacity(dm.triggered.queues[1], 900)
+	assert.Equal(90, len(evicted), "Evicted 90 buffers")
+
+	evicted = dm.EvictQueueToCapacity(dm.triggered.queues[1], 801)
+	assert.Equal(99, len(evicted), "Evicted 99 buffers")
+
+	evicted = dm.EvictQueueToCapacity(dm.triggered.queues[1], 800)
+	assert.Equal(8, len(evicted), "Evicted 8 buffers")
+	assert.Equal(793, dm.triggered.buffer_count, "792 buffers remain")
+
+}
+
 func TestDataManagerEvictionPriority(t *testing.T) {
 	assert := assert.New(t)
 

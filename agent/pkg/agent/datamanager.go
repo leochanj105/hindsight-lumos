@@ -170,6 +170,36 @@ func (dm *DataManager) EvictNext(queue *TriggerQueue) []int {
 	return trigger.Evict(dm)
 }
 
+/* Evicts triggers from the specified queue until the total number of triggered buffers is
+reduced below the specified target_capacity */
+func (dm *DataManager) EvictQueueToCapacity(queue *TriggerQueue, target_capacity int) []int {
+	if dm.triggered.buffer_count <= target_capacity || target_capacity < 0 {
+		return nil
+	}
+
+	/*
+		We evict in batches for efficiency rather than one at a time; here
+		calculate the number to actually evict, rounding up
+	*/
+	num_to_evict := dm.triggered.buffer_count - target_capacity
+	min_to_evict := target_capacity / 100
+	if num_to_evict < min_to_evict {
+		num_to_evict = min_to_evict
+	}
+
+	/*
+		Do the eviction; it's possible this can completely drain a queue without
+		reaching the target_capacity, which is OK
+	*/
+	var evicted []int
+	for len(evicted) < num_to_evict && queue.reporting.Size() > 0 {
+		id := queue.reporting.PopNearMax()
+		trigger := queue.fired[id]
+		evicted = append(evicted, trigger.Evict(dm)...)
+	}
+	return evicted
+}
+
 /* Pops one fired trigger from the specified queue, and returns buffers to be reported and freed */
 func (dm *DataManager) ReportNext(queue *TriggerQueue) []int {
 	id := queue.reporting.PopMin()
