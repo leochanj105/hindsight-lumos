@@ -34,7 +34,7 @@ type BreadcrumbBatch map[uint64][]string
 
 /* Go style API that has some goroutines and puts stuff into channels */
 type GoAgentAPI struct {
-	agent *AgentAPI
+	agent AgentAPI
 
 	Available   chan []int           // Channel for re-enqueueing buffers to shm available queue
 	Complete    chan CompleteBatch   // Channel for receiving completed buffers from shm
@@ -59,25 +59,32 @@ type Breadcrumb struct {
 
 func InitAgentAPI(fname string) *AgentAPI {
 	var agent AgentAPI
-	agent.c_api = C.hindsight_agentapi_init(C.CString(fname))
+	agent.Init(fname)
+	return &agent
+}
 
+func (agent *AgentAPI) Init(fname string) {
+	agent.c_api = C.hindsight_agentapi_init(C.CString(fname))
 	fmt.Println("Initialize buffers: done")
 	fmt.Println("Queue states:")
 	fmt.Print("  Available ")
 	C.queue_print(&agent.c_api.mgr.available)
 	fmt.Print("  Complete ")
 	C.queue_print(&agent.c_api.mgr.complete)
-	return &agent
 }
 
 func InitGoAgentAPI(fname string) *GoAgentAPI {
 	var api GoAgentAPI
-	api.agent = InitAgentAPI(fname)
+	api.Init(fname)
+	return &api
+}
+
+func (api *GoAgentAPI) Init(fname string) {
+	api.agent.Init(fname)
 	api.Available = make(chan []int, 100000)
 	api.Complete = make(chan CompleteBatch, 100000)
 	api.Triggers = make(chan []Trigger, 100000)
 	api.Breadcrumbs = make(chan BreadcrumbBatch, 100000)
-	return &api
 }
 
 func (api *GoAgentAPI) Capacity() int {

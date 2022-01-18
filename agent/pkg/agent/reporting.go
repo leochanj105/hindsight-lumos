@@ -28,7 +28,11 @@ type Reporting struct {
 
 func InitReporting(api *memory.GoAgentAPI, rate_limit_mb float64) *Reporting {
 	var r Reporting
+	r.Init(api, rate_limit_mb)
+	return &r
+}
 
+func (r *Reporting) Init(api *memory.GoAgentAPI, rate_limit_mb float64) {
 	r.api = api
 	// r.collector set after run
 	r.queue = make(chan *TraceData, 100)       // 100 somewhat arbitrary
@@ -39,8 +43,6 @@ func InitReporting(api *memory.GoAgentAPI, rate_limit_mb float64) *Reporting {
 	if r.rate_limit != 0 {
 		r.bucket = ratelimit.NewBucketWithRate(r.rate_limit, int64(r.rate_limit))
 	}
-
-	return &r
 }
 
 /* Reports trace data to the collector */

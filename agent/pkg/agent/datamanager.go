@@ -34,6 +34,11 @@ type TriggeredData struct {
 /* Called upon agent startup */
 func InitDataManager() *DataManager {
 	var dm DataManager
+	dm.Init()
+	return &dm
+}
+
+func (dm *DataManager) Init() {
 	dm.now = time.Now()
 	dm.traces = make(map[uint64]*Trace)
 
@@ -42,8 +47,6 @@ func InitDataManager() *DataManager {
 
 	dm.untriggered.lru = list.New()
 	dm.untriggered.buffer_count = 0
-
-	return &dm
 }
 
 /*
