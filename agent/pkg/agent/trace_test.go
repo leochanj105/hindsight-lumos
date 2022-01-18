@@ -1,8 +1,10 @@
 package agent
 
 import (
+	"fmt"
 	"math/rand"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -487,7 +489,29 @@ func TestMultipleTriggers2(t *testing.T) {
 	assert.Equal(0, dm.triggered.buffer_count, "No buffers are triggered")
 }
 
-func TestDataManagerEvictReportingPriority(t *testing.T) {
+func TestDataManagerEvictionPriority(t *testing.T) {
+	assert := assert.New(t)
+
+	dm := InitDataManager()
+
+	for i := 0; i < 1000; i++ {
+		dm.AddBuffers(uint64(i), []int{i})
+		dm.Trigger(1, uint64(i), []uint64{uint64(i)})
+	}
+
+	assert.Equal(1000, dm.triggered.trace_count, "1000 triggered traces")
+	assert.Equal(1000, dm.triggered.buffer_count, "1000 triggered buffers")
+
+	for i := 0; i < 400; i++ {
+		bufs := dm.ReportNext(dm.triggered.queues[1])
+		assert.Equal([]int{i}, bufs, fmt.Sprintf("Report trace %d", i))
+
+		evicted := dm.EvictNext(dm.triggered.queues[1])
+		assert.Greater(evicted[0], 500, "Evict a trace with ID > 500")
+	}
+}
+
+func TestDataManagerReportingPriority(t *testing.T) {
 	assert := assert.New(t)
 
 	dm := InitDataManager()
@@ -582,6 +606,56 @@ func TestDataManagerEvictReportingPriority(t *testing.T) {
 func TestDataManagerEvictIdleTriggers(t *testing.T) {
 	assert := assert.New(t)
 	assert.Equal(1, 1, "hello world")
+
+	dm := InitDataManager()
+
+	for i := 0; i < 10; i++ {
+		dm.AddBuffers(uint64(i), []int{i})
+		dm.Trigger(1, uint64(i), []uint64{uint64(i)})
+	}
+
+	assert.Equal(10, dm.triggered.trace_count, "Traces are all triggered")
+	assert.Equal(10, dm.triggered.buffer_count, "Buffers are all triggered")
+	assert.Equal(10, len(dm.triggered.queues[1].fired), "10 triggers")
+
+	for i := 0; i < 5; i++ {
+		bufs := dm.ReportNext(dm.triggered.queues[1])
+		assert.Equal([]int{i}, bufs, fmt.Sprintf("Trace %d was reported", i))
+	}
+
+	assert.Equal(5, dm.triggered.queues[1].idle.Len(), "5 idle triggers")
+	assert.Equal(5, dm.triggered.buffer_count, "5 Buffers are triggered")
+	assert.Equal(10, len(dm.triggered.queues[1].fired), "10 triggers")
+
+	dm.EvictIdleTriggersFromQueue(dm.triggered.queues[1], time.Now().Add(time.Duration(-1)*time.Hour))
+	assert.Equal(5, dm.triggered.queues[1].idle.Len(), "5 idle triggers still, eviction time hasn't been reached")
+	assert.Equal(5, dm.triggered.buffer_count, "5 Buffers are triggered")
+	assert.Equal(10, len(dm.triggered.queues[1].fired), "10 triggers")
+
+	dm.EvictIdleTriggersFromQueue(dm.triggered.queues[1], time.Now().Add(time.Duration(1)*time.Hour))
+	assert.Equal(0, dm.triggered.queues[1].idle.Len(), "No idle triggers remain")
+	assert.Equal(5, dm.triggered.buffer_count, "5 Buffers are triggered")
+	assert.Equal(5, len(dm.triggered.queues[1].fired), "5 triggers")
+
+	for i := 5; i < 10; i++ {
+		bufs := dm.ReportNext(dm.triggered.queues[1])
+		assert.Equal([]int{i}, bufs, fmt.Sprintf("Trace %d was reported", i))
+	}
+
+	assert.Equal(5, dm.triggered.queues[1].idle.Len(), "5 idle triggers")
+	assert.Equal(0, dm.triggered.buffer_count, "0 Buffers are triggered")
+	assert.Equal(5, len(dm.triggered.queues[1].fired), "5 triggers")
+
+	dm.EvictIdleTriggersFromQueue(dm.triggered.queues[1], time.Now().Add(time.Duration(-1)*time.Hour))
+	assert.Equal(5, dm.triggered.queues[1].idle.Len(), "5 idle triggers still, eviction time hasn't been reached")
+	assert.Equal(0, dm.triggered.buffer_count, "0 Buffers are triggered")
+	assert.Equal(5, len(dm.triggered.queues[1].fired), "5 triggers")
+
+	dm.EvictIdleTriggersFromQueue(dm.triggered.queues[1], time.Now().Add(time.Duration(1)*time.Hour))
+	assert.Equal(0, dm.triggered.queues[1].idle.Len(), "No idle triggers remain")
+	assert.Equal(0, dm.triggered.buffer_count, "0 Buffers are triggered")
+	assert.Equal(0, len(dm.triggered.queues[1].fired), "0 triggers")
+
 }
 
 func TestDataManagerEvictUntriggeredLRU(t *testing.T) {
