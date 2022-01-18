@@ -1,7 +1,6 @@
 package agent
 
 import (
-	"fmt"
 	"math/rand"
 	"testing"
 
@@ -486,6 +485,77 @@ func TestMultipleTriggers2(t *testing.T) {
 	assert.Equal(0, q[3].reporting.Size(), "No trigger to report in third queue")
 	assert.Equal(0, dm.triggered.trace_count, "No traces are triggered")
 	assert.Equal(0, dm.triggered.buffer_count, "No buffers are triggered")
+}
 
-	fmt.Println(dm)
+func TestDataManagerEvictIdleTriggers(t *testing.T) {
+	assert := assert.New(t)
+	assert.Equal(1, 1, "hello world")
+}
+
+func TestDataManagerEvictUntriggeredLRU(t *testing.T) {
+	assert := assert.New(t)
+
+	dm := InitDataManager()
+
+	/*
+		First, add a trace, and check it gets inserted correctly
+		with the correct buffers and correct counts
+	*/
+	dm.AddBuffers(75, []int{1, 2, 3, 4, 5})
+	dm.AddBuffers(76, []int{6})
+	dm.AddBuffers(77, []int{7, 8, 9})
+	dm.AddBuffers(78, []int{10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20})
+	dm.AddBuffers(79, []int{21, 22, 23})
+
+	assert.Equal(dm.trace_count, 5, "Trace count")
+	assert.Equal(dm.buffer_count, 23, "Buffer count")
+	assert.Equal(dm.untriggered.trace_count, 5, "Untriggered trace count")
+	assert.Equal(dm.untriggered.buffer_count, 23, "Untriggered buffer count")
+	assert.Equal(dm.triggered.trace_count, 0, "Triggered trace count")
+	assert.Equal(dm.triggered.buffer_count, 0, "Triggered buffer count")
+
+	dm.EvictToCapacity(100)
+	assert.Equal(dm.trace_count, 5, "Trace count")
+	assert.Equal(dm.buffer_count, 23, "Buffer count")
+
+	dm.EvictToCapacity(20)
+	assert.Equal(dm.trace_count, 4, "Trace count")
+	assert.Equal(dm.buffer_count, 18, "Buffer count")
+
+	dm.EvictToCapacity(18)
+	assert.Equal(dm.trace_count, 4, "Trace count")
+	assert.Equal(dm.buffer_count, 18, "Buffer count")
+
+	dm.EvictToCapacity(15)
+	assert.Equal(dm.trace_count, 2, "Trace count")
+	assert.Equal(dm.buffer_count, 14, "Buffer count")
+
+	dm.EvictToCapacity(2)
+	assert.Equal(dm.trace_count, 0, "Trace count")
+	assert.Equal(dm.buffer_count, 0, "Buffer count")
+
+	// Populate dm with 50005 buffers
+	for i := 0; i <= 10000; i++ {
+		dm.AddBuffers(uint64(i), []int{i, i + 1, i + 2, i + 3, i + 4})
+	}
+	assert.Equal(10001, dm.trace_count, "Trace count")
+	assert.Equal(50005, dm.buffer_count, "Buffer count")
+
+	/* Test eviction occurs in batches of size 0.01 * capacity.
+	This should evict 500 buffers / 100 traces */
+	evicted := dm.EvictToCapacity(50000)
+	assert.Equal(500, len(evicted), "Evicting in batches")
+	assert.Equal(9901, dm.trace_count, "Trace count")
+	assert.Equal(49505, dm.buffer_count, "Buffer count")
+
+	evicted = dm.EvictToCapacity(1000000)
+	assert.Equal(0, len(evicted), "Evicted nothing")
+	assert.Equal(9901, dm.trace_count, "Trace count")
+	assert.Equal(49505, dm.buffer_count, "Buffer count")
+
+	evicted = dm.EvictToCapacity(0)
+	assert.Equal(49505, len(evicted), "Evicted everything")
+	assert.Equal(0, dm.trace_count, "Trace count")
+	assert.Equal(0, dm.buffer_count, "Buffer count")
+
 }

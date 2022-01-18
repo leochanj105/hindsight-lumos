@@ -80,7 +80,7 @@ func (dm *DataManager) Trigger(queue_id int, trigger_id uint64, trace_ids []uint
 	return breadcrumbs
 }
 
-/* Evict an untriggered trace; returns its buffers */
+/* Evict the LRU untriggered trace; returns its buffers */
 func (dm *DataManager) Evict() []int {
 	if dm.untriggered.trace_count == 0 {
 		return nil
@@ -88,6 +88,34 @@ func (dm *DataManager) Evict() []int {
 
 	trace := dm.untriggered.lru.Back().Value.(*Trace)
 	return trace.TakeBuffers(dm)
+}
+
+/* Evicts multiple LRU untriggered traces to reach the target number of buffers.
+Returns the evicted buffers to be freed */
+func (dm *DataManager) EvictToCapacity(target_capacity int) []int {
+	if dm.buffer_count <= target_capacity || target_capacity < 0 {
+		return nil
+	}
+
+	/*
+		We evict in batches for efficiency rather than one at a time; here
+		calculate the number to actually evict, rounding up
+	*/
+	num_to_evict := dm.buffer_count - target_capacity
+	min_to_evict := target_capacity / 100
+	if num_to_evict < min_to_evict {
+		num_to_evict = min_to_evict
+	}
+
+	/*
+		Do the eviction
+	*/
+	var evicted []int
+	for len(evicted) < num_to_evict && dm.untriggered.lru.Len() > 0 {
+		trace := dm.untriggered.lru.Back().Value.(*Trace)
+		evicted = append(evicted, trace.TakeBuffers(dm)...)
+	}
+	return evicted
 }
 
 func (dm *DataManager) getOrCreateTrace(trace_id uint64) *Trace {
@@ -106,7 +134,7 @@ TODO: a buggy trigger could fire for random queueIds resulting in too many
 queues being created.  A future fix would be to limit the number of
 allowed empty queues and tear them down on an LRU basis.
 */
-func (dm *DataManager) getOrCreateQueue(queue_id int) *TriggerQueue {
+func (dm *DataManager) GetOrCreateQueue(queue_id int) *TriggerQueue {
 	if queue, ok := dm.triggered.queues[queue_id]; ok {
 		return queue
 	}
@@ -126,7 +154,7 @@ When a trigger fires locally or remotely, we call this method to create
 the metadata related to the trigger
 */
 func (dm *DataManager) getOrCreateTrigger(queue_id int, id uint64) *FiredTrigger {
-	queue := dm.getOrCreateQueue(queue_id)
+	queue := dm.GetOrCreateQueue(queue_id)
 
 	if trigger, ok := queue.fired[id]; ok {
 		return trigger
@@ -135,14 +163,22 @@ func (dm *DataManager) getOrCreateTrigger(queue_id int, id uint64) *FiredTrigger
 	}
 }
 
+/* Evicts one fired trigger from the specified queue, and returns buffers to be freed */
 func (dm *DataManager) EvictNext(queue *TriggerQueue) []int {
 	id := queue.reporting.PopNearMax()
 	trigger := queue.fired[id]
 	return trigger.Evict(dm)
 }
 
+/* Pops one fired trigger from the specified queue, and returns buffers to be reported and freed */
 func (dm *DataManager) ReportNext(queue *TriggerQueue) []int {
 	id := queue.reporting.PopMin()
 	trigger := queue.fired[id]
 	return trigger.GetBuffersForReport(dm)
+}
+
+/* Evict triggers that have been idle since before the specified time.
+Since they are idle, this should not return any buffers */
+func (dm *DataManager) EvictIdleTriggers(ft *FiredTrigger, expiration time.Duration) {
+	// TODO
 }
