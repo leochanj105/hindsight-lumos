@@ -71,16 +71,16 @@ func (tm *TriggerManager) getQueue(queue_id int) *ManagedQueue {
 	return &mq
 }
 
-func (mq *ManagedQueue) TriggerLocal(trigger_id uint64, trace_ids []uint64) map[uint64][]string {
+func (mq *ManagedQueue) TriggerLocal(trigger_id uint64, trace_ids []uint64) (bool, map[uint64][]string) {
 	// Rate limit local triggers
 	if mq.trigger_limiter.Available() < 0 {
-		return nil
+		return false, nil
 	}
 	mq.trigger_limiter.Take(1)
 
 	// Send to DataManager, return any breadcrumbs that must be reported
 	// TODO: we must also report the local trigger
-	return mq.queue.Trigger(trigger_id, trace_ids)
+	return true, mq.queue.Trigger(trigger_id, trace_ids)
 }
 
 func (mq *ManagedQueue) TriggerRemote(trigger_id uint64, trace_ids []uint64) map[uint64][]string {

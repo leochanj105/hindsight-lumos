@@ -21,7 +21,7 @@ type Agent struct {
 	trigger_timeout    time.Duration // How long a trigger remains idle before being deleted
 
 	/* Wraps api.Triggers, possibly adding a delay for experiments */
-	triggers <-chan []memory.Trigger // triggers from shm
+	localtriggers <-chan []memory.Trigger // triggers from shm
 
 	metrics AgentMetrics
 
@@ -49,10 +49,10 @@ func InitAgent2(fname string, trigger_delay uint64, reporting_rate_limit float64
 
 	// This delayed trigger stuff is only used for experiments with intentional trigger delay
 	if trigger_delay == 0 {
-		agent.triggers = agent.api.Triggers
+		agent.localtriggers = agent.api.Triggers
 	} else {
 		proxy := make(chan []memory.Trigger, 10000)
-		agent.triggers = proxy
+		agent.localtriggers = proxy
 		go func() {
 			for {
 				select {
@@ -160,37 +160,53 @@ func (agent *Agent) processBreadcrumbs(batch memory.BreadcrumbBatch) {
 }
 
 func (agent *Agent) processTriggers(batch []memory.Trigger) {
+	triggers_to_forward := make([]memory.Trigger, 0, len(batch))
+	breadcrumbs_to_forward := make(map[uint64][]string)
 	for _, t := range batch {
-
-		// TODO: rate limiting goes here
-
 		/* Add to the DataManager */
 		// TODO: update C struct to send lateral trace ids all in one or have two ids
 		queue := agent.tm.getQueue(t.Queue_id)
-		breadcrumbs := queue.TriggerLocal(t.Base_trace_id, []uint64{t.Trace_id})
+		triggered, breadcrumbs := queue.TriggerLocal(t.Base_trace_id, []uint64{t.Trace_id})
 
-		/* Forward breadcrumbs as needed */
-		// TODO HERE
-		// FORWARD TO COORDINATOR
-		// FORWARD EMPTY BREADCRUMBS TOO, so that coordinator knows trace is seen here
-		// Forward triggers separately from breadcrumbs
-		if len(breadcrumbs) > 0 {
-			fmt.Printf("Forwarding tcrumbs %v\n", breadcrumbs)
+		/* Forward trigger to coordinator */
+		if triggered {
+			triggers_to_forward = append(triggers_to_forward, t)
 		}
+
+		/* Accumulate breadcrumbs to forward */
+		for trace_id, addrs := range breadcrumbs {
+			if len(addrs) > 0 {
+				breadcrumbs_to_forward[trace_id] = append(breadcrumbs_to_forward[trace_id], addrs...)
+			}
+		}
+	}
+
+	/* Forward triggers and breadcrumbs */
+	if len(triggers_to_forward) > 0 {
+		agent.reporting.localtriggers <- triggers_to_forward
+	}
+	if len(breadcrumbs_to_forward) > 0 {
+		agent.reporting.breadcrumbs <- breadcrumbs_to_forward
 	}
 }
 
-func (agent *Agent) processRemoteTriggers(triggers map[TriggerID][]uint64) {
-	for trigger_id, trace_ids := range triggers {
-		queue := agent.tm.getQueue(trigger_id.queue_id)
-		breadcrumbs := queue.TriggerRemote(trigger_id.base_trace_id, trace_ids)
+func (agent *Agent) processRemoteTriggers(batch []memory.Trigger) {
+	breadcrumbs_to_forward := make(map[uint64][]string)
+	for _, t := range batch {
+		queue := agent.tm.getQueue(t.Queue_id)
+		// TODO: update C struct to send lateral trace ids all in one or have two ids
+		breadcrumbs := queue.TriggerRemote(t.Base_trace_id, []uint64{t.Trace_id})
 
-		/* Forward breadcrumbs as needed */
-		// TODO HERE
-		// FORWARD TO COORDINATOR
-		if breadcrumbs != nil {
-			fmt.Printf("Forwarding tcrumbs %v\n", breadcrumbs)
+		/* Accumulate breadcrumbs to forward */
+		for trace_id, addrs := range breadcrumbs {
+			if len(addrs) > 0 {
+				breadcrumbs_to_forward[trace_id] = append(breadcrumbs_to_forward[trace_id], addrs...)
+			}
 		}
+	}
+
+	if breadcrumbs_to_forward != nil {
+		agent.reporting.breadcrumbs <- breadcrumbs_to_forward
 	}
 }
 
@@ -206,7 +222,7 @@ func (agent *Agent) RunProcessingLoop(ctx context.Context) {
 			has only a very short blocking queue, so this will often fail */
 			if len(data_to_report) > 0 {
 				select {
-				case agent.reporting.queue <- data_to_report:
+				case agent.reporting.data <- data_to_report:
 					data_to_report = nil
 				default:
 					break Reporting // Queue of pending reports is full
@@ -224,7 +240,10 @@ func (agent *Agent) RunProcessingLoop(ctx context.Context) {
 		case <-ctx.Done():
 			fmt.Println("Agent goroutine exiting")
 			return
-		case triggers := <-agent.triggers:
+		case triggers := <-agent.reporting.remotetriggers:
+			/* Received some triggers from the coordinator */
+			agent.processRemoteTriggers(triggers)
+		case triggers := <-agent.localtriggers:
 			/* Received some triggers from the shm triggers queue */
 			agent.processTriggers(triggers)
 		case buffers := <-agent.api.Complete:

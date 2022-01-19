@@ -40,6 +40,7 @@ func (i *triggerRateLimitFlags) Set(value string) error {
 	return nil
 }
 
+// TODO different main methods for different cmds..........
 func main() {
 
 	isLC := flag.Bool("lc", false, "Log Collector")
