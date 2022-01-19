@@ -9,7 +9,7 @@ import (
 	"github.com/geraldleizhang/hindsight/agent/pkg/memory"
 )
 
-type Agent2 struct {
+type Agent struct {
 	dm        DataManager       // the trace data
 	api       memory.GoAgentAPI // API to the shared memory
 	reporting Reporting         // Interface to LogCollector
@@ -28,7 +28,7 @@ type Agent2 struct {
 	vc int // Virtual clock used for fair sharing
 }
 
-func InitAgent2(fname string, trigger_delay uint64, reporting_rate_limit float64, trigger_rate_limit float64, per_trigger_rate_limits map[int]float64) *Agent2 {
+func InitAgent2(fname string, trigger_delay uint64, reporting_rate_limit float64, trigger_rate_limit float64, per_trigger_rate_limits map[int]float64) *Agent {
 	fmt.Println("Init agent", fname)
 	fmt.Printf("  Trigger delay %d nanoseconds\n", trigger_delay)
 	fmt.Printf("  Reporting rate limit %.2f MB/s\n", reporting_rate_limit)
@@ -36,7 +36,7 @@ func InitAgent2(fname string, trigger_delay uint64, reporting_rate_limit float64
 		fmt.Printf("    -Trigger %d rate limit %.2f MB/s\n", trigger_id, rate)
 	}
 
-	var agent Agent2
+	var agent Agent
 	agent.dm.Init()
 	agent.api.Init(fname)
 	agent.reporting.Init(&agent.api, reporting_rate_limit)
@@ -78,7 +78,7 @@ func InitAgent2(fname string, trigger_delay uint64, reporting_rate_limit float64
 	* Time out idle triggers
 	Returns any evicted buffers to the available queue
 */
-func (agent *Agent2) maybeEvict() {
+func (agent *Agent) maybeEvict() {
 	// Skip until the cache is full
 	if agent.dm.buffer_count < agent.cache_capacity {
 		return
@@ -105,7 +105,7 @@ func (agent *Agent2) maybeEvict() {
   Process a batch of buffers retrieved from the complete queue.
 	This mainly just sends the buffers to the datamanager
 */
-func (agent *Agent2) processCompletedBuffers(batch memory.CompleteBatch) {
+func (agent *Agent) processCompletedBuffers(batch memory.CompleteBatch) {
 	var freed_buffers []int
 	for trace_id, buffers := range batch {
 		/* Update agent metrics */
@@ -136,7 +136,7 @@ func (agent *Agent2) processCompletedBuffers(batch memory.CompleteBatch) {
   Process a batch of breadcrumbs retrieved from the shm bc queue.
 	This mainly just sends the breadcrumbs to the datamanager
 */
-func (agent *Agent2) processBreadcrumbs(batch memory.BreadcrumbBatch) {
+func (agent *Agent) processBreadcrumbs(batch memory.BreadcrumbBatch) {
 	to_report := make(map[uint64][]string)
 	for trace_id, breadcrumbs := range batch {
 		/* Ignore trace ID 0 */
@@ -159,7 +159,7 @@ func (agent *Agent2) processBreadcrumbs(batch memory.BreadcrumbBatch) {
 	}
 }
 
-func (agent *Agent2) processTriggers(batch []memory.Trigger) {
+func (agent *Agent) processTriggers(batch []memory.Trigger) {
 	for _, t := range batch {
 
 		// TODO: rate limiting goes here
@@ -178,7 +178,7 @@ func (agent *Agent2) processTriggers(batch []memory.Trigger) {
 	}
 }
 
-func (agent *Agent2) processRemoteTriggers(triggers map[TriggerID][]uint64) {
+func (agent *Agent) processRemoteTriggers(triggers map[TriggerID][]uint64) {
 	for trigger_id, trace_ids := range triggers {
 		queue := agent.tm.getQueue(trigger_id.queue_id)
 		breadcrumbs := queue.TriggerRemote(trigger_id.base_trace_id, trace_ids)
@@ -192,7 +192,7 @@ func (agent *Agent2) processRemoteTriggers(triggers map[TriggerID][]uint64) {
 	}
 }
 
-func (agent *Agent2) RunProcessingLoop(ctx context.Context) {
+func (agent *Agent) RunProcessingLoop(ctx context.Context) {
 	fmt.Println("Agent goroutine running")
 	var data_to_report []int
 	for {
@@ -238,7 +238,7 @@ func (agent *Agent2) RunProcessingLoop(ctx context.Context) {
 	}
 }
 
-func (agent *Agent2) Run(ctx context.Context) {
+func (agent *Agent) Run(ctx context.Context) {
 	wg := new(sync.WaitGroup)
 	wg.Add(4)
 	go func() {

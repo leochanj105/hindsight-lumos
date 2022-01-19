@@ -99,7 +99,7 @@ func (s *Stats) Str() string {
 }
 
 /* Calculates agent stats and resets for next iteration */
-func (agent *Agent2) calculateAgentStats(duration_nanos float64, debug bool) Stats {
+func (agent *Agent) calculateAgentStats(duration_nanos float64, debug bool) Stats {
 	/* Get and reset the agent's metrics */
 	metrics := agent.metrics
 	agent.metrics = AgentMetrics{}
@@ -144,7 +144,7 @@ func (agent *Agent2) calculateAgentStats(duration_nanos float64, debug bool) Sta
 	return stats
 }
 
-func (agent *Agent2) calculateQueueStats(duration_nanos float64, queue *ManagedQueue) QueueStats {
+func (agent *Agent) calculateQueueStats(duration_nanos float64, queue *ManagedQueue) QueueStats {
 	/* Get and reset the trigger's metrics */
 	metrics := queue.queue.metrics
 	queue.queue.metrics = TriggerMetrics{}
@@ -203,7 +203,7 @@ func (d *QueueDiagnostics) add(other *QueueDiagnostics) {
 	d.lru_percent += other.lru_percent
 }
 
-func (agent *Agent2) calculateQueueDiagnostics(queue *ManagedQueue) QueueDiagnostics {
+func (agent *Agent) calculateQueueDiagnostics(queue *ManagedQueue) QueueDiagnostics {
 	var d QueueDiagnostics
 	d.buffers = queue.queue.buffer_count
 	d.buffers_percent = 100 * float64(d.buffers) / float64(agent.triggered_capacity)
@@ -213,7 +213,7 @@ func (agent *Agent2) calculateQueueDiagnostics(queue *ManagedQueue) QueueDiagnos
 	return d
 }
 
-func (agent *Agent2) calculateDiagnostics() Diagnostics {
+func (agent *Agent) calculateDiagnostics() Diagnostics {
 	var d Diagnostics
 	d.cache_size = agent.dm.buffer_count
 	d.cache_percent = 100 * float64(d.cache_size) / float64(agent.cache_capacity)
@@ -223,7 +223,7 @@ func (agent *Agent2) calculateDiagnostics() Diagnostics {
 	return d
 }
 
-func (agent *Agent2) printLoop(ctx context.Context) {
+func (agent *Agent) printLoop(ctx context.Context) {
 	print_every := time.Duration(1000 * time.Millisecond)
 	next_print := time.NewTimer(1 * time.Millisecond)
 	var last_print uint64
