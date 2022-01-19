@@ -27,6 +27,8 @@ type breadcrumbs struct {
 }
 
 type Collector struct {
+	datapb.UnimplementedCollectorServer
+
 	// trace_pool keeps all coming trace data with {request_id : {addr: [traces]}}
 	trace_pool       map[int64]map[string][]trace
 	trace_pool_mutex sync.RWMutex

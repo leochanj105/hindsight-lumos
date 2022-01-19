@@ -16,6 +16,8 @@ import (
 )
 
 type Reporting struct {
+	datapb.UnimplementedAgentServer
+
 	api       *memory.GoAgentAPI // API to the shared memory
 	collector datapb.CollectorClient
 	queue     chan []int
