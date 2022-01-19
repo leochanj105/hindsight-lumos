@@ -18,7 +18,7 @@ const _ = grpc.SupportPackageIsVersion7
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type AgentClient interface {
-	RemoteTrigger(ctx context.Context, in *Trigger, opts ...grpc.CallOption) (*TriggerReply, error)
+	RemoteTrigger(ctx context.Context, in *TriggerRequest, opts ...grpc.CallOption) (*TriggerReply, error)
 }
 
 type agentClient struct {
@@ -29,7 +29,7 @@ func NewAgentClient(cc grpc.ClientConnInterface) AgentClient {
 	return &agentClient{cc}
 }
 
-func (c *agentClient) RemoteTrigger(ctx context.Context, in *Trigger, opts ...grpc.CallOption) (*TriggerReply, error) {
+func (c *agentClient) RemoteTrigger(ctx context.Context, in *TriggerRequest, opts ...grpc.CallOption) (*TriggerReply, error) {
 	out := new(TriggerReply)
 	err := c.cc.Invoke(ctx, "/datapb.Agent/RemoteTrigger", in, out, opts...)
 	if err != nil {
@@ -42,7 +42,7 @@ func (c *agentClient) RemoteTrigger(ctx context.Context, in *Trigger, opts ...gr
 // All implementations must embed UnimplementedAgentServer
 // for forward compatibility
 type AgentServer interface {
-	RemoteTrigger(context.Context, *Trigger) (*TriggerReply, error)
+	RemoteTrigger(context.Context, *TriggerRequest) (*TriggerReply, error)
 	mustEmbedUnimplementedAgentServer()
 }
 
@@ -50,7 +50,7 @@ type AgentServer interface {
 type UnimplementedAgentServer struct {
 }
 
-func (UnimplementedAgentServer) RemoteTrigger(context.Context, *Trigger) (*TriggerReply, error) {
+func (UnimplementedAgentServer) RemoteTrigger(context.Context, *TriggerRequest) (*TriggerReply, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method RemoteTrigger not implemented")
 }
 func (UnimplementedAgentServer) mustEmbedUnimplementedAgentServer() {}
@@ -67,7 +67,7 @@ func RegisterAgentServer(s grpc.ServiceRegistrar, srv AgentServer) {
 }
 
 func _Agent_RemoteTrigger_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(Trigger)
+	in := new(TriggerRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
@@ -79,7 +79,7 @@ func _Agent_RemoteTrigger_Handler(srv interface{}, ctx context.Context, dec func
 		FullMethod: "/datapb.Agent/RemoteTrigger",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(AgentServer).RemoteTrigger(ctx, req.(*Trigger))
+		return srv.(AgentServer).RemoteTrigger(ctx, req.(*TriggerRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -104,7 +104,7 @@ var Agent_ServiceDesc = grpc.ServiceDesc{
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type CoordinatorClient interface {
-	LocalTrigger(ctx context.Context, in *Trigger, opts ...grpc.CallOption) (*TriggerReply, error)
+	LocalTrigger(ctx context.Context, in *TriggerRequest, opts ...grpc.CallOption) (*TriggerReply, error)
 	Breadcrumbs(ctx context.Context, in *BreadcrumbsRequest, opts ...grpc.CallOption) (*BreadcrumbsReply, error)
 }
 
@@ -116,7 +116,7 @@ func NewCoordinatorClient(cc grpc.ClientConnInterface) CoordinatorClient {
 	return &coordinatorClient{cc}
 }
 
-func (c *coordinatorClient) LocalTrigger(ctx context.Context, in *Trigger, opts ...grpc.CallOption) (*TriggerReply, error) {
+func (c *coordinatorClient) LocalTrigger(ctx context.Context, in *TriggerRequest, opts ...grpc.CallOption) (*TriggerReply, error) {
 	out := new(TriggerReply)
 	err := c.cc.Invoke(ctx, "/datapb.Coordinator/LocalTrigger", in, out, opts...)
 	if err != nil {
@@ -138,7 +138,7 @@ func (c *coordinatorClient) Breadcrumbs(ctx context.Context, in *BreadcrumbsRequ
 // All implementations must embed UnimplementedCoordinatorServer
 // for forward compatibility
 type CoordinatorServer interface {
-	LocalTrigger(context.Context, *Trigger) (*TriggerReply, error)
+	LocalTrigger(context.Context, *TriggerRequest) (*TriggerReply, error)
 	Breadcrumbs(context.Context, *BreadcrumbsRequest) (*BreadcrumbsReply, error)
 	mustEmbedUnimplementedCoordinatorServer()
 }
@@ -147,7 +147,7 @@ type CoordinatorServer interface {
 type UnimplementedCoordinatorServer struct {
 }
 
-func (UnimplementedCoordinatorServer) LocalTrigger(context.Context, *Trigger) (*TriggerReply, error) {
+func (UnimplementedCoordinatorServer) LocalTrigger(context.Context, *TriggerRequest) (*TriggerReply, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method LocalTrigger not implemented")
 }
 func (UnimplementedCoordinatorServer) Breadcrumbs(context.Context, *BreadcrumbsRequest) (*BreadcrumbsReply, error) {
@@ -167,7 +167,7 @@ func RegisterCoordinatorServer(s grpc.ServiceRegistrar, srv CoordinatorServer) {
 }
 
 func _Coordinator_LocalTrigger_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(Trigger)
+	in := new(TriggerRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
@@ -179,7 +179,7 @@ func _Coordinator_LocalTrigger_Handler(srv interface{}, ctx context.Context, dec
 		FullMethod: "/datapb.Coordinator/LocalTrigger",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(CoordinatorServer).LocalTrigger(ctx, req.(*Trigger))
+		return srv.(CoordinatorServer).LocalTrigger(ctx, req.(*TriggerRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }

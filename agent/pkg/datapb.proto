@@ -5,11 +5,11 @@ option go_package = "/datapb";
 package datapb;
 
 service Agent {
-	rpc RemoteTrigger (Trigger) returns (TriggerReply) {}
+	rpc RemoteTrigger (TriggerRequest) returns (TriggerReply) {}
 }
 
 service Coordinator {
-	rpc LocalTrigger (Trigger) returns (TriggerReply) {}
+	rpc LocalTrigger (TriggerRequest) returns (TriggerReply) {}
 	rpc Breadcrumbs (BreadcrumbsRequest) returns (BreadcrumbsReply) {}
 }
 
@@ -17,6 +17,10 @@ message Trigger {
 	int32 queue_id = 1;
 	fixed64 base_trace_id = 2;
 	repeated fixed64 trace_ids = 3;
+}
+
+message TriggerRequest {
+	repeated Trigger triggers = 1;
 }
 
 message TriggerReply {
