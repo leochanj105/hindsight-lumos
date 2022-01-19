@@ -172,6 +172,8 @@ func (agent *Agent) processTriggers(batch []memory.Trigger) {
 		/* Forward breadcrumbs as needed */
 		// TODO HERE
 		// FORWARD TO COORDINATOR
+		// FORWARD EMPTY BREADCRUMBS TOO, so that coordinator knows trace is seen here
+		// Forward triggers separately from breadcrumbs
 		if len(breadcrumbs) > 0 {
 			fmt.Printf("Forwarding tcrumbs %v\n", breadcrumbs)
 		}

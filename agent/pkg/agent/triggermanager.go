@@ -79,6 +79,7 @@ func (mq *ManagedQueue) TriggerLocal(trigger_id uint64, trace_ids []uint64) map[
 	mq.trigger_limiter.Take(1)
 
 	// Send to DataManager, return any breadcrumbs that must be reported
+	// TODO: we must also report the local trigger
 	return mq.queue.Trigger(trigger_id, trace_ids)
 }
 
