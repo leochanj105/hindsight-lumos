@@ -26,17 +26,20 @@ type ManagedQueue struct {
 	trigger_limiter   *ratelimit.Bucket // Rate limiter for local triggers
 	reporting_limiter *ratelimit.Bucket // Rate limiter for reporting
 	vt                int               // Virtual time used for fair sharing of reporting
-	metrics           TriggerMetrics
 }
 
-func (tm *TriggerManager) Init(dm *DataManager, buffer_size int) {
+func (tm *TriggerManager) Init(dm *DataManager, buffer_size int, trigger_limit float64) {
 	tm.dm = dm
 	tm.queues = make(map[int]*ManagedQueue)
 	tm.vc = 0
 	tm.buffer_size = buffer_size
-	tm.trigger_limit = 10000                     // TODO: not hardcoded, configured per trigger, or adaptive based on eviction rates
+	tm.trigger_limit = trigger_limit             // TODO: not hardcoded, configured per trigger, or adaptive based on eviction rates
 	tm.reporting_limit = 10 * 1024 * 1024 * 1024 // TODO: not hardcoded
-	tm.batch_size = 100
+	tm.batch_size = 1 + (128*1024)/buffer_size
+
+	if tm.trigger_limit == 0 {
+		tm.trigger_limit = 10 * 1024 * 1024 * 1024
+	}
 }
 
 /*

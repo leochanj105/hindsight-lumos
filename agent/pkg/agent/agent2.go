@@ -28,10 +28,10 @@ type Agent2 struct {
 	vc int // Virtual clock used for fair sharing
 }
 
-func InitAgent2(fname string, trigger_delay uint64, rate_limit float64, per_trigger_rate_limits map[int]float64) *Agent2 {
+func InitAgent2(fname string, trigger_delay uint64, reporting_rate_limit float64, trigger_rate_limit float64, per_trigger_rate_limits map[int]float64) *Agent2 {
 	fmt.Println("Init agent", fname)
 	fmt.Printf("  Trigger delay %d nanoseconds\n", trigger_delay)
-	fmt.Printf("  Reporting rate limit %.2f MB/s\n", rate_limit)
+	fmt.Printf("  Reporting rate limit %.2f MB/s\n", reporting_rate_limit)
 	for trigger_id, rate := range per_trigger_rate_limits {
 		fmt.Printf("    -Trigger %d rate limit %.2f MB/s\n", trigger_id, rate)
 	}
@@ -39,8 +39,8 @@ func InitAgent2(fname string, trigger_delay uint64, rate_limit float64, per_trig
 	var agent Agent2
 	agent.dm.Init()
 	agent.api.Init(fname)
-	agent.reporting.Init(&agent.api, rate_limit)
-	agent.tm.Init(&agent.dm, agent.api.BufferSize())
+	agent.reporting.Init(&agent.api, reporting_rate_limit)
+	agent.tm.Init(&agent.dm, agent.api.BufferSize(), trigger_rate_limit)
 	agent.tm.ConfigureRateLimits(per_trigger_rate_limits)
 
 	agent.cache_capacity = (4 * agent.api.Capacity()) / 5 // TODO: not hardcoded

@@ -31,6 +31,7 @@ static struct argp_option options[] = {
   {"headsampling", 'H', "NUM", 0, "The default head-based sampling probability between 0 and 1, default 0.0 (disabled), float"},
   {"retroactive", 'R', "NUM", 0, "Set the percentage of requests that will generate data, by default this is 1.0 (all requests generate data)"},
   {"duration", 'd', "NUM", 0, "Duration in seconds before exiting, default 0. A value of 0 runs forever"},
+  {"sleep", 'S', "NUM", 0, "Sleep time to add, in microseconds, after each trace.  Default 0."},
   {"output",   'o', "FILE", 0, "Output stats to FILE.  Not currently implemented." },
   { 0 }
 };
@@ -55,6 +56,7 @@ struct arguments {
   float head_sampling_probability;
   float retroactive_sampling_percentage;
   uint64_t duration;
+  uint64_t sleep;
   char* output_file;
   char* process_name;
 };
@@ -91,6 +93,9 @@ static error_t parse_opt (int key, char *arg, struct argp_state *state) {
       break;
     case 'd':
       arguments->duration = atoll(arg);
+      break;
+    case 'S':
+      arguments->sleep = atoll(arg);
       break;
     case 'o':
       arguments->output_file = arg;
@@ -196,6 +201,8 @@ void client_thread_main(volatile int *alive,
       }
     }
 
+    bool sleep = arguments->sleep > 0;
+
     int traces = 0;
     int invalid_traces = 0;
     int batchsize = 100;
@@ -250,6 +257,10 @@ void client_thread_main(volatile int *alive,
             sum_begins = 0;
             sum_tracepoints = 0;
             sum_ends = 0;
+        }
+
+        if (sleep) {
+          usleep(arguments->sleep);
         }
     }
     printf("Client ended\n");
