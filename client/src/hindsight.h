@@ -34,9 +34,19 @@ typedef struct HindsightConfig {
     size_t triggers_capacity;
     char* address; // max 32 bytes addr:port string
     int payload;
+
+    /* I don't know what this is used for.  Shouldn't be here - something experiment specific. */
     int sample_rate; // reverse, 100 -> 0.01
-    float retroactive_sampling_percentage; // percentage of requests that we will sample; between 0 to 1; default 1
-    float head_sampling_probability; // probability of automatically triggering for head-based sampling; between 0 to 1; default 0
+
+    /* This parameter controls whether we even bother recording data for all requests.
+    By default this is 1, meaning that every request will generate data.  Setting this
+    to 0 means that no request will generate any data.  Use this to control the 
+    criticalpath overheads of generating trace data in the first place */
+    float retroactive_sampling_percentage;
+
+    /* Sets the probability that we will immediately trigger a trace when it begins.
+    By default this is 0 and head sampling is disabled. */
+    float head_sampling_probability;
 
     uint64_t _retroactive_sampling_threshold; // derived from retroactive_sampling_percentage
     uint64_t _head_sampling_threshold; // derived from head_sampling_probability
@@ -123,6 +133,7 @@ void hindsight_forward_breadcrumb(const char* addr);
 // Fire a trigger.  For now, only report a trigger ID
 void hindsight_trigger(int trigger_id);
 void hindsight_trigger_manual(uint64_t trace_id, int trigger_id);
+void hindsight_trigger_lateral(int trigger_id, uint64_t base_trace_id, uint64_t lateral_trace_id);
 
 uint64_t hindsight_get_traceid();
 char* hindsight_get_local_address();

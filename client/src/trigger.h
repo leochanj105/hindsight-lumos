@@ -15,7 +15,8 @@ typedef struct Triggers {
 // For now, a trigger is just an ID and trace_id
 typedef struct Trigger {
     int trigger_id; // The ID of the trigger that fired
-    uint64_t trace_id; // The trace that fired it
+    uint64_t base_trace_id; // The trace that fired it
+    uint64_t trace_id; // The trace ID to report for this trigger (e.g. lateral trace ID)
 } Trigger;
 
 // name is used for mapping to the appropriate shmem file
@@ -26,7 +27,7 @@ Triggers triggers_init(const char* name, size_t capacity);
 Triggers triggers_init_existing(const char* name);
 
 // For now, we are just sen
-void triggers_fire(Triggers* t, int trigger_id, uint64_t trace_id);
+void triggers_fire(Triggers* t, int trigger_id, uint64_t base_trace_id, uint64_t trace_id);
 
 typedef struct TailCounter {
     int64_t queue[1000]; // An even lazy way is to only keep 100 items

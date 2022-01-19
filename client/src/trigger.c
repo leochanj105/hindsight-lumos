@@ -23,8 +23,8 @@ Triggers triggers_init_existing(const char* name) {
     return t;
 }
 
-void triggers_fire(Triggers* t, int trigger_id, uint64_t trace_id) {
-    Trigger trigger = {trigger_id, trace_id};
+void triggers_fire(Triggers* t, int trigger_id, uint64_t base_trace_id, uint64_t trace_id) {
+    Trigger trigger = {trigger_id, base_trace_id, trace_id};
     queue_put_nonblocking(&t->queue, (char*) &trigger);
 }
 

@@ -166,8 +166,8 @@ func (agent *Agent2) processTriggers(batch []memory.Trigger) {
 
 		/* Add to the DataManager */
 		// TODO: update C struct to send lateral trace ids all in one or have two ids
-		queue := agent.tm.getQueue(t.Trigger_id)
-		breadcrumbs := queue.TriggerLocal(t.Request_id, []uint64{t.Request_id})
+		queue := agent.tm.getQueue(t.Queue_id)
+		breadcrumbs := queue.TriggerLocal(t.Base_trace_id, []uint64{t.Trace_id})
 
 		/* Forward breadcrumbs as needed */
 		// TODO HERE

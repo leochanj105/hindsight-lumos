@@ -48,8 +48,9 @@ type CompleteBuffer struct {
 }
 
 type Trigger struct {
-	Request_id uint64
-	Trigger_id int
+	Queue_id      int
+	Base_trace_id uint64
+	Trace_id      uint64
 }
 
 type Breadcrumb struct {
@@ -383,8 +384,9 @@ func (agent *AgentAPI) GetTriggers() []Trigger {
 	triggers := make([]Trigger, count)
 	for i := 0; i < count; i++ {
 		trigger := &triggers[i]
-		trigger.Request_id = uint64(tb.triggers[i].trace_id)
-		trigger.Trigger_id = int(tb.triggers[i].trigger_id)
+		trigger.Queue_id = int(tb.triggers[i].trigger_id)
+		trigger.Base_trace_id = uint64(tb.triggers[i].base_trace_id)
+		trigger.Trace_id = uint64(tb.triggers[i].trace_id)
 	}
 
 	return triggers

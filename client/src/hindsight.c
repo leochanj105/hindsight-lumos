@@ -63,7 +63,7 @@ HindsightConfig hindsight_load_config_file(const char* fname) {
 
     // Read the config
     char* line = NULL;
-    ssize_t read;
+    size_t read;
     size_t len = 0;
     while((read = getline(&line, &len, config_file)) != -1) {
         char* temp = strchr(line, '\n');
@@ -218,11 +218,16 @@ void hindsight_forward_breadcrumb(const char* addr) {
 }
 
 void hindsight_trigger(int trigger_id) {
-    triggers_fire(&hindsight.triggers, trigger_id, hindsight_tls.header.trace_id);
+    uint64_t trace_id = hindsight_tls.header.trace_id;
+    triggers_fire(&hindsight.triggers, trigger_id, trace_id, trace_id);
 }
 
 void hindsight_trigger_manual(uint64_t trace_id, int trigger_id) {
-    triggers_fire(&hindsight.triggers, trigger_id, trace_id);   
+    triggers_fire(&hindsight.triggers, trigger_id, trace_id, trace_id);   
+}
+
+void hindsight_trigger_lateral(int trigger_id, uint64_t base_trace_id, uint64_t lateral_trace_id) {
+    triggers_fire(&hindsight.triggers, trigger_id, base_trace_id, lateral_trace_id);  
 }
 
 uint64_t hindsight_get_traceid() {
@@ -280,7 +285,7 @@ void hindsight_inject() {
 void hindsight_tail(int64_t latency, int trigger_id) {
     printf("[HINDSIGHT TEST] Req: %ld Latency: %ld\n", hindsight_tls.header.trace_id, latency);
     if (tail_latency(hindsight_tls.header.trace_id, latency)){
-        triggers_fire(&hindsight.triggers, trigger_id, hindsight_tls.header.trace_id);
+        hindsight_trigger(trigger_id);
     }
     return;
 }
@@ -290,7 +295,7 @@ bool hindsight_exception(int trigger_id) {
     if(exception_throw(hindsight_tls.header.trace_id)) {
         if (exception_rate_limit() == false) return true;
         printf("[HINDSIGHT TEST] Req: %ld Sampled\n", hindsight_tls.header.trace_id);
-        triggers_fire(&hindsight.triggers, trigger_id, hindsight_tls.header.trace_id);
+        hindsight_trigger(trigger_id);
     } else {
         return false;
     }
@@ -302,7 +307,7 @@ void hindsight_trigger_sampling_tail(int64_t latency, int trigger_id) {
     if(hindsight_tls.header.trace_id % 10000000 > 10000000 / hindsight.config.sample_rate) return;
     printf("[SAMPLING TEST] Req: %ld Sampled\n", hindsight_tls.header.trace_id);
     if (tail_latency(hindsight_tls.header.trace_id, latency)) {
-        triggers_fire(&hindsight.triggers, trigger_id, hindsight_tls.header.trace_id);
+        hindsight_trigger(trigger_id);
     }
 
     return;
@@ -313,7 +318,7 @@ bool hindsight_trigger_sampling_exception(int trigger_id) {
     if(exception_throw(hindsight_tls.header.trace_id)) {
         if(hindsight_tls.header.trace_id % 10000000 > 10000000 / hindsight.config.sample_rate) return true;
         printf("[SAMPLING TEST] Req: %ld Sampled\n", hindsight_tls.header.trace_id);
-        triggers_fire(&hindsight.triggers, trigger_id, hindsight_tls.header.trace_id);       
+        hindsight_trigger(trigger_id);     
     } else {
         return false;
     }

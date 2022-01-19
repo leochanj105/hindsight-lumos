@@ -22,16 +22,16 @@ static char doc[] = "Simple hindsight benchmarking program.  PROCNAME is require
 static char args_doc[] = "PROCNAME";
 
 static struct argp_option options[] = {
-  {"threads",  't', "NUM",  0,  "Number of benchmark threads to run" },
-  {"buffer_size",  's', "NUM",  0,  "Buffer size in bytes" },
-  {"buffer_count",  'c', "NUM",  0,  "Number of buffers in pool" },
-  {"payload_size",  'w', "NUM",  0,  "Payload size written by each tracepoint" },
-  {"tracepoints", 'n', "NUM", 0, "Number of tracepoints per trace"},
-  {"trigger", 'p', "NUM", 0, "Adds a trigger with probability p; can be provided multiple times."},
-  {"headsampling", 'H', "NUM", 0, "Head-based sampling probability between 0 and 1, default 0, float"},
-  {"retroactive", 'R', "NUM", 0, "Retroactive sampling percentage between 0 and 1, default 1, float"},
-  {"duration", 'd', "NUM", 0, "Duration in seconds before exiting. 0 to run forever"},
-  {"output",   'o', "FILE", 0, "Output stats to FILE" },
+  {"threads",  't', "NUM",  0,  "Number of benchmark threads to run, int, default 1" },
+  {"buffer_size",  's', "NUM",  0,  "Buffer size in bytes, int, default 32kB" },
+  {"buffer_count",  'c', "NUM",  0,  "Number of buffers in pool, int, default 10000 (320MB pool)" },
+  {"payload_size",  'w', "NUM",  0,  "Payload size written by each tracepoint, int, default 400 bytes per tracepoint" },
+  {"tracepoints", 'n', "NUM", 0, "Number of tracepoints per trace, int, default 100 tracepoints (40kB per trace)"},
+  {"trigger", 'p', "NUM", 0, "Adds a trigger with probability p, float.  This can be provided multiple times.  For example '-p 0.5 -p 0.1' will create two triggers -- trigger 10 that fires 50\% of the time and trigger 11 that fires 10\% of the time.."},
+  {"headsampling", 'H', "NUM", 0, "The default head-based sampling probability between 0 and 1, default 0.0 (disabled), float"},
+  {"retroactive", 'R', "NUM", 0, "Set the percentage of requests that will generate data, by default this is 1.0 (all requests generate data)"},
+  {"duration", 'd', "NUM", 0, "Duration in seconds before exiting, default 0. A value of 0 runs forever"},
+  {"output",   'o', "FILE", 0, "Output stats to FILE.  Not currently implemented." },
   { 0 }
 };
 
@@ -411,8 +411,8 @@ int main (int argc, char **argv) {
 
   /* Default values. */
   arguments.num_threads = 1;
-  arguments.buffer_size = 4096;
-  arguments.buffer_count = 25000; // Default 100MB pool
+  arguments.buffer_size = 32768;
+  arguments.buffer_count = 10000; // Default 100MB pool
   arguments.payload_size = 400;
   arguments.tracepoints_per_request = 100;
   arguments.trigger_count = 0;

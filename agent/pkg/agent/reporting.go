@@ -100,7 +100,7 @@ func (r *Reporting) Request(ctx context.Context, in *datapb.RequestID) (*datapb.
 
 	for _, request_id := range request_ids {
 		// TODO  memory.Trigger should categorize as locally or remote
-		triggers = append(triggers, memory.Trigger{uint64(request_id), 2})
+		triggers = append(triggers, memory.Trigger{2, uint64(request_id), uint64(request_id)})
 	}
 
 	if len(triggers) > 0 {
