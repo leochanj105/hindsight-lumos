@@ -18,7 +18,7 @@ const _ = grpc.SupportPackageIsVersion7
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type AgentClient interface {
-	Request(ctx context.Context, in *RequestID, opts ...grpc.CallOption) (*CallRet, error)
+	RemoteTrigger(ctx context.Context, in *Trigger, opts ...grpc.CallOption) (*TriggerReply, error)
 }
 
 type agentClient struct {
@@ -29,9 +29,9 @@ func NewAgentClient(cc grpc.ClientConnInterface) AgentClient {
 	return &agentClient{cc}
 }
 
-func (c *agentClient) Request(ctx context.Context, in *RequestID, opts ...grpc.CallOption) (*CallRet, error) {
-	out := new(CallRet)
-	err := c.cc.Invoke(ctx, "/datapb.Agent/Request", in, out, opts...)
+func (c *agentClient) RemoteTrigger(ctx context.Context, in *Trigger, opts ...grpc.CallOption) (*TriggerReply, error) {
+	out := new(TriggerReply)
+	err := c.cc.Invoke(ctx, "/datapb.Agent/RemoteTrigger", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -42,7 +42,7 @@ func (c *agentClient) Request(ctx context.Context, in *RequestID, opts ...grpc.C
 // All implementations must embed UnimplementedAgentServer
 // for forward compatibility
 type AgentServer interface {
-	Request(context.Context, *RequestID) (*CallRet, error)
+	RemoteTrigger(context.Context, *Trigger) (*TriggerReply, error)
 	mustEmbedUnimplementedAgentServer()
 }
 
@@ -50,8 +50,8 @@ type AgentServer interface {
 type UnimplementedAgentServer struct {
 }
 
-func (UnimplementedAgentServer) Request(context.Context, *RequestID) (*CallRet, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method Request not implemented")
+func (UnimplementedAgentServer) RemoteTrigger(context.Context, *Trigger) (*TriggerReply, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method RemoteTrigger not implemented")
 }
 func (UnimplementedAgentServer) mustEmbedUnimplementedAgentServer() {}
 
@@ -66,20 +66,20 @@ func RegisterAgentServer(s grpc.ServiceRegistrar, srv AgentServer) {
 	s.RegisterService(&Agent_ServiceDesc, srv)
 }
 
-func _Agent_Request_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(RequestID)
+func _Agent_RemoteTrigger_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(Trigger)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(AgentServer).Request(ctx, in)
+		return srv.(AgentServer).RemoteTrigger(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: "/datapb.Agent/Request",
+		FullMethod: "/datapb.Agent/RemoteTrigger",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(AgentServer).Request(ctx, req.(*RequestID))
+		return srv.(AgentServer).RemoteTrigger(ctx, req.(*Trigger))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -92,94 +92,130 @@ var Agent_ServiceDesc = grpc.ServiceDesc{
 	HandlerType: (*AgentServer)(nil),
 	Methods: []grpc.MethodDesc{
 		{
-			MethodName: "Request",
-			Handler:    _Agent_Request_Handler,
+			MethodName: "RemoteTrigger",
+			Handler:    _Agent_RemoteTrigger_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
 	Metadata: "datapb.proto",
 }
 
-// CollectorClient is the client API for Collector service.
+// CoordinatorClient is the client API for Coordinator service.
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
-type CollectorClient interface {
-	Report(ctx context.Context, in *Trace, opts ...grpc.CallOption) (*CallRet, error)
+type CoordinatorClient interface {
+	LocalTrigger(ctx context.Context, in *Trigger, opts ...grpc.CallOption) (*TriggerReply, error)
+	Breadcrumbs(ctx context.Context, in *BreadcrumbsRequest, opts ...grpc.CallOption) (*BreadcrumbsReply, error)
 }
 
-type collectorClient struct {
+type coordinatorClient struct {
 	cc grpc.ClientConnInterface
 }
 
-func NewCollectorClient(cc grpc.ClientConnInterface) CollectorClient {
-	return &collectorClient{cc}
+func NewCoordinatorClient(cc grpc.ClientConnInterface) CoordinatorClient {
+	return &coordinatorClient{cc}
 }
 
-func (c *collectorClient) Report(ctx context.Context, in *Trace, opts ...grpc.CallOption) (*CallRet, error) {
-	out := new(CallRet)
-	err := c.cc.Invoke(ctx, "/datapb.Collector/Report", in, out, opts...)
+func (c *coordinatorClient) LocalTrigger(ctx context.Context, in *Trigger, opts ...grpc.CallOption) (*TriggerReply, error) {
+	out := new(TriggerReply)
+	err := c.cc.Invoke(ctx, "/datapb.Coordinator/LocalTrigger", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-// CollectorServer is the server API for Collector service.
-// All implementations must embed UnimplementedCollectorServer
+func (c *coordinatorClient) Breadcrumbs(ctx context.Context, in *BreadcrumbsRequest, opts ...grpc.CallOption) (*BreadcrumbsReply, error) {
+	out := new(BreadcrumbsReply)
+	err := c.cc.Invoke(ctx, "/datapb.Coordinator/Breadcrumbs", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// CoordinatorServer is the server API for Coordinator service.
+// All implementations must embed UnimplementedCoordinatorServer
 // for forward compatibility
-type CollectorServer interface {
-	Report(context.Context, *Trace) (*CallRet, error)
-	mustEmbedUnimplementedCollectorServer()
+type CoordinatorServer interface {
+	LocalTrigger(context.Context, *Trigger) (*TriggerReply, error)
+	Breadcrumbs(context.Context, *BreadcrumbsRequest) (*BreadcrumbsReply, error)
+	mustEmbedUnimplementedCoordinatorServer()
 }
 
-// UnimplementedCollectorServer must be embedded to have forward compatible implementations.
-type UnimplementedCollectorServer struct {
+// UnimplementedCoordinatorServer must be embedded to have forward compatible implementations.
+type UnimplementedCoordinatorServer struct {
 }
 
-func (UnimplementedCollectorServer) Report(context.Context, *Trace) (*CallRet, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method Report not implemented")
+func (UnimplementedCoordinatorServer) LocalTrigger(context.Context, *Trigger) (*TriggerReply, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method LocalTrigger not implemented")
 }
-func (UnimplementedCollectorServer) mustEmbedUnimplementedCollectorServer() {}
+func (UnimplementedCoordinatorServer) Breadcrumbs(context.Context, *BreadcrumbsRequest) (*BreadcrumbsReply, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method Breadcrumbs not implemented")
+}
+func (UnimplementedCoordinatorServer) mustEmbedUnimplementedCoordinatorServer() {}
 
-// UnsafeCollectorServer may be embedded to opt out of forward compatibility for this service.
-// Use of this interface is not recommended, as added methods to CollectorServer will
+// UnsafeCoordinatorServer may be embedded to opt out of forward compatibility for this service.
+// Use of this interface is not recommended, as added methods to CoordinatorServer will
 // result in compilation errors.
-type UnsafeCollectorServer interface {
-	mustEmbedUnimplementedCollectorServer()
+type UnsafeCoordinatorServer interface {
+	mustEmbedUnimplementedCoordinatorServer()
 }
 
-func RegisterCollectorServer(s grpc.ServiceRegistrar, srv CollectorServer) {
-	s.RegisterService(&Collector_ServiceDesc, srv)
+func RegisterCoordinatorServer(s grpc.ServiceRegistrar, srv CoordinatorServer) {
+	s.RegisterService(&Coordinator_ServiceDesc, srv)
 }
 
-func _Collector_Report_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(Trace)
+func _Coordinator_LocalTrigger_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(Trigger)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(CollectorServer).Report(ctx, in)
+		return srv.(CoordinatorServer).LocalTrigger(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: "/datapb.Collector/Report",
+		FullMethod: "/datapb.Coordinator/LocalTrigger",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(CollectorServer).Report(ctx, req.(*Trace))
+		return srv.(CoordinatorServer).LocalTrigger(ctx, req.(*Trigger))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-// Collector_ServiceDesc is the grpc.ServiceDesc for Collector service.
+func _Coordinator_Breadcrumbs_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(BreadcrumbsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(CoordinatorServer).Breadcrumbs(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/datapb.Coordinator/Breadcrumbs",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(CoordinatorServer).Breadcrumbs(ctx, req.(*BreadcrumbsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+// Coordinator_ServiceDesc is the grpc.ServiceDesc for Coordinator service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
-var Collector_ServiceDesc = grpc.ServiceDesc{
-	ServiceName: "datapb.Collector",
-	HandlerType: (*CollectorServer)(nil),
+var Coordinator_ServiceDesc = grpc.ServiceDesc{
+	ServiceName: "datapb.Coordinator",
+	HandlerType: (*CoordinatorServer)(nil),
 	Methods: []grpc.MethodDesc{
 		{
-			MethodName: "Report",
-			Handler:    _Collector_Report_Handler,
+			MethodName: "LocalTrigger",
+			Handler:    _Coordinator_LocalTrigger_Handler,
+		},
+		{
+			MethodName: "Breadcrumbs",
+			Handler:    _Coordinator_Breadcrumbs_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

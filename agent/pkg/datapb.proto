@@ -5,24 +5,31 @@ option go_package = "/datapb";
 package datapb;
 
 service Agent {
-	rpc Request (RequestID) returns (CallRet) {}
+	rpc RemoteTrigger (Trigger) returns (TriggerReply) {}
 }
 
-service Collector {
-	rpc Report (Trace) returns (CallRet) {}
+service Coordinator {
+	rpc LocalTrigger (Trigger) returns (TriggerReply) {}
+	rpc Breadcrumbs (BreadcrumbsRequest) returns (BreadcrumbsReply) {}
 }
 
-message RequestID {
-	repeated int64 rid = 1;
+message Trigger {
+	int32 queue_id = 1;
+	fixed64 base_trace_id = 2;
+	repeated fixed64 trace_ids = 3;
 }
 
-message Trace {
-	int64 request_id  = 1;
-	repeated int32 entry = 2;
-	bytes trace = 3;
-	repeated string addrs = 4;
+message TriggerReply {
 }
 
-message CallRet {
-	bool callret = 1;
+message Breadcrumbs {
+	fixed64 trace_id = 1;
+	repeated string addrs = 2;
+}
+
+message BreadcrumbsRequest {
+	repeated Breadcrumbs breadcrumbs = 1;
+}
+
+message BreadcrumbsReply {
 }

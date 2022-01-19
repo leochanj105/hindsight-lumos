@@ -20,16 +20,18 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
-type RequestID struct {
+type Trigger struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
 
-	Rid []int64 `protobuf:"varint,1,rep,packed,name=rid,proto3" json:"rid,omitempty"`
+	QueueId     int32    `protobuf:"varint,1,opt,name=queue_id,json=queueId,proto3" json:"queue_id,omitempty"`
+	BaseTraceId uint64   `protobuf:"fixed64,2,opt,name=base_trace_id,json=baseTraceId,proto3" json:"base_trace_id,omitempty"`
+	TraceIds    []uint64 `protobuf:"fixed64,3,rep,packed,name=trace_ids,json=traceIds,proto3" json:"trace_ids,omitempty"`
 }
 
-func (x *RequestID) Reset() {
-	*x = RequestID{}
+func (x *Trigger) Reset() {
+	*x = Trigger{}
 	if protoimpl.UnsafeEnabled {
 		mi := &file_datapb_proto_msgTypes[0]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -37,13 +39,13 @@ func (x *RequestID) Reset() {
 	}
 }
 
-func (x *RequestID) String() string {
+func (x *Trigger) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*RequestID) ProtoMessage() {}
+func (*Trigger) ProtoMessage() {}
 
-func (x *RequestID) ProtoReflect() protoreflect.Message {
+func (x *Trigger) ProtoReflect() protoreflect.Message {
 	mi := &file_datapb_proto_msgTypes[0]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -55,31 +57,40 @@ func (x *RequestID) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use RequestID.ProtoReflect.Descriptor instead.
-func (*RequestID) Descriptor() ([]byte, []int) {
+// Deprecated: Use Trigger.ProtoReflect.Descriptor instead.
+func (*Trigger) Descriptor() ([]byte, []int) {
 	return file_datapb_proto_rawDescGZIP(), []int{0}
 }
 
-func (x *RequestID) GetRid() []int64 {
+func (x *Trigger) GetQueueId() int32 {
 	if x != nil {
-		return x.Rid
+		return x.QueueId
+	}
+	return 0
+}
+
+func (x *Trigger) GetBaseTraceId() uint64 {
+	if x != nil {
+		return x.BaseTraceId
+	}
+	return 0
+}
+
+func (x *Trigger) GetTraceIds() []uint64 {
+	if x != nil {
+		return x.TraceIds
 	}
 	return nil
 }
 
-type Trace struct {
+type TriggerReply struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
-
-	RequestId int64    `protobuf:"varint,1,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
-	Entry     []int32  `protobuf:"varint,2,rep,packed,name=entry,proto3" json:"entry,omitempty"`
-	Trace     []byte   `protobuf:"bytes,3,opt,name=trace,proto3" json:"trace,omitempty"`
-	Addrs     []string `protobuf:"bytes,4,rep,name=addrs,proto3" json:"addrs,omitempty"`
 }
 
-func (x *Trace) Reset() {
-	*x = Trace{}
+func (x *TriggerReply) Reset() {
+	*x = TriggerReply{}
 	if protoimpl.UnsafeEnabled {
 		mi := &file_datapb_proto_msgTypes[1]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -87,13 +98,13 @@ func (x *Trace) Reset() {
 	}
 }
 
-func (x *Trace) String() string {
+func (x *TriggerReply) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*Trace) ProtoMessage() {}
+func (*TriggerReply) ProtoMessage() {}
 
-func (x *Trace) ProtoReflect() protoreflect.Message {
+func (x *TriggerReply) ProtoReflect() protoreflect.Message {
 	mi := &file_datapb_proto_msgTypes[1]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -105,49 +116,22 @@ func (x *Trace) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use Trace.ProtoReflect.Descriptor instead.
-func (*Trace) Descriptor() ([]byte, []int) {
+// Deprecated: Use TriggerReply.ProtoReflect.Descriptor instead.
+func (*TriggerReply) Descriptor() ([]byte, []int) {
 	return file_datapb_proto_rawDescGZIP(), []int{1}
 }
 
-func (x *Trace) GetRequestId() int64 {
-	if x != nil {
-		return x.RequestId
-	}
-	return 0
-}
-
-func (x *Trace) GetEntry() []int32 {
-	if x != nil {
-		return x.Entry
-	}
-	return nil
-}
-
-func (x *Trace) GetTrace() []byte {
-	if x != nil {
-		return x.Trace
-	}
-	return nil
-}
-
-func (x *Trace) GetAddrs() []string {
-	if x != nil {
-		return x.Addrs
-	}
-	return nil
-}
-
-type CallRet struct {
+type Breadcrumbs struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
 
-	Callret bool `protobuf:"varint,1,opt,name=callret,proto3" json:"callret,omitempty"`
+	TraceId uint64   `protobuf:"fixed64,1,opt,name=trace_id,json=traceId,proto3" json:"trace_id,omitempty"`
+	Addrs   []string `protobuf:"bytes,2,rep,name=addrs,proto3" json:"addrs,omitempty"`
 }
 
-func (x *CallRet) Reset() {
-	*x = CallRet{}
+func (x *Breadcrumbs) Reset() {
+	*x = Breadcrumbs{}
 	if protoimpl.UnsafeEnabled {
 		mi := &file_datapb_proto_msgTypes[2]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -155,13 +139,13 @@ func (x *CallRet) Reset() {
 	}
 }
 
-func (x *CallRet) String() string {
+func (x *Breadcrumbs) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*CallRet) ProtoMessage() {}
+func (*Breadcrumbs) ProtoMessage() {}
 
-func (x *CallRet) ProtoReflect() protoreflect.Message {
+func (x *Breadcrumbs) ProtoReflect() protoreflect.Message {
 	mi := &file_datapb_proto_msgTypes[2]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -173,42 +157,147 @@ func (x *CallRet) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use CallRet.ProtoReflect.Descriptor instead.
-func (*CallRet) Descriptor() ([]byte, []int) {
+// Deprecated: Use Breadcrumbs.ProtoReflect.Descriptor instead.
+func (*Breadcrumbs) Descriptor() ([]byte, []int) {
 	return file_datapb_proto_rawDescGZIP(), []int{2}
 }
 
-func (x *CallRet) GetCallret() bool {
+func (x *Breadcrumbs) GetTraceId() uint64 {
 	if x != nil {
-		return x.Callret
+		return x.TraceId
 	}
-	return false
+	return 0
+}
+
+func (x *Breadcrumbs) GetAddrs() []string {
+	if x != nil {
+		return x.Addrs
+	}
+	return nil
+}
+
+type BreadcrumbsRequest struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	Breadcrumbs []*Breadcrumbs `protobuf:"bytes,1,rep,name=breadcrumbs,proto3" json:"breadcrumbs,omitempty"`
+}
+
+func (x *BreadcrumbsRequest) Reset() {
+	*x = BreadcrumbsRequest{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_datapb_proto_msgTypes[3]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *BreadcrumbsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*BreadcrumbsRequest) ProtoMessage() {}
+
+func (x *BreadcrumbsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_datapb_proto_msgTypes[3]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use BreadcrumbsRequest.ProtoReflect.Descriptor instead.
+func (*BreadcrumbsRequest) Descriptor() ([]byte, []int) {
+	return file_datapb_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *BreadcrumbsRequest) GetBreadcrumbs() []*Breadcrumbs {
+	if x != nil {
+		return x.Breadcrumbs
+	}
+	return nil
+}
+
+type BreadcrumbsReply struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+}
+
+func (x *BreadcrumbsReply) Reset() {
+	*x = BreadcrumbsReply{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_datapb_proto_msgTypes[4]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *BreadcrumbsReply) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*BreadcrumbsReply) ProtoMessage() {}
+
+func (x *BreadcrumbsReply) ProtoReflect() protoreflect.Message {
+	mi := &file_datapb_proto_msgTypes[4]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use BreadcrumbsReply.ProtoReflect.Descriptor instead.
+func (*BreadcrumbsReply) Descriptor() ([]byte, []int) {
+	return file_datapb_proto_rawDescGZIP(), []int{4}
 }
 
 var File_datapb_proto protoreflect.FileDescriptor
 
 var file_datapb_proto_rawDesc = []byte{
 	0x0a, 0x0c, 0x64, 0x61, 0x74, 0x61, 0x70, 0x62, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x12, 0x06,
-	0x64, 0x61, 0x74, 0x61, 0x70, 0x62, 0x22, 0x1d, 0x0a, 0x09, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73,
-	0x74, 0x49, 0x44, 0x12, 0x10, 0x0a, 0x03, 0x72, 0x69, 0x64, 0x18, 0x01, 0x20, 0x03, 0x28, 0x03,
-	0x52, 0x03, 0x72, 0x69, 0x64, 0x22, 0x68, 0x0a, 0x05, 0x54, 0x72, 0x61, 0x63, 0x65, 0x12, 0x1d,
-	0x0a, 0x0a, 0x72, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x5f, 0x69, 0x64, 0x18, 0x01, 0x20, 0x01,
-	0x28, 0x03, 0x52, 0x09, 0x72, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x49, 0x64, 0x12, 0x14, 0x0a,
-	0x05, 0x65, 0x6e, 0x74, 0x72, 0x79, 0x18, 0x02, 0x20, 0x03, 0x28, 0x05, 0x52, 0x05, 0x65, 0x6e,
-	0x74, 0x72, 0x79, 0x12, 0x14, 0x0a, 0x05, 0x74, 0x72, 0x61, 0x63, 0x65, 0x18, 0x03, 0x20, 0x01,
-	0x28, 0x0c, 0x52, 0x05, 0x74, 0x72, 0x61, 0x63, 0x65, 0x12, 0x14, 0x0a, 0x05, 0x61, 0x64, 0x64,
-	0x72, 0x73, 0x18, 0x04, 0x20, 0x03, 0x28, 0x09, 0x52, 0x05, 0x61, 0x64, 0x64, 0x72, 0x73, 0x22,
-	0x23, 0x0a, 0x07, 0x43, 0x61, 0x6c, 0x6c, 0x52, 0x65, 0x74, 0x12, 0x18, 0x0a, 0x07, 0x63, 0x61,
-	0x6c, 0x6c, 0x72, 0x65, 0x74, 0x18, 0x01, 0x20, 0x01, 0x28, 0x08, 0x52, 0x07, 0x63, 0x61, 0x6c,
-	0x6c, 0x72, 0x65, 0x74, 0x32, 0x38, 0x0a, 0x05, 0x41, 0x67, 0x65, 0x6e, 0x74, 0x12, 0x2f, 0x0a,
-	0x07, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x12, 0x11, 0x2e, 0x64, 0x61, 0x74, 0x61, 0x70,
-	0x62, 0x2e, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x49, 0x44, 0x1a, 0x0f, 0x2e, 0x64, 0x61,
-	0x74, 0x61, 0x70, 0x62, 0x2e, 0x43, 0x61, 0x6c, 0x6c, 0x52, 0x65, 0x74, 0x22, 0x00, 0x32, 0x37,
-	0x0a, 0x09, 0x43, 0x6f, 0x6c, 0x6c, 0x65, 0x63, 0x74, 0x6f, 0x72, 0x12, 0x2a, 0x0a, 0x06, 0x52,
-	0x65, 0x70, 0x6f, 0x72, 0x74, 0x12, 0x0d, 0x2e, 0x64, 0x61, 0x74, 0x61, 0x70, 0x62, 0x2e, 0x54,
-	0x72, 0x61, 0x63, 0x65, 0x1a, 0x0f, 0x2e, 0x64, 0x61, 0x74, 0x61, 0x70, 0x62, 0x2e, 0x43, 0x61,
-	0x6c, 0x6c, 0x52, 0x65, 0x74, 0x22, 0x00, 0x42, 0x09, 0x5a, 0x07, 0x2f, 0x64, 0x61, 0x74, 0x61,
-	0x70, 0x62, 0x62, 0x06, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x33,
+	0x64, 0x61, 0x74, 0x61, 0x70, 0x62, 0x22, 0x65, 0x0a, 0x07, 0x54, 0x72, 0x69, 0x67, 0x67, 0x65,
+	0x72, 0x12, 0x19, 0x0a, 0x08, 0x71, 0x75, 0x65, 0x75, 0x65, 0x5f, 0x69, 0x64, 0x18, 0x01, 0x20,
+	0x01, 0x28, 0x05, 0x52, 0x07, 0x71, 0x75, 0x65, 0x75, 0x65, 0x49, 0x64, 0x12, 0x22, 0x0a, 0x0d,
+	0x62, 0x61, 0x73, 0x65, 0x5f, 0x74, 0x72, 0x61, 0x63, 0x65, 0x5f, 0x69, 0x64, 0x18, 0x02, 0x20,
+	0x01, 0x28, 0x06, 0x52, 0x0b, 0x62, 0x61, 0x73, 0x65, 0x54, 0x72, 0x61, 0x63, 0x65, 0x49, 0x64,
+	0x12, 0x1b, 0x0a, 0x09, 0x74, 0x72, 0x61, 0x63, 0x65, 0x5f, 0x69, 0x64, 0x73, 0x18, 0x03, 0x20,
+	0x03, 0x28, 0x06, 0x52, 0x08, 0x74, 0x72, 0x61, 0x63, 0x65, 0x49, 0x64, 0x73, 0x22, 0x0e, 0x0a,
+	0x0c, 0x54, 0x72, 0x69, 0x67, 0x67, 0x65, 0x72, 0x52, 0x65, 0x70, 0x6c, 0x79, 0x22, 0x3e, 0x0a,
+	0x0b, 0x42, 0x72, 0x65, 0x61, 0x64, 0x63, 0x72, 0x75, 0x6d, 0x62, 0x73, 0x12, 0x19, 0x0a, 0x08,
+	0x74, 0x72, 0x61, 0x63, 0x65, 0x5f, 0x69, 0x64, 0x18, 0x01, 0x20, 0x01, 0x28, 0x06, 0x52, 0x07,
+	0x74, 0x72, 0x61, 0x63, 0x65, 0x49, 0x64, 0x12, 0x14, 0x0a, 0x05, 0x61, 0x64, 0x64, 0x72, 0x73,
+	0x18, 0x02, 0x20, 0x03, 0x28, 0x09, 0x52, 0x05, 0x61, 0x64, 0x64, 0x72, 0x73, 0x22, 0x4b, 0x0a,
+	0x12, 0x42, 0x72, 0x65, 0x61, 0x64, 0x63, 0x72, 0x75, 0x6d, 0x62, 0x73, 0x52, 0x65, 0x71, 0x75,
+	0x65, 0x73, 0x74, 0x12, 0x35, 0x0a, 0x0b, 0x62, 0x72, 0x65, 0x61, 0x64, 0x63, 0x72, 0x75, 0x6d,
+	0x62, 0x73, 0x18, 0x01, 0x20, 0x03, 0x28, 0x0b, 0x32, 0x13, 0x2e, 0x64, 0x61, 0x74, 0x61, 0x70,
+	0x62, 0x2e, 0x42, 0x72, 0x65, 0x61, 0x64, 0x63, 0x72, 0x75, 0x6d, 0x62, 0x73, 0x52, 0x0b, 0x62,
+	0x72, 0x65, 0x61, 0x64, 0x63, 0x72, 0x75, 0x6d, 0x62, 0x73, 0x22, 0x12, 0x0a, 0x10, 0x42, 0x72,
+	0x65, 0x61, 0x64, 0x63, 0x72, 0x75, 0x6d, 0x62, 0x73, 0x52, 0x65, 0x70, 0x6c, 0x79, 0x32, 0x41,
+	0x0a, 0x05, 0x41, 0x67, 0x65, 0x6e, 0x74, 0x12, 0x38, 0x0a, 0x0d, 0x52, 0x65, 0x6d, 0x6f, 0x74,
+	0x65, 0x54, 0x72, 0x69, 0x67, 0x67, 0x65, 0x72, 0x12, 0x0f, 0x2e, 0x64, 0x61, 0x74, 0x61, 0x70,
+	0x62, 0x2e, 0x54, 0x72, 0x69, 0x67, 0x67, 0x65, 0x72, 0x1a, 0x14, 0x2e, 0x64, 0x61, 0x74, 0x61,
+	0x70, 0x62, 0x2e, 0x54, 0x72, 0x69, 0x67, 0x67, 0x65, 0x72, 0x52, 0x65, 0x70, 0x6c, 0x79, 0x22,
+	0x00, 0x32, 0x8d, 0x01, 0x0a, 0x0b, 0x43, 0x6f, 0x6f, 0x72, 0x64, 0x69, 0x6e, 0x61, 0x74, 0x6f,
+	0x72, 0x12, 0x37, 0x0a, 0x0c, 0x4c, 0x6f, 0x63, 0x61, 0x6c, 0x54, 0x72, 0x69, 0x67, 0x67, 0x65,
+	0x72, 0x12, 0x0f, 0x2e, 0x64, 0x61, 0x74, 0x61, 0x70, 0x62, 0x2e, 0x54, 0x72, 0x69, 0x67, 0x67,
+	0x65, 0x72, 0x1a, 0x14, 0x2e, 0x64, 0x61, 0x74, 0x61, 0x70, 0x62, 0x2e, 0x54, 0x72, 0x69, 0x67,
+	0x67, 0x65, 0x72, 0x52, 0x65, 0x70, 0x6c, 0x79, 0x22, 0x00, 0x12, 0x45, 0x0a, 0x0b, 0x42, 0x72,
+	0x65, 0x61, 0x64, 0x63, 0x72, 0x75, 0x6d, 0x62, 0x73, 0x12, 0x1a, 0x2e, 0x64, 0x61, 0x74, 0x61,
+	0x70, 0x62, 0x2e, 0x42, 0x72, 0x65, 0x61, 0x64, 0x63, 0x72, 0x75, 0x6d, 0x62, 0x73, 0x52, 0x65,
+	0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x18, 0x2e, 0x64, 0x61, 0x74, 0x61, 0x70, 0x62, 0x2e, 0x42,
+	0x72, 0x65, 0x61, 0x64, 0x63, 0x72, 0x75, 0x6d, 0x62, 0x73, 0x52, 0x65, 0x70, 0x6c, 0x79, 0x22,
+	0x00, 0x42, 0x09, 0x5a, 0x07, 0x2f, 0x64, 0x61, 0x74, 0x61, 0x70, 0x62, 0x62, 0x06, 0x70, 0x72,
+	0x6f, 0x74, 0x6f, 0x33,
 }
 
 var (
@@ -223,22 +312,27 @@ func file_datapb_proto_rawDescGZIP() []byte {
 	return file_datapb_proto_rawDescData
 }
 
-var file_datapb_proto_msgTypes = make([]protoimpl.MessageInfo, 3)
+var file_datapb_proto_msgTypes = make([]protoimpl.MessageInfo, 5)
 var file_datapb_proto_goTypes = []interface{}{
-	(*RequestID)(nil), // 0: datapb.RequestID
-	(*Trace)(nil),     // 1: datapb.Trace
-	(*CallRet)(nil),   // 2: datapb.CallRet
+	(*Trigger)(nil),            // 0: datapb.Trigger
+	(*TriggerReply)(nil),       // 1: datapb.TriggerReply
+	(*Breadcrumbs)(nil),        // 2: datapb.Breadcrumbs
+	(*BreadcrumbsRequest)(nil), // 3: datapb.BreadcrumbsRequest
+	(*BreadcrumbsReply)(nil),   // 4: datapb.BreadcrumbsReply
 }
 var file_datapb_proto_depIdxs = []int32{
-	0, // 0: datapb.Agent.Request:input_type -> datapb.RequestID
-	1, // 1: datapb.Collector.Report:input_type -> datapb.Trace
-	2, // 2: datapb.Agent.Request:output_type -> datapb.CallRet
-	2, // 3: datapb.Collector.Report:output_type -> datapb.CallRet
-	2, // [2:4] is the sub-list for method output_type
-	0, // [0:2] is the sub-list for method input_type
-	0, // [0:0] is the sub-list for extension type_name
-	0, // [0:0] is the sub-list for extension extendee
-	0, // [0:0] is the sub-list for field type_name
+	2, // 0: datapb.BreadcrumbsRequest.breadcrumbs:type_name -> datapb.Breadcrumbs
+	0, // 1: datapb.Agent.RemoteTrigger:input_type -> datapb.Trigger
+	0, // 2: datapb.Coordinator.LocalTrigger:input_type -> datapb.Trigger
+	3, // 3: datapb.Coordinator.Breadcrumbs:input_type -> datapb.BreadcrumbsRequest
+	1, // 4: datapb.Agent.RemoteTrigger:output_type -> datapb.TriggerReply
+	1, // 5: datapb.Coordinator.LocalTrigger:output_type -> datapb.TriggerReply
+	4, // 6: datapb.Coordinator.Breadcrumbs:output_type -> datapb.BreadcrumbsReply
+	4, // [4:7] is the sub-list for method output_type
+	1, // [1:4] is the sub-list for method input_type
+	1, // [1:1] is the sub-list for extension type_name
+	1, // [1:1] is the sub-list for extension extendee
+	0, // [0:1] is the sub-list for field type_name
 }
 
 func init() { file_datapb_proto_init() }
@@ -248,7 +342,7 @@ func file_datapb_proto_init() {
 	}
 	if !protoimpl.UnsafeEnabled {
 		file_datapb_proto_msgTypes[0].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*RequestID); i {
+			switch v := v.(*Trigger); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -260,7 +354,7 @@ func file_datapb_proto_init() {
 			}
 		}
 		file_datapb_proto_msgTypes[1].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*Trace); i {
+			switch v := v.(*TriggerReply); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -272,7 +366,31 @@ func file_datapb_proto_init() {
 			}
 		}
 		file_datapb_proto_msgTypes[2].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*CallRet); i {
+			switch v := v.(*Breadcrumbs); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_datapb_proto_msgTypes[3].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*BreadcrumbsRequest); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_datapb_proto_msgTypes[4].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*BreadcrumbsReply); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -290,7 +408,7 @@ func file_datapb_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: file_datapb_proto_rawDesc,
 			NumEnums:      0,
-			NumMessages:   3,
+			NumMessages:   5,
 			NumExtensions: 0,
 			NumServices:   2,
 		},
