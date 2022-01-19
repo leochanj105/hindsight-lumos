@@ -18,14 +18,22 @@ import (
 type Reporting struct {
 	datapb.UnimplementedAgentServer
 
-	api       *memory.GoAgentAPI // API to the shared memory
-	collector datapb.CollectorClient
-	queue     chan []int
-	enabled   bool
+	api     *memory.GoAgentAPI // API to the shared memory
+	queue   chan []int
+	enabled bool
 
 	rate_limit  float64
 	buffer_size int
 	bucket      *ratelimit.Bucket
+
+	server_port string // The port that the agent listens on for remote triggers
+
+	coordinator      datapb.CoordinatorClient
+	coordinator_addr string
+	coordinator_port string
+
+	collector_addr string
+	collector_port string
 }
 
 func InitReporting(api *memory.GoAgentAPI, rate_limit_mb float64) *Reporting {
@@ -45,6 +53,12 @@ func (r *Reporting) Init(api *memory.GoAgentAPI, rate_limit_mb float64) {
 	if r.rate_limit != 0 {
 		r.bucket = ratelimit.NewBucketWithRate(r.rate_limit, int64(r.rate_limit))
 	}
+
+	r.server_port = util.Server_port  // TODO not in this hacky way
+	r.coordinator_addr = util.LC_addr // TODO not in this hacky way
+	r.coordinator_port = util.LC_port // TODO not in this hacky way
+	r.collector_addr = ""             // TODO add separate collection backend addr
+	r.collector_port = ""             // TODO add separate collection backend port
 }
 
 /* Reports trace data to the collector */
@@ -71,16 +85,16 @@ func (r *Reporting) report(buffers []int) {
 			trace_data = append(trace_data, data...)
 		}
 
-		ctx, cancel := context.WithTimeout(context.Background(), 1000000000*time.Nanosecond)
-		defer cancel()
+		// ctx, cancel := context.WithTimeout(context.Background(), 1000000000*time.Nanosecond)
+		// defer cancel()
 
 		// TODO: report differently; not as RPC, and buffers only
 		// TODO: configurable whether to actually report or not.
-		r.collector.Report(ctx, &datapb.Trace{
-			RequestId: int64(0),
-			Entry:     entry,
-			Trace:     trace_data,
-			Addrs:     addrs})
+		// r.collector.Report(ctx, &datapb.Trace{
+		// 	RequestId: int64(0),
+		// 	Entry:     entry,
+		// 	Trace:     trace_data,
+		// 	Addrs:     addrs})
 	}
 
 	// if err != nil {
@@ -94,37 +108,43 @@ func (r *Reporting) report(buffers []int) {
 	}
 }
 
-/* gRPC requests from Log collector */
-func (r *Reporting) Request(ctx context.Context, in *datapb.RequestID) (*datapb.CallRet, error) {
-	request_ids := in.Rid
+/* remote trigger from coordinator over RPC */
+func (r *Reporting) RemoteTrigger(ctx context.Context, in *datapb.TriggerRequest) (*datapb.TriggerReply, error) {
 
-	triggers := make([]memory.Trigger, 0, len(request_ids))
-
-	for _, request_id := range request_ids {
+	var triggers []memory.Trigger
+	for _, trigger := range in.Triggers {
 		// TODO  memory.Trigger should categorize as locally or remote
-		triggers = append(triggers, memory.Trigger{2, uint64(request_id), uint64(request_id)})
+		// should combine all triggers into one
+		// should use a separate channel to local triggers
+		for _, traceid := range trigger.GetTraceIds() {
+			var mt memory.Trigger
+			mt.Queue_id = int(trigger.QueueId)
+			mt.Base_trace_id = trigger.BaseTraceId
+			mt.Trace_id = traceid
+			triggers = append(triggers, mt)
+		}
 	}
 
 	if len(triggers) > 0 {
 		r.api.Triggers <- triggers
 	}
 
-	return &datapb.CallRet{Callret: true}, nil
+	return &datapb.TriggerReply{}, nil
 }
 
 func (r *Reporting) Run(ctx context.Context) {
 	fmt.Println("Reporting goroutine running")
-	conn, err := grpc.Dial(util.LC_addr+":"+util.LC_port,
-		grpc.WithInsecure(),
-		grpc.WithTimeout(100000000*time.Nanosecond))
+	addr := r.collector_addr + ":" + r.collector_port
+
+	conn, err := grpc.Dial(addr, grpc.WithInsecure(), grpc.WithTimeout(100*time.Millisecond))
 	if err != nil {
-		fmt.Println("dial", util.LC_addr+":"+util.LC_port, err)
+		fmt.Println("dial", addr, err)
 		return
 	}
-	fmt.Println("Reporting connected to", util.LC_addr+":"+util.LC_port)
+	fmt.Println("Reporting connected to", addr)
 	defer conn.Close()
 
-	lis, err := net.Listen("tcp", ":"+util.Server_port)
+	lis, err := net.Listen("tcp", ":"+r.server_port)
 	if err != nil {
 		log.Fatalf("failed to listen: %v", err)
 	}
@@ -138,7 +158,7 @@ func (r *Reporting) Run(ctx context.Context) {
 		}
 	}()
 
-	r.collector = datapb.NewCollectorClient(conn)
+	// r.collector = datapb.NewCollectorClient(conn)
 	for {
 		select {
 		case <-ctx.Done():

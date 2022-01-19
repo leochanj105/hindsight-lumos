@@ -2,7 +2,12 @@ package coordinator
 
 import (
 	"container/list"
+	"log"
+	"net"
 	"time"
+
+	"github.com/geraldleizhang/hindsight/agent/pkg/datapb"
+	"google.golang.org/grpc"
 )
 
 type TriggerID struct {
@@ -26,32 +31,71 @@ type Coordinator struct {
 	triggers    map[TriggerID]*triggerstate // All known triggers
 	trigger_lru *list.List                  // For expiring triggers
 	trace_lru   *list.List                  // For expiring traces
+	agents      map[string]*Agent           // connections to agents
+
+	listen_port string // Port to listen for connections from agents
 }
 
-func (c *Coordinator) Init() {
+type Agent struct {
+	addr string
+}
+
+func (c *Coordinator) Init(port string) {
 	c.now = time.Now()
 	c.traces = make(map[uint64]*tracestate)
 	c.triggers = make(map[TriggerID]*triggerstate)
 	c.trigger_lru = list.New()
 	c.trace_lru = list.New()
+	c.listen_port = port
+}
+
+func (c *Coordinator) Run() {
+
+}
+
+/* Run the server that receives triggers and breadcrumbs */
+func (c *Coordinator) runServer() {
+	for true {
+		lis, err := net.Listen("tcp", ":"+c.listen_port)
+		if err != nil {
+			log.Fatalf("failed to listen: %v", err)
+		}
+		s := grpc.NewServer()
+		datapb.RegisterCollectorServer(s, lc)
+		if err := s.Serve(lis); err != nil {
+			log.Fatalf("failed to serve: %v", err)
+		}
+	}
+}
+
+func initAgent(addr string) *Agent {
+
+}
+
+func (a *Agent) Run() {
+
 }
 
 /* Trace representation internal to the Coordinator */
 type tracestate struct {
-	id            uint64
-	known_at      map[string]struct{}         // Agents where this trace is known
-	triggers      map[TriggerID]*triggerstate // Triggers of this trace
-	last_modified time.Time
-	lru_entry     *list.Element
+	id              uint64
+	known_at        map[string]struct{}         // Agents where this trace is known
+	triggers        map[TriggerID]*triggerstate // Triggers of this trace
+	created         time.Time
+	last_modified   time.Time
+	last_breadcrumb time.Time
+	lru_entry       *list.Element
 }
 
 /* Trigger representation internal to the coordinator */
 type triggerstate struct {
-	id            TriggerID
-	known_at      map[string]struct{}    // Agents where this trigger is known
-	traces        map[uint64]*tracestate // Traces of this trigger
-	last_modified time.Time
-	lru_entry     *list.Element
+	id              TriggerID
+	known_at        map[string]struct{}    // Agents where this trigger is known
+	traces          map[uint64]*tracestate // Traces of this trigger
+	created         time.Time
+	last_modified   time.Time
+	last_breadcrumb time.Time
+	lru_entry       *list.Element
 }
 
 func (ts *triggerstate) Trigger() Trigger {
@@ -71,6 +115,7 @@ func (c *Coordinator) getTrigger(id TriggerID) *triggerstate {
 	trigger.id = id
 	trigger.known_at = make(map[string]struct{})
 	trigger.traces = make(map[uint64]*tracestate)
+	trigger.created = c.now
 	trigger.last_modified = c.now
 	trigger.lru_entry = c.trigger_lru.PushFront(&trigger)
 	c.triggers[id] = &trigger
@@ -86,6 +131,7 @@ func (c *Coordinator) getTrace(id uint64) *tracestate {
 	trace.known_at = make(map[string]struct{})
 	trace.triggers = make(map[TriggerID]*triggerstate)
 	trace.last_modified = c.now
+	trace.created = c.now
 	trace.lru_entry = c.trace_lru.PushFront(&trace)
 	c.traces[id] = &trace
 	return &trace
@@ -213,6 +259,7 @@ func (c *Coordinator) AddBreadcrumb(src string, breadcrumbs Breadcrumbs) map[str
 				// trigger isn't known at this address yet; must disseminate
 				triggers_to_disseminate = append(triggers_to_disseminate, trigger.Trigger())
 				trigger.known_at[addr] = struct{}{}
+				trigger.last_breadcrumb = c.now
 			}
 		}
 
@@ -221,6 +268,7 @@ func (c *Coordinator) AddBreadcrumb(src string, breadcrumbs Breadcrumbs) map[str
 		}
 
 		trace.known_at[addr] = struct{}{}
+		trace.last_breadcrumb = c.now
 	}
 
 	// Update trigger and trace LRUs
