@@ -91,27 +91,34 @@ func (c *Coordinator) getTrace(id uint64) *tracestate {
 	return &trace
 }
 
-func (c *Coordinator) expireTrigger(trigger *triggerstate) {
-	for _, tracestate := range trigger.traces {
-		delete(tracestate.triggers, trigger.id)
+func (c *Coordinator) checkTriggerExpiration(cutoff time.Time) {
+	for c.trigger_lru.Len() > 0 {
+		trigger := c.trigger_lru.Back().Value.(*triggerstate)
+		if trigger.last_modified.After(cutoff) {
+			break
+		}
+
+		for _, tracestate := range trigger.traces {
+			delete(tracestate.triggers, trigger.id)
+		}
+		delete(c.triggers, trigger.id)
+		c.trigger_lru.Remove(trigger.lru_entry)
 	}
-	delete(c.triggers, trigger.id)
-	c.trigger_lru.Remove(trigger.lru_entry)
 }
 
-func (c *Coordinator) expireTrace(trace *tracestate) {
-	for _, triggerstate := range trace.triggers {
-		delete(triggerstate.traces, trace.id)
+func (c *Coordinator) checkTraceExpiration(cutoff time.Time) {
+	for c.trace_lru.Len() > 0 {
+		trace := c.trace_lru.Back().Value.(*tracestate)
+		if trace.last_modified.After(cutoff) {
+			break
+		}
+
+		for _, triggerstate := range trace.triggers {
+			delete(triggerstate.traces, trace.id)
+		}
+		delete(c.traces, trace.id)
+		c.trace_lru.Remove(trace.lru_entry)
 	}
-	delete(c.traces, trace.id)
-	c.trace_lru.Remove(trace.lru_entry)
-	/*
-		Strictly speaking, a trigger should only be known_at
-		the superset of addresses of traces that it contains,
-		so by deleting a trace we should also update the triggerstate
-		known_at map.  However, this is an edge-case that
-		we don't need to deal with for now.
-	*/
 }
 
 /*

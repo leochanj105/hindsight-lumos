@@ -2,6 +2,7 @@ package coordinator
 
 import (
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -73,6 +74,9 @@ func TestCoordinator(t *testing.T) {
 
 	disseminate = c.AddBreadcrumb("c", Breadcrumbs{uint64(77), []string{"d"}})
 	assert.Equal(0, len(disseminate), "Adding another breadcrumb c->d does not require dissemination to d")
+
+	disseminate = c.AddBreadcrumb("c", Breadcrumbs{uint64(75), []string{"d", "e", "f", "g"}})
+	assert.Equal(3, len(disseminate), "Adding multiple breadcrumbs requires dissemination")
 }
 
 func TestCoordinatorAfterBreadcrumbs(t *testing.T) {
@@ -128,5 +132,68 @@ func TestCoordinatorAfterBreadcrumbs(t *testing.T) {
 	assert.Equal(6, c.addr_count(triggerid), "Trigger is known at 6 addresses")
 	assert.Equal(c.trace_addr_count(uint64(75)), 4, "Trace 75 known at 4 addresses")
 	assert.Equal(c.trace_addr_count(uint64(77)), 4, "Trace 77 known at 3 addresses")
+
+}
+
+func TestCoordinatorExpiration(t *testing.T) {
+	assert := assert.New(t)
+
+	var c Coordinator
+	c.Init()
+
+	triggerid := TriggerID{1, uint64(75)}
+
+	c.AddBreadcrumb("a", Breadcrumbs{uint64(75), []string{"b"}})
+	c.AddBreadcrumb("b", Breadcrumbs{uint64(75), []string{"c"}})
+	c.AddBreadcrumb("c", Breadcrumbs{uint64(75), []string{"d"}})
+	c.AddBreadcrumb("a", Breadcrumbs{uint64(77), []string{"e"}})
+	c.AddBreadcrumb("e", Breadcrumbs{uint64(77), []string{"f"}})
+
+	c.AddTrigger("a", Trigger{triggerid, []uint64{uint64(75)}})
+	c.AddTrigger("b", Trigger{triggerid, []uint64{uint64(77)}})
+
+	assert.Equal(1, len(c.triggers), "Trigger was created")
+	assert.Equal(2, len(c.traces), "Traces were created")
+
+	c.checkTraceExpiration(time.Now().Add(time.Duration(-1) * time.Hour))
+
+	assert.Equal(1, len(c.triggers), "Trigger was not expired")
+	assert.Equal(2, len(c.traces), "Traces were not expired")
+
+	c.checkTriggerExpiration(time.Now().Add(time.Duration(-1) * time.Hour))
+
+	assert.Equal(1, len(c.triggers), "Trigger was not expired")
+	assert.Equal(2, len(c.traces), "Traces were not expired")
+
+	c.checkTraceExpiration(time.Now().Add(time.Duration(1) * time.Hour))
+
+	assert.Equal(1, len(c.triggers), "Trigger was not expired")
+	assert.Equal(0, len(c.traces), "Traces were expired")
+
+	c.AddBreadcrumb("a", Breadcrumbs{uint64(75), []string{"b"}})
+	c.AddBreadcrumb("b", Breadcrumbs{uint64(75), []string{"c"}})
+	c.AddBreadcrumb("c", Breadcrumbs{uint64(75), []string{"d"}})
+	c.AddBreadcrumb("a", Breadcrumbs{uint64(77), []string{"e"}})
+	c.AddBreadcrumb("e", Breadcrumbs{uint64(77), []string{"f"}})
+
+	assert.Equal(1, len(c.triggers), "Trigger exists")
+	assert.Equal(2, len(c.traces), "Traces were created")
+
+	c.checkTriggerExpiration(time.Now().Add(time.Duration(1) * time.Hour))
+
+	assert.Equal(0, len(c.triggers), "Trigger was expired")
+	assert.Equal(2, len(c.traces), "Traces were not expired")
+
+	c.AddTrigger("a", Trigger{triggerid, []uint64{uint64(75)}})
+	c.AddTrigger("b", Trigger{triggerid, []uint64{uint64(77)}})
+
+	assert.Equal(1, len(c.triggers), "Trigger was created")
+	assert.Equal(2, len(c.traces), "Traces exist")
+
+	c.checkTraceExpiration(time.Now().Add(time.Duration(1) * time.Hour))
+	c.checkTriggerExpiration(time.Now().Add(time.Duration(1) * time.Hour))
+
+	assert.Equal(0, len(c.triggers), "Trigger was expired")
+	assert.Equal(0, len(c.traces), "Traces were expired")
 
 }
