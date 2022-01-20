@@ -5,6 +5,7 @@
 #include <unistd.h>
 #include <argp.h>
 #include <pthread.h>
+#include <string.h>
 
 #include "buffer.h"
 #include "tracer.h"
@@ -27,12 +28,14 @@ static struct argp_option options[] = {
   {"buffer_count",  'c', "NUM",  0,  "Number of buffers in pool, int, default 10000 (320MB pool)" },
   {"payload_size",  'w', "NUM",  0,  "Payload size written by each tracepoint, int, default 400 bytes per tracepoint" },
   {"tracepoints", 'n', "NUM", 0, "Number of tracepoints per trace, int, default 100 tracepoints (40kB per trace)"},
-  {"trigger", 'p', "NUM", 0, "Adds a trigger with probability p, float.  This can be provided multiple times.  For example '-p 0.5 -p 0.1' will create two triggers -- trigger 10 that fires 50\% of the time and trigger 11 that fires 10\% of the time.."},
+  {"trigger", 'p', "NUM", 0, "Adds a trigger with probability p, float.  This can be provided multiple times.  For example '-p 0.5 -p 0.1' will create two triggers -- trigger 10 that fires 50%% of the time and trigger 11 that fires 10%% of the time.."},
   {"headsampling", 'H', "NUM", 0, "The default head-based sampling probability between 0 and 1, default 0.0 (disabled), float"},
   {"retroactive", 'R', "NUM", 0, "Set the percentage of requests that will generate data, by default this is 1.0 (all requests generate data)"},
   {"duration", 'd', "NUM", 0, "Duration in seconds before exiting, default 0. A value of 0 runs forever"},
   {"sleep", 'S', "NUM", 0, "Sleep time to add, in microseconds, after each trace.  Default 0."},
   {"output",   'o', "FILE", 0, "Output stats to FILE.  Not currently implemented." },
+  {"addr",   'a', "HOST:PORT", 0, "The address of the agent to use as local breadcrumb." },
+  {"breadcrumb",   'b', "HOST:PORT", 0, "The address of other agents to add as breadcrumbs." },
   { 0 }
 };
 
@@ -59,6 +62,9 @@ struct arguments {
   uint64_t sleep;
   char* output_file;
   char* process_name;
+  char* address;
+  char** breadcrumbs;
+  int breadcrumb_count;
 };
 
 static error_t parse_opt (int key, char *arg, struct argp_state *state) {
@@ -100,6 +106,19 @@ static error_t parse_opt (int key, char *arg, struct argp_state *state) {
     case 'o':
       arguments->output_file = arg;
       break;
+    case 'a':
+      arguments->address = (char*) malloc(32 * sizeof(char));
+      memset(arguments->address, 0, 32*sizeof(char));
+      strcpy(arguments->address, "");
+      strncat(arguments->address, arg, 31);
+      break;
+    case 'b': ;
+      char** new_breadcrumbs = (char**) malloc((arguments->breadcrumb_count+1) * sizeof(char*));
+      memcpy(new_breadcrumbs, arguments->breadcrumbs, arguments->breadcrumb_count * sizeof(char*));
+      new_breadcrumbs[arguments->breadcrumb_count] = arg;
+      arguments->breadcrumb_count++;
+      arguments->breadcrumbs = new_breadcrumbs;
+      break;
 
     case ARGP_KEY_ARG:
       if (state->arg_num >= 1)
@@ -130,7 +149,7 @@ void init_hindsight_client(struct arguments *arguments) {
     conf.buffer_size = arguments->buffer_size;
     conf.breadcrumbs_capacity = conf.pool_capacity;
     conf.triggers_capacity = conf.pool_capacity;
-    conf.address = malloc(32 * sizeof(char));
+    conf.address = arguments->address;
     conf.retroactive_sampling_percentage = arguments->retroactive_sampling_percentage;
     conf.head_sampling_probability = arguments->head_sampling_probability;
     conf._retroactive_sampling_threshold = multiply_by(UINT64_MAX, conf.retroactive_sampling_percentage);
@@ -228,7 +247,9 @@ void client_thread_main(volatile int *alive,
             hindsight_trigger(trigger_ids[i]);
           }
         }
-        hindsight_breadcrumb("breadcrumb");
+        for (int i = 0; i < arguments->breadcrumb_count; i++) {
+          hindsight_breadcrumb(arguments->breadcrumbs[i]);
+        }
         hindsight_end();
         ts[3] = getticks();
         uint64_t end = nanos();
@@ -432,6 +453,7 @@ int main (int argc, char **argv) {
   arguments.head_sampling_probability = 0.0;
   arguments.retroactive_sampling_percentage = 1.0;
   arguments.duration = 0;
+  arguments.breadcrumb_count = 0;
 
 
   arguments.process_name = 0;
@@ -449,6 +471,10 @@ int main (int argc, char **argv) {
   printf("%d triggers:\n", arguments.trigger_count);
   for (int i = 0; i < arguments.trigger_count; i++) {
     printf("  %d  --  %.4f\n", i+10, arguments.trigger_probabilities[i]);
+  }
+  printf("%d breadcrumbs:\n", arguments.breadcrumb_count);
+  for (int i = 0; i < arguments.breadcrumb_count; i++) {
+    printf("  %s\n", arguments.breadcrumbs[i]);
   }
   printf("-------\n");
 

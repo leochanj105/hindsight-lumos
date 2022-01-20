@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/geraldleizhang/hindsight/agent/pkg/coordinator"
+	"github.com/geraldleizhang/hindsight/agent/pkg/util"
 )
 
 type triggerRateLimitFlags map[int]float64
@@ -38,12 +39,31 @@ func (i *triggerRateLimitFlags) Set(value string) error {
 	return nil
 }
 
+func resolveConfigValue(key string, value string, legacyconfigvalue string, service_name string) string {
+	if value == "" {
+		value = legacyconfigvalue
+		fmt.Printf("  %s=%s (%s.conf)\n", key, value, service_name)
+	} else {
+		fmt.Printf("  %s=%s (command line)\n", key, value)
+	}
+	return value
+}
+
 // TODO different main methods for different cmds..........
 func main() {
 
-	port := flag.String("port", "5252", "Port that the coordinator listens on for connections from agents")
+	port := flag.String("port", "5252", "Coordinator port.  If not specified, uses `lc_port` from the legacy config lc.conf file.")
 
 	flag.Parse()
+
+	isConfig := util.Conf_init("lc")
+	if !isConfig {
+		fmt.Println("Failed to load config file for lc")
+		return
+	}
+
+	fmt.Println("Running coordinator")
+	*port = resolveConfigValue("port", *port, util.Server_port, "lc")
 
 	ctx, _ := context.WithCancel(context.Background())
 

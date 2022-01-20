@@ -15,6 +15,7 @@ import (
 type CoordinatorServer struct {
 	datapb.UnimplementedCoordinatorServer
 
+	ctx    context.Context   // For shutdown
 	c      Coordinator       // Manages coordination data
 	agents map[string]*Agent // connections to agents
 
@@ -43,6 +44,7 @@ func (a *Agent) Init(addr string) {
 }
 
 func (s *CoordinatorServer) Run(ctx context.Context) {
+	s.ctx = ctx
 	wg := new(sync.WaitGroup)
 	wg.Add(2)
 	go func() {
@@ -79,6 +81,7 @@ func (cs *CoordinatorServer) GetAgent(addr string) *Agent {
 		var agent Agent
 		agent.Init(addr)
 		cs.agents[addr] = &agent
+		agent.Run(cs.ctx)
 		return &agent
 	}
 }
@@ -178,8 +181,10 @@ func (s *CoordinatorServer) Breadcrumbs(ctx context.Context, in *datapb.Breadcru
 	return &datapb.BreadcrumbsReply{}, nil
 }
 
-func (a *Agent) Run() {
-
+func (a *Agent) Run(ctx context.Context) {
+	go func() {
+		a.AgentLoop(ctx)
+	}()
 }
 
 /* Connects to an agent in a loop, then sends triggers once connected */
