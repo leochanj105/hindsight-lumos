@@ -10,10 +10,11 @@ import (
 )
 
 type Agent struct {
-	dm        DataManager       // the trace data
-	api       memory.GoAgentAPI // API to the shared memory
-	reporting Reporting         // Interface to LogCollector
-	tm        TriggerManager    // Rate limits and fair shares the triggers
+	dm          DataManager       // the trace data
+	api         memory.GoAgentAPI // API to the shared memory
+	coordinator Coordinator       // Interface to coordinator
+	reporting   Reporting         // Interface to trace data backend
+	tm          TriggerManager    // Rate limits and fair shares the triggers
 
 	// Constants for deciding when to evict
 	cache_capacity     int           // Above this threshold, we should evict
@@ -39,7 +40,8 @@ func InitAgent2(fname string, trigger_delay uint64, reporting_rate_limit float64
 	var agent Agent
 	agent.dm.Init()
 	agent.api.Init(fname)
-	agent.reporting.Init(&agent.api, reporting_rate_limit)
+	agent.reporting.Init(&agent.api, reporting_rate_limit, true)
+	agent.coordinator.Init(true)
 	agent.tm.Init(&agent.dm, agent.api.BufferSize(), trigger_rate_limit)
 	agent.tm.ConfigureRateLimits(per_trigger_rate_limits)
 
@@ -183,10 +185,20 @@ func (agent *Agent) processTriggers(batch []memory.Trigger) {
 
 	/* Forward triggers and breadcrumbs */
 	if len(triggers_to_forward) > 0 {
-		agent.reporting.localtriggers <- triggers_to_forward
+		select {
+		case agent.coordinator.localtriggers <- triggers_to_forward:
+			break
+		default:
+			// Connection to coordinator is bottlenecked; drop the triggers
+		}
 	}
 	if len(breadcrumbs_to_forward) > 0 {
-		agent.reporting.breadcrumbs <- breadcrumbs_to_forward
+		select {
+		case agent.coordinator.breadcrumbs <- breadcrumbs_to_forward:
+			break
+		default:
+			// Connection to coordinator is bottlenecked; drop the breadcrumbs
+		}
 	}
 }
 
@@ -205,8 +217,13 @@ func (agent *Agent) processRemoteTriggers(batch []memory.Trigger) {
 		}
 	}
 
-	if breadcrumbs_to_forward != nil {
-		agent.reporting.breadcrumbs <- breadcrumbs_to_forward
+	if len(breadcrumbs_to_forward) > 0 {
+		select {
+		case agent.coordinator.breadcrumbs <- breadcrumbs_to_forward:
+			break
+		default:
+			// Connection to coordinator is bottlenecked; drop the breadcrumbs
+		}
 	}
 }
 
@@ -240,7 +257,7 @@ func (agent *Agent) RunProcessingLoop(ctx context.Context) {
 		case <-ctx.Done():
 			fmt.Println("Agent goroutine exiting")
 			return
-		case triggers := <-agent.reporting.remotetriggers:
+		case triggers := <-agent.coordinator.remotetriggers:
 			/* Received some triggers from the coordinator */
 			agent.processRemoteTriggers(triggers)
 		case triggers := <-agent.localtriggers:
@@ -261,9 +278,13 @@ func (agent *Agent) RunProcessingLoop(ctx context.Context) {
 
 func (agent *Agent) Run(ctx context.Context) {
 	wg := new(sync.WaitGroup)
-	wg.Add(4)
+	wg.Add(5)
 	go func() {
 		agent.RunProcessingLoop(ctx)
+	}()
+	go func() {
+		agent.coordinator.Run(ctx)
+		wg.Done()
 	}()
 	go func() {
 		agent.reporting.Run(ctx)

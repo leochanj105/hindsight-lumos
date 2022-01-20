@@ -1,13 +1,13 @@
 package util
 
 import (
+	"bufio"
 	"encoding/binary"
+	"fmt"
 	"os"
+	"strings"
 	"sync"
 	"time"
-	"bufio"
-	"strings"
-	"fmt"
 )
 
 var DEBUG int
@@ -15,8 +15,10 @@ var DEBUG int
 // addresses and message queues, for server and log collector
 var Server_addr string
 var Server_port string
-var LC_addr string
-var LC_port string
+var Coordinator_addr string
+var Coordinator_port string
+var Reporting_addr string
+var Reporting_port string
 
 func Conf_init(service_name string) bool {
 	conf_file, err := os.Open("/etc/hindsight_conf/" + service_name + ".conf")
@@ -48,10 +50,16 @@ func Conf_init(service_name string) bool {
 			Server_port = strings.Split(scanner.Text(), " ")[1]
 		}
 		if strings.Contains(scanner.Text(), "lc_addr") {
-			LC_addr = strings.Split(scanner.Text(), " ")[1]
+			Coordinator_addr = strings.Split(scanner.Text(), " ")[1]
 		}
 		if strings.Contains(scanner.Text(), "lc_port") {
-			LC_port = strings.Split(scanner.Text(), " ")[1]
+			Coordinator_port = strings.Split(scanner.Text(), " ")[1]
+		}
+		if strings.Contains(scanner.Text(), "r_addr") {
+			Reporting_addr = strings.Split(scanner.Text(), " ")[1]
+		}
+		if strings.Contains(scanner.Text(), "r_port") {
+			Reporting_port = strings.Split(scanner.Text(), " ")[1]
 		}
 	}
 
