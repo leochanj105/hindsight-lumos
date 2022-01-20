@@ -228,6 +228,7 @@ void client_thread_main(volatile int *alive,
             hindsight_trigger(trigger_ids[i]);
           }
         }
+        hindsight_breadcrumb("breadcrumb");
         hindsight_end();
         ts[3] = getticks();
         uint64_t end = nanos();

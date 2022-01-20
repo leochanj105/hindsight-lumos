@@ -154,10 +154,14 @@ func (agent *Agent) processBreadcrumbs(batch memory.BreadcrumbBatch) {
 	}
 
 	/* Forward breadcrumbs as needed */
-	// TODO HERE
-	// FORWARD TO COORDINATOR
 	if len(to_report) > 0 {
-		fmt.Printf("Forwarding crumbs %v\n", to_report)
+		select {
+		case agent.coordinator.breadcrumbs <- to_report:
+			break
+		default:
+			// Connection to coordinator is bottlenecked; drop the breadcrumbs
+			fmt.Println("processBreadcrumbs coordinator bottlenecked!")
+		}
 	}
 }
 
@@ -190,6 +194,7 @@ func (agent *Agent) processTriggers(batch []memory.Trigger) {
 			break
 		default:
 			// Connection to coordinator is bottlenecked; drop the triggers
+			fmt.Println("processTriggers triggers coordinator bottlenecked!")
 		}
 	}
 	if len(breadcrumbs_to_forward) > 0 {
@@ -198,6 +203,7 @@ func (agent *Agent) processTriggers(batch []memory.Trigger) {
 			break
 		default:
 			// Connection to coordinator is bottlenecked; drop the breadcrumbs
+			fmt.Println("processTriggers breadcrumbs coordinator bottlenecked!")
 		}
 	}
 }
@@ -223,6 +229,7 @@ func (agent *Agent) processRemoteTriggers(batch []memory.Trigger) {
 			break
 		default:
 			// Connection to coordinator is bottlenecked; drop the breadcrumbs
+			fmt.Println("processRemoteTriggers breadcrumbs coordinator bottlenecked!")
 		}
 	}
 }
