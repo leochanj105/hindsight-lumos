@@ -10,7 +10,6 @@ import (
 
 	"github.com/geraldleizhang/hindsight/agent/pkg/datapb"
 	"github.com/geraldleizhang/hindsight/agent/pkg/memory"
-	"github.com/geraldleizhang/hindsight/agent/pkg/util"
 	"google.golang.org/grpc"
 )
 
@@ -28,18 +27,18 @@ type Coordinator struct {
 	remotetriggers chan []memory.Trigger    // Remote triggers received from coordinator
 }
 
-func InitCoordinator(enabled bool) *Coordinator {
+func InitCoordinator(enabled bool, local_hostname string, local_port string, remote_addr string) *Coordinator {
 	var r Coordinator
-	r.Init(enabled)
+	r.Init(enabled, local_hostname, local_port, remote_addr)
 	return &r
 }
 
-func (r *Coordinator) Init(enabled bool) {
+func (r *Coordinator) Init(enabled bool, local_hostname string, local_port string, remote_addr string) {
 	r.enabled = enabled // used for testing/dev
 
-	r.local_port = util.Server_port
-	r.local_addr = util.Server_addr + ":" + util.Server_port            // TODO not in this hacky way
-	r.remote_addr = util.Coordinator_addr + ":" + util.Coordinator_port // TODO not in this hacky way
+	r.local_port = local_port
+	r.local_addr = local_hostname + ":" + local_port
+	r.remote_addr = remote_addr
 
 	r.localtriggers = make(chan []memory.Trigger, 500)
 	r.breadcrumbs = make(chan map[uint64][]string, 500)
@@ -49,7 +48,7 @@ func (r *Coordinator) Init(enabled bool) {
 /* Send a batch of breadcrumbs to the coordinator */
 func (r *Coordinator) sendBreadcrumbs(rpcclient datapb.CoordinatorClient, accumulated_breadcrumbs []map[uint64][]string) error {
 	// For the RPC call we invert the map to avoid duplicating strings
-	var inverted map[string][]uint64
+	inverted := make(map[string][]uint64)
 	for _, breadcrumbs := range accumulated_breadcrumbs {
 		for trace_id, addrs := range breadcrumbs {
 			for _, addr := range addrs {
@@ -125,6 +124,7 @@ func (r *Coordinator) RemoteTrigger(ctx context.Context, in *datapb.TriggerReque
 			break
 		default:
 			// Agent is bottlenecked, drop remote triggers
+			// TODO: counters here
 		}
 	}
 

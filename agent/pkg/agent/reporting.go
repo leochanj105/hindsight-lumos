@@ -25,13 +25,13 @@ type Reporting struct {
 	data        chan []int // Buffers to be reported to collector
 }
 
-func InitReporting(api *memory.GoAgentAPI, rate_limit_mb float64, enabled bool) *Reporting {
+func InitReporting(api *memory.GoAgentAPI, rate_limit_mb float64, enabled bool, remote_addr string) *Reporting {
 	var r Reporting
-	r.Init(api, rate_limit_mb, enabled)
+	r.Init(api, rate_limit_mb, enabled, remote_addr)
 	return &r
 }
 
-func (r *Reporting) Init(api *memory.GoAgentAPI, rate_limit_mb float64, enabled bool) {
+func (r *Reporting) Init(api *memory.GoAgentAPI, rate_limit_mb float64, enabled bool, remote_addr string) {
 	r.api = api
 	r.data = make(chan []int, 4)               // 4 somewhat arbitrary
 	r.enabled = enabled                        // used for testing/dev
@@ -42,7 +42,7 @@ func (r *Reporting) Init(api *memory.GoAgentAPI, rate_limit_mb float64, enabled 
 		r.bucket = ratelimit.NewBucketWithRate(r.rate_limit, int64(r.rate_limit))
 	}
 
-	r.remote_addr = util.Reporting_addr + ":" + util.Reporting_port
+	r.remote_addr = remote_addr
 }
 
 /* Reports trace data to the collector TODO grpc? */

@@ -63,13 +63,6 @@ func Conf_init(service_name string) bool {
 		}
 	}
 
-	fmt.Println("config file loaded, addr =", Server_addr, "port =", Server_port)
-
-	if Server_addr == "" || Server_port == "0" {
-		fmt.Println("Please declare agent addr and port")
-		return false
-	}
-
 	return true
 }
 

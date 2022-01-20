@@ -29,10 +29,22 @@ type Agent struct {
 	vc int // Virtual clock used for fair sharing
 }
 
-func InitAgent2(fname string, trigger_delay uint64, reporting_rate_limit float64, trigger_rate_limit float64, per_trigger_rate_limits map[int]float64) *Agent {
+func InitAgent2(fname string, local_hostname string, local_port string, coordinator_addr string,
+	reporting_addr string, trigger_delay uint64, reporting_rate_limit float64,
+	trigger_rate_limit float64, per_trigger_rate_limits map[int]float64) *Agent {
 	fmt.Println("Init agent", fname)
-	fmt.Printf("  Trigger delay %d nanoseconds\n", trigger_delay)
-	fmt.Printf("  Reporting rate limit %.2f MB/s\n", reporting_rate_limit)
+
+	if trigger_delay > 0 {
+		fmt.Printf("  Triggers are delayed by %d nanoseconds before firing\n", trigger_delay)
+	} else {
+		fmt.Println("  Triggers fire immediately")
+	}
+
+	if reporting_rate_limit > 0 {
+		fmt.Printf("  Reporting rate-limited to %.2f MB/s\n", reporting_rate_limit)
+	} else {
+		fmt.Println("  Unrestricted reporting bandwidth")
+	}
 	for trigger_id, rate := range per_trigger_rate_limits {
 		fmt.Printf("    -Trigger %d rate limit %.2f MB/s\n", trigger_id, rate)
 	}
@@ -40,8 +52,8 @@ func InitAgent2(fname string, trigger_delay uint64, reporting_rate_limit float64
 	var agent Agent
 	agent.dm.Init()
 	agent.api.Init(fname)
-	agent.reporting.Init(&agent.api, reporting_rate_limit, true)
-	agent.coordinator.Init(true)
+	agent.reporting.Init(&agent.api, reporting_rate_limit, true, reporting_addr)
+	agent.coordinator.Init(true, local_hostname, local_port, coordinator_addr)
 	agent.tm.Init(&agent.dm, agent.api.BufferSize(), trigger_rate_limit)
 	agent.tm.ConfigureRateLimits(per_trigger_rate_limits)
 

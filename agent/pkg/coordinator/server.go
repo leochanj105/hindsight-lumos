@@ -6,6 +6,7 @@ import (
 	"log"
 	"net"
 	"sync"
+	"time"
 
 	"github.com/geraldleizhang/hindsight/agent/pkg/datapb"
 	"google.golang.org/grpc"
@@ -34,6 +35,11 @@ func (s *CoordinatorServer) Init(port string) {
 	s.listen_port = port
 	s.incoming_triggers = make(chan *datapb.TriggerRequest, 1000)
 	s.incoming_breadcrumbs = make(chan *datapb.BreadcrumbsRequest, 1000)
+}
+
+func (a *Agent) Init(addr string) {
+	a.addr = addr
+	a.outgoing_triggers = make(chan []Trigger, 100)
 }
 
 func (s *CoordinatorServer) Run(ctx context.Context) {
@@ -101,7 +107,7 @@ func (cs *CoordinatorServer) processTriggersRequest(req *datapb.TriggerRequest) 
 
 func (cs *CoordinatorServer) processBreadcrumbRequest(req *datapb.BreadcrumbsRequest) {
 	// Breadcrumbs are received inverted; reverse this
-	var inverted map[uint64][]string
+	inverted := make(map[uint64][]string)
 	for _, b := range req.Breadcrumbs {
 		for _, trace_id := range b.TraceIds {
 			inverted[trace_id] = append(inverted[trace_id], b.Addr)
@@ -153,6 +159,7 @@ func (s *CoordinatorServer) LocalTrigger(ctx context.Context, in *datapb.Trigger
 	case s.incoming_triggers <- in:
 		break
 	default:
+		// TODO: counters here
 		fmt.Println("LocalTrigger incoming_triggers bottlenecked!")
 	}
 	return &datapb.TriggerReply{}, nil
@@ -165,19 +172,120 @@ func (s *CoordinatorServer) Breadcrumbs(ctx context.Context, in *datapb.Breadcru
 	case s.incoming_breadcrumbs <- in:
 		break
 	default:
+		// TODO: counters here
 		fmt.Println("LocalTrigger incoming_breadcrumbs bottlenecked!")
 	}
 	return &datapb.BreadcrumbsReply{}, nil
-}
-
-func (a *Agent) Init(addr string) {
-	a.addr = addr
 }
 
 func (a *Agent) Run() {
 
 }
 
+/* Connects to an agent in a loop, then sends triggers once connected */
+func (a *Agent) AgentLoop(ctx context.Context) {
+	fmt.Println("Connecting to agent", a.addr)
+	firsttime := true
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		default:
+			break
+		}
+
+		conn, err := grpc.Dial(a.addr, grpc.WithInsecure(), grpc.WithTimeout(100*time.Millisecond))
+		if err != nil {
+			if firsttime {
+				fmt.Println("Unable to connect to coordinator, retrying every 2 seconds", a.addr, err)
+				firsttime = false
+			}
+			time.Sleep(time.Duration(2) * time.Second)
+			continue
+		}
+		defer conn.Close()
+
+		rpcclient := datapb.NewAgentClient(conn)
+
+		err = a.ReportTriggers(ctx, rpcclient)
+		if err != nil {
+			if firsttime {
+				fmt.Println("Error with agent", a.addr, err, " -- will retry every 2 seconds")
+				firsttime = false
+			}
+			time.Sleep(time.Duration(2) * time.Second)
+			continue
+		}
+
+		firsttime = true
+	}
+}
+
+func (a *Agent) ReportTriggers(ctx context.Context, rpcclient datapb.AgentClient) error {
+	for {
+		// Accumulate a batch of up to 100 triggers
+		var accumulated []Trigger
+
+		// Block waiting for some triggers
+		for len(accumulated) == 0 {
+			select {
+			case triggers := <-a.outgoing_triggers:
+				if len(triggers) > 0 {
+					accumulated = append(accumulated, triggers...)
+				}
+			}
+		}
+
+		// Now try to batch as many additional triggers as possible (without blocking)
+	Accumulation:
+		for len(accumulated) < 100 {
+			select {
+			case <-ctx.Done():
+				return nil
+			case triggers := <-a.outgoing_triggers:
+				if len(triggers) > 0 {
+					accumulated = append(accumulated, triggers...)
+				}
+			default:
+				break Accumulation
+			}
+		}
+
+		// Send them
+		err := a.doSend(rpcclient, accumulated)
+
+		if err != nil {
+			return err
+		}
+	}
+}
+
+/* Send a batch of local triggers to the coordinator */
+func (a *Agent) doSend(rpcclient datapb.AgentClient, triggers []Trigger) error {
+	var request datapb.TriggerRequest
+	for _, trigger := range triggers {
+		var t datapb.Trigger
+		t.QueueId = int32(trigger.id.queue_id)
+		t.BaseTraceId = trigger.id.base_trace_id
+		t.TraceIds = trigger.trace_ids
+		request.Triggers = append(request.Triggers, &t)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+
+	_, err := rpcclient.RemoteTrigger(ctx, &request)
+
+	return err
+}
+
 func (a *Agent) SendTriggers(triggers []Trigger) {
 	fmt.Println("Forwarding triggers!", a.addr, triggers)
+	select {
+	case a.outgoing_triggers <- triggers:
+		break
+	default:
+		// TODO: counters here
+		fmt.Println("Agent SendTriggers bottlenecked!", a.addr)
+	}
 }

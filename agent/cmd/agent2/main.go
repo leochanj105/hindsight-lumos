@@ -8,7 +8,6 @@ import (
 	"strings"
 
 	"github.com/geraldleizhang/hindsight/agent/pkg/agent"
-	"github.com/geraldleizhang/hindsight/agent/pkg/collector_new"
 	"github.com/geraldleizhang/hindsight/agent/pkg/util"
 )
 
@@ -40,11 +39,24 @@ func (i *triggerRateLimitFlags) Set(value string) error {
 	return nil
 }
 
+func resolveConfigValue(key string, value string, legacyconfigvalue string, service_name string) string {
+	if value == "" {
+		value = legacyconfigvalue
+		fmt.Printf("  %s=%s (%s.conf)\n", key, value, service_name)
+	} else {
+		fmt.Printf("  %s=%s (command line)\n", key, value)
+	}
+	return value
+}
+
 // TODO different main methods for different cmds..........
 func main() {
 
-	isLC := flag.Bool("lc", false, "Log Collector")
-	serv_temp := flag.String("serv", "", "Service name")
+	serv := flag.String("serv", "", "Service name")
+	hostname := flag.String("host", "", "Hostname or IP of this agent.  If not specified, uses `addr` from the legacy config file")
+	port := flag.String("port", "", "Port to run the agent on.  If not specified, uses `port` from the legacy config file.")
+	lc_addr := flag.String("lc", "", "Address of the log collector in form hostname:port.  If not specified, uses `lc_addr`:`lc_port` from the legacy config file.")
+	r_addr := flag.String("r", "", "Address of the reporting backend in form hostname:port.  If not specified, uses `r_addr`:`r_port` from the legacy config file.")
 	// isReport := flag.Bool("report", true, "If report to LC (or local mode)")
 	delayf := flag.Int("delay", 0, "Used for experimental purposes.  If specified, this delays the reporting of triggers by the specified delay (in nanoseconds).  Default to 0 - no delay.")
 	reportingratelimit := flag.Float64("rate", 0, "Rate limit for reporting traces in MB/s.  Set to 0 to disable.  Default 0.")
@@ -55,25 +67,22 @@ func main() {
 
 	flag.Parse()
 
-	service_name := *serv_temp
 	delay := uint64(1000000 * (*delayf))
 
-	isConfig := util.Conf_init(service_name)
+	isConfig := util.Conf_init(*serv)
 	if !isConfig {
-		fmt.Println("Failed to load config file")
+		fmt.Println("Failed to load config file for", *serv)
 		return
 	}
 
+	fmt.Println("Running agent", *serv)
+	*hostname = resolveConfigValue("hostname", *hostname, util.Server_addr, *serv)
+	*port = resolveConfigValue("port", *port, util.Server_port, *serv)
+	*lc_addr = resolveConfigValue("lc_addr", *lc_addr, util.Coordinator_addr+":"+util.Coordinator_port, *serv)
+	*r_addr = resolveConfigValue("r_addr", *r_addr, util.Reporting_addr+":"+util.Reporting_port, *serv)
+
 	ctx, _ := context.WithCancel(context.Background())
 
-	if *isLC == true {
-		fmt.Println("running lc")
-		lc := collector_new.InitLC()
-		lc.Run(ctx)
-	} else {
-		fmt.Println("running server")
-		agent := agent.InitAgent2(service_name, delay, *reportingratelimit, *triggerratelimit, per_trigger_limits)
-		agent.Run(ctx)
-	}
-
+	agent := agent.InitAgent2(*serv, *hostname, *port, *lc_addr, *r_addr, delay, *reportingratelimit, *triggerratelimit, per_trigger_limits)
+	agent.Run(ctx)
 }
