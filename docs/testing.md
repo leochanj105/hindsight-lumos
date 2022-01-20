@@ -323,3 +323,69 @@ report rpc error: code = Unavailable desc = connection error: desc = "transport:
 Throughput: 1672702 Average batch: 11.423772
 ```
 In the above test, every 100,000 traces gets triggered.
+
+
+### Integration Test 5: Multiple Clients, Multiple Agents, Coordinator and Triggers
+
+This test runs 4 clients, 4 agents, and a coordinator.  Each client has a breadcrumb to the next.  Only one client fires triggers.  The coordinator will collect trace data from all clients.
+
+Expected output: you should see output from the coordinator terminal demonstrating the breadcrumb traversal process.
+
+**Terminal 0 (coordinator)**
+Start by clearing dev shm and running the coordinator
+```
+rm /dev/shm/*
+cd agent
+go run cmd/coordinator/main.go
+```
+
+**Terminal 1A (agent 1):**
+```
+cd agent
+go run cmd/agent2/main.go --serv hs_breadcrumb_test1 -port 5053
+```
+
+**Terminal 2A (agent 2):**
+```
+cd agent
+go run cmd/agent2/main.go --serv hs_breadcrumb_test2 -port 5054
+```
+
+**Terminal 3A (agent 3):**
+```
+cd agent
+go run cmd/agent2/main.go --serv hs_breadcrumb_test3 -port 5055
+```
+
+**Terminal 4A (agent 4):**
+```
+cd agent
+go run cmd/agent2/main.go --serv hs_breadcrumb_test4 -port 5056
+```
+
+**Terminal 1C (client 1):**
+```
+cd client
+bin/trigger_benchmark_test hs_breadcrumb_test1 -S 100000 -a 127.0.0.1:5053
+```
+*The -S flag adds a sleep to the client.  Lower values sleeps less and produces more data*
+
+**Terminal 2C (client 2):**
+```
+cd client
+bin/trigger_benchmark_test hs_breadcrumb_test1 -S 100000 -a 127.0.0.1:5054 -b 127.0.0.1:5053
+```
+*The -b flag adds a breadcrumb to the specified address; in this case it is to agent1*
+
+**Terminal 3C (client 3):**
+```
+cd client
+bin/trigger_benchmark_test hs_breadcrumb_test1 -S 100000 -a 127.0.0.1:5055 -b 127.0.0.1:5054
+```
+
+**Terminal 4C (client 4):**
+```
+cd client
+bin/trigger_benchmark_test hs_breadcrumb_test1 -S 100000 -a 127.0.0.1:5056 -b 127.0.0.1:5055 -p 1
+```
+*The -p flag adds a trigger with probability 1 that it will fire -- that is, every request*
