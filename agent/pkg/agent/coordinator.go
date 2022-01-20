@@ -48,16 +48,24 @@ func (r *Coordinator) Init(enabled bool) {
 
 /* Send a batch of breadcrumbs to the coordinator */
 func (r *Coordinator) sendBreadcrumbs(rpcclient datapb.CoordinatorClient, accumulated_breadcrumbs []map[uint64][]string) error {
-	var request datapb.BreadcrumbsRequest
-	request.Src = r.local_addr
-
+	// For the RPC call we invert the map to avoid duplicating strings
+	var inverted map[string][]uint64
 	for _, breadcrumbs := range accumulated_breadcrumbs {
 		for trace_id, addrs := range breadcrumbs {
-			var bcs datapb.Breadcrumbs
-			bcs.TraceId = trace_id
-			bcs.Addrs = addrs
-			request.Breadcrumbs = append(request.Breadcrumbs, &bcs)
+			for _, addr := range addrs {
+				inverted[addr] = append(inverted[addr], trace_id)
+			}
 		}
+	}
+
+	// Construct RPC request object
+	var request datapb.BreadcrumbsRequest
+	request.Src = r.local_addr
+	for addr, trace_ids := range inverted {
+		var bcs datapb.Breadcrumbs
+		bcs.Addr = addr
+		bcs.TraceIds = trace_ids
+		request.Breadcrumbs = append(request.Breadcrumbs, &bcs)
 	}
 
 	if r.enabled {

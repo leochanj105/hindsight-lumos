@@ -15,11 +15,6 @@ type Trigger struct {
 	trace_ids []uint64
 }
 
-type Breadcrumbs struct {
-	trace_id uint64
-	addrs    []string
-}
-
 type Coordinator struct {
 	now         time.Time
 	traces      map[uint64]*tracestate      // All known traces
@@ -193,15 +188,15 @@ An agent has sent us some breadcrumbs of a trace.
 Store the breadcrumb in the coordinator and return triggers that must
 be now disseminated and the addresses to which they must be sent.
 */
-func (c *Coordinator) AddBreadcrumb(src string, breadcrumbs Breadcrumbs) map[string][]Trigger {
-	trace := c.getTrace(breadcrumbs.trace_id)
+func (c *Coordinator) AddBreadcrumb(src string, trace_id uint64, addrs []string) map[string][]Trigger {
+	trace := c.getTrace(trace_id)
 
 	/*
 		For each trigger this trace belongs to, compare the breadcrumbs:
 		- the trigger is not known at the crumb yet
 		- the trigger is known at the crumb already
 	*/
-	addrs := append(breadcrumbs.addrs, src) // might also need to disseminate triggers to src
+	addrs = append(addrs, src) // might also need to disseminate triggers to src
 
 	to_disseminate := make(map[string][]Trigger)
 	for _, addr := range addrs {

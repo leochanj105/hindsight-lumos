@@ -66,16 +66,16 @@ func TestCoordinator(t *testing.T) {
 	assert.Equal(2, c.addr_count(triggerid), "Trigger is known at 2 addresses")
 	assert.Equal([]string{"a"}, addrs, "Updating a trigger from a different source requires redistribution to first source")
 
-	disseminate := c.AddBreadcrumb("a", Breadcrumbs{uint64(75), []string{"c"}})
+	disseminate := c.AddBreadcrumb("a", uint64(75), []string{"c"})
 	assert.Equal(1, len(disseminate), "Adding a breadcrumb c->d requires dissemination to c")
 
-	disseminate = c.AddBreadcrumb("c", Breadcrumbs{uint64(75), []string{"d"}})
+	disseminate = c.AddBreadcrumb("c", uint64(75), []string{"d"})
 	assert.Equal(1, len(disseminate), "Adding a breadcrumb c->d requires dissemination to d")
 
-	disseminate = c.AddBreadcrumb("c", Breadcrumbs{uint64(77), []string{"d"}})
+	disseminate = c.AddBreadcrumb("c", uint64(77), []string{"d"})
 	assert.Equal(0, len(disseminate), "Adding another breadcrumb c->d does not require dissemination to d")
 
-	disseminate = c.AddBreadcrumb("c", Breadcrumbs{uint64(75), []string{"d", "e", "f", "g"}})
+	disseminate = c.AddBreadcrumb("c", uint64(75), []string{"d", "e", "f", "g"})
 	assert.Equal(3, len(disseminate), "Adding multiple breadcrumbs requires dissemination")
 }
 
@@ -87,18 +87,18 @@ func TestCoordinatorAfterBreadcrumbs(t *testing.T) {
 
 	triggerid := TriggerID{1, uint64(75)}
 
-	disseminate := c.AddBreadcrumb("a", Breadcrumbs{uint64(75), []string{"b"}})
+	disseminate := c.AddBreadcrumb("a", uint64(75), []string{"b"})
 	assert.Equal(0, len(disseminate), "Adding breadcrumbs requires no dissemination yet")
 	assert.True(c.trace_known_at(uint64(75), "a"), "Trace is known at a")
 	assert.True(c.trace_known_at(uint64(75), "b"), "Trace is known at b")
 
-	disseminate = c.AddBreadcrumb("b", Breadcrumbs{uint64(75), []string{"c"}})
+	disseminate = c.AddBreadcrumb("b", uint64(75), []string{"c"})
 	assert.Equal(0, len(disseminate), "Adding breadcrumbs requires no dissemination yet")
 	assert.True(c.trace_known_at(uint64(75), "a"), "Trace is known at a")
 	assert.True(c.trace_known_at(uint64(75), "b"), "Trace is known at b")
 	assert.True(c.trace_known_at(uint64(75), "c"), "Trace is known at c")
 
-	disseminate = c.AddBreadcrumb("c", Breadcrumbs{uint64(75), []string{"d"}})
+	disseminate = c.AddBreadcrumb("c", uint64(75), []string{"d"})
 	assert.Equal(0, len(disseminate), "Adding breadcrumbs requires no dissemination yet")
 	assert.True(c.trace_known_at(uint64(75), "a"), "Trace is known at a")
 	assert.True(c.trace_known_at(uint64(75), "b"), "Trace is known at b")
@@ -106,12 +106,12 @@ func TestCoordinatorAfterBreadcrumbs(t *testing.T) {
 	assert.True(c.trace_known_at(uint64(75), "d"), "Trace is known at d")
 	assert.False(c.trace_known_at(uint64(77), "a"), "Trace 77 not known yet")
 
-	disseminate = c.AddBreadcrumb("a", Breadcrumbs{uint64(77), []string{"e"}})
+	disseminate = c.AddBreadcrumb("a", uint64(77), []string{"e"})
 	assert.Equal(0, len(disseminate), "Adding breadcrumbs requires no dissemination yet")
 	assert.True(c.trace_known_at(uint64(77), "a"), "Trace 77 is known at a")
 	assert.True(c.trace_known_at(uint64(77), "e"), "Trace 77 is known at e")
 
-	disseminate = c.AddBreadcrumb("e", Breadcrumbs{uint64(77), []string{"f"}})
+	disseminate = c.AddBreadcrumb("e", uint64(77), []string{"f"})
 	assert.Equal(0, len(disseminate), "Adding breadcrumbs requires no dissemination yet")
 	assert.True(c.trace_known_at(uint64(77), "a"), "Trace 77 is known at a")
 	assert.True(c.trace_known_at(uint64(77), "e"), "Trace 77 is known at e")
@@ -143,11 +143,11 @@ func TestCoordinatorExpiration(t *testing.T) {
 
 	triggerid := TriggerID{1, uint64(75)}
 
-	c.AddBreadcrumb("a", Breadcrumbs{uint64(75), []string{"b"}})
-	c.AddBreadcrumb("b", Breadcrumbs{uint64(75), []string{"c"}})
-	c.AddBreadcrumb("c", Breadcrumbs{uint64(75), []string{"d"}})
-	c.AddBreadcrumb("a", Breadcrumbs{uint64(77), []string{"e"}})
-	c.AddBreadcrumb("e", Breadcrumbs{uint64(77), []string{"f"}})
+	c.AddBreadcrumb("a", uint64(75), []string{"b"})
+	c.AddBreadcrumb("b", uint64(75), []string{"c"})
+	c.AddBreadcrumb("c", uint64(75), []string{"d"})
+	c.AddBreadcrumb("a", uint64(77), []string{"e"})
+	c.AddBreadcrumb("e", uint64(77), []string{"f"})
 
 	c.AddTrigger("a", Trigger{triggerid, []uint64{uint64(75)}})
 	c.AddTrigger("b", Trigger{triggerid, []uint64{uint64(77)}})
@@ -170,11 +170,11 @@ func TestCoordinatorExpiration(t *testing.T) {
 	assert.Equal(1, len(c.triggers), "Trigger was not expired")
 	assert.Equal(0, len(c.traces), "Traces were expired")
 
-	c.AddBreadcrumb("a", Breadcrumbs{uint64(75), []string{"b"}})
-	c.AddBreadcrumb("b", Breadcrumbs{uint64(75), []string{"c"}})
-	c.AddBreadcrumb("c", Breadcrumbs{uint64(75), []string{"d"}})
-	c.AddBreadcrumb("a", Breadcrumbs{uint64(77), []string{"e"}})
-	c.AddBreadcrumb("e", Breadcrumbs{uint64(77), []string{"f"}})
+	c.AddBreadcrumb("a", uint64(75), []string{"b"})
+	c.AddBreadcrumb("b", uint64(75), []string{"c"})
+	c.AddBreadcrumb("c", uint64(75), []string{"d"})
+	c.AddBreadcrumb("a", uint64(77), []string{"e"})
+	c.AddBreadcrumb("e", uint64(77), []string{"f"})
 
 	assert.Equal(1, len(c.triggers), "Trigger exists")
 	assert.Equal(2, len(c.traces), "Traces were created")

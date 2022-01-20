@@ -100,13 +100,19 @@ func (cs *CoordinatorServer) processTriggersRequest(req *datapb.TriggerRequest) 
 }
 
 func (cs *CoordinatorServer) processBreadcrumbRequest(req *datapb.BreadcrumbsRequest) {
-	triggers_to_forward := make(map[string][]Trigger)
+	// Breadcrumbs are received inverted; reverse this
+	var inverted map[uint64][]string
 	for _, b := range req.Breadcrumbs {
+		for _, trace_id := range b.TraceIds {
+			inverted[trace_id] = append(inverted[trace_id], b.Addr)
+		}
+	}
+
+	// Now process them
+	triggers_to_forward := make(map[string][]Trigger)
+	for trace_id, addrs := range inverted {
 		// Store the received breadcrumbs
-		var breadcrumbs Breadcrumbs
-		breadcrumbs.trace_id = b.TraceId
-		breadcrumbs.addrs = b.Addrs
-		to_forward := cs.c.AddBreadcrumb(req.Src, breadcrumbs)
+		to_forward := cs.c.AddBreadcrumb(req.Src, trace_id, addrs)
 
 		// Forward any necessary triggers
 		for addr, triggers := range to_forward {
