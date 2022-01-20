@@ -373,19 +373,19 @@ bin/trigger_benchmark_test hs_breadcrumb_test1 -S 100000 -a 127.0.0.1:5053
 **Terminal 2C (client 2):**
 ```
 cd client
-bin/trigger_benchmark_test hs_breadcrumb_test1 -S 100000 -a 127.0.0.1:5054 -b 127.0.0.1:5053
+bin/trigger_benchmark_test hs_breadcrumb_test2 -S 100000 -a 127.0.0.1:5054 -b 127.0.0.1:5053
 ```
 *The -b flag adds a breadcrumb to the specified address; in this case it is to agent1*
 
 **Terminal 3C (client 3):**
 ```
 cd client
-bin/trigger_benchmark_test hs_breadcrumb_test1 -S 100000 -a 127.0.0.1:5055 -b 127.0.0.1:5054
+bin/trigger_benchmark_test hs_breadcrumb_test3 -S 100000 -a 127.0.0.1:5055 -b 127.0.0.1:5054
 ```
 
 **Terminal 4C (client 4):**
 ```
 cd client
-bin/trigger_benchmark_test hs_breadcrumb_test1 -S 100000 -a 127.0.0.1:5056 -b 127.0.0.1:5055 -p 1
+bin/trigger_benchmark_test hs_breadcrumb_test4 -S 100000 -a 127.0.0.1:5056 -b 127.0.0.1:5055 -p 1
 ```
 *The -p flag adds a trigger with probability 1 that it will fire -- that is, every request*
