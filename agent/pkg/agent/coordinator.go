@@ -167,8 +167,19 @@ func (r *Coordinator) ReportBreadcrumbs(ctx context.Context, rpcclient datapb.Co
 		// Accumulate a batch of up to 100 breadcrumbs
 		var accumulated []map[uint64][]string
 
+		// Block waiting for some breadcrumbs
+		for len(accumulated) == 0 {
+			select {
+			case breadcrumbs := <-r.breadcrumbs:
+				if len(breadcrumbs) > 0 {
+					accumulated = append(accumulated, breadcrumbs)
+				}
+			}
+		}
+
+		// Now try to batch as many additional breadcrumbs as possible (without blocking)
 	Accumulation:
-		for i := 0; i < 100; i++ {
+		for len(accumulated) < 100 {
 			select {
 			case <-ctx.Done():
 				return nil
@@ -177,12 +188,11 @@ func (r *Coordinator) ReportBreadcrumbs(ctx context.Context, rpcclient datapb.Co
 					accumulated = append(accumulated, breadcrumbs)
 				}
 			default:
-				if len(accumulated) > 0 {
-					break Accumulation
-				}
+				break Accumulation
 			}
 		}
 
+		// Send them
 		err := r.sendBreadcrumbs(rpcclient, accumulated)
 
 		if err != nil {
@@ -234,20 +244,28 @@ func (r *Coordinator) ReportTriggers(ctx context.Context, rpcclient datapb.Coord
 		// Accumulate a batch of up to 100 triggers
 		var accumulated []memory.Trigger
 
+		// Block waiting for some triggers
+		for len(accumulated) == 0 {
+			select {
+			case triggers := <-r.localtriggers:
+				accumulated = append(accumulated, triggers...)
+			}
+		}
+
+		// Now try to batch as many additional triggers as possible (without blocking)
 	Accumulation:
-		for i := 0; i < 100; i++ {
+		for len(accumulated) < 100 {
 			select {
 			case <-ctx.Done():
 				return nil
 			case triggers := <-r.localtriggers:
 				accumulated = append(accumulated, triggers...)
 			default:
-				if len(accumulated) > 0 {
-					break Accumulation
-				}
+				break Accumulation
 			}
 		}
 
+		// Send them
 		err := r.sendTriggers(rpcclient, accumulated)
 
 		if err != nil {

@@ -2,12 +2,7 @@ package coordinator
 
 import (
 	"container/list"
-	"log"
-	"net"
 	"time"
-
-	"github.com/geraldleizhang/hindsight/agent/pkg/datapb"
-	"google.golang.org/grpc"
 )
 
 type TriggerID struct {
@@ -31,49 +26,14 @@ type Coordinator struct {
 	triggers    map[TriggerID]*triggerstate // All known triggers
 	trigger_lru *list.List                  // For expiring triggers
 	trace_lru   *list.List                  // For expiring traces
-	agents      map[string]*Agent           // connections to agents
-
-	listen_port string // Port to listen for connections from agents
 }
 
-type Agent struct {
-	addr string
-}
-
-func (c *Coordinator) Init(port string) {
+func (c *Coordinator) Init() {
 	c.now = time.Now()
 	c.traces = make(map[uint64]*tracestate)
 	c.triggers = make(map[TriggerID]*triggerstate)
 	c.trigger_lru = list.New()
 	c.trace_lru = list.New()
-	c.listen_port = port
-}
-
-func (c *Coordinator) Run() {
-
-}
-
-/* Run the server that receives triggers and breadcrumbs */
-func (c *Coordinator) runServer() {
-	for true {
-		lis, err := net.Listen("tcp", ":"+c.listen_port)
-		if err != nil {
-			log.Fatalf("failed to listen: %v", err)
-		}
-		s := grpc.NewServer()
-		datapb.RegisterCollectorServer(s, lc)
-		if err := s.Serve(lis); err != nil {
-			log.Fatalf("failed to serve: %v", err)
-		}
-	}
-}
-
-func initAgent(addr string) *Agent {
-
-}
-
-func (a *Agent) Run() {
-
 }
 
 /* Trace representation internal to the Coordinator */
