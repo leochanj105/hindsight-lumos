@@ -63,7 +63,9 @@ void hindsight_agentapi_get_complete_nonblocking(HindsightAgentAPI* api, Complet
 void hindsight_agentapi_get_triggers_nonblocking(HindsightAgentAPI* api, TriggerBatch* triggers);
 void hindsight_agentapi_get_breadcrumbs_nonblocking(HindsightAgentAPI* api, BreadcrumbBatch* breadcrumbs);
 
-void hindsight_agentapi_read_buffer_header(HindsightAgentAPI* api, int buffer_id, TraceHeader* header);
+void hindsight_agentapi_read_buffer_header_from_pool(HindsightAgentAPI* api, int buffer_id, TraceHeader* header);
+
+void hindsight_agentapi_read_buffer_header(void* ptr, TraceHeader* header);
 
 
 #endif // _HINDSIGHT_CLIENT_AGENTAPI_H_

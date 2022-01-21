@@ -8,6 +8,7 @@ package memory
 #cgo LDFLAGS: ${SRCDIR}/../../../client/lib/libtracer.a -lm
 
 #include "agentapi.h"
+#include "tracestate.h"
 
 */
 import "C"
@@ -436,6 +437,7 @@ func (agent *AgentAPI) GetBreadcrumbBatches() (int, BreadcrumbBatch) {
 	return count, breadcrumbs
 }
 
+/* Gets the full contents of the raw buffer as a byte array from the pool */
 func (agent *AgentAPI) GetBuffer(buffer_id int) []byte {
 	buffer_size := int(agent.c_api.mgr.meta.buffer_size)
 	start := buffer_id * buffer_size
@@ -445,6 +447,37 @@ func (agent *AgentAPI) GetBuffer(buffer_id int) []byte {
 	return data
 }
 
+// This is the format of the buffer header defined in tracestate.h
+// Buffer header appears at the start of the buffer
+// size includes the size of bufferheader
+type BufferHeader struct {
+	trace_id          uint64
+	acquired          uint64
+	completed         uint64
+	size              uint32
+	buffer_number     int16
+	null_buffer_count int16
+}
+
+/* Gets the buffer from the pool and extracts the header, returning the header and the full buffer contents payload */
+func (agent *AgentAPI) ExtractBuffer(buffer_id int) (header BufferHeader, payload []byte) {
+	payload = agent.GetBuffer(buffer_id)
+	header = ExtractBufferHeader(payload)
+	return
+}
+
 func (api *GoAgentAPI) GetBuffer(buffer_id int) []byte {
 	return api.agent.GetBuffer(buffer_id)
+}
+
+func ExtractBufferHeader(buffer []byte) (header BufferHeader) {
+	var cheader C.TraceHeader
+	C.hindsight_agentapi_read_buffer_header(unsafe.Pointer(&buffer[0]), &cheader)
+	header.trace_id = uint64(cheader.trace_id)
+	header.acquired = uint64(cheader.acquired)
+	header.completed = uint64(cheader.completed)
+	header.size = uint32(cheader.size)
+	header.buffer_number = int16(cheader.buffer_number)
+	header.null_buffer_count = int16(cheader.null_buffer_count)
+	return
 }
