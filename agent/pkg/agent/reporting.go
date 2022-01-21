@@ -65,8 +65,9 @@ func (r *Reporting) reportData(buffers []int) error {
 
 		for _, buffer_id := range buffers {
 			entry = append(entry, int32(buffer_id))
-			data := r.api.GetBuffer(buffer_id)
-			trace_data = append(trace_data, data...)
+			header, data := r.api.ExtractBuffer(buffer_id)
+			trace_data = append(trace_data, data[0:header.Size]...)
+			// fmt.Println(header)
 		}
 
 		// ctx, cancel := context.WithTimeout(context.Background(), 1000000000*time.Nanosecond)

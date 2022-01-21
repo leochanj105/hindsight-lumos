@@ -447,16 +447,20 @@ func (agent *AgentAPI) GetBuffer(buffer_id int) []byte {
 	return data
 }
 
+func (api *GoAgentAPI) GetBuffer(buffer_id int) []byte {
+	return api.agent.GetBuffer(buffer_id)
+}
+
 // This is the format of the buffer header defined in tracestate.h
 // Buffer header appears at the start of the buffer
 // size includes the size of bufferheader
 type BufferHeader struct {
-	trace_id          uint64
-	acquired          uint64
-	completed         uint64
-	size              uint32
-	buffer_number     int16
-	null_buffer_count int16
+	Trace_id          uint64
+	Acquired          uint64
+	Completed         uint64
+	Size              uint32
+	Buffer_number     int16
+	Null_buffer_count int16
 }
 
 /* Gets the buffer from the pool and extracts the header, returning the header and the full buffer contents payload */
@@ -466,18 +470,18 @@ func (agent *AgentAPI) ExtractBuffer(buffer_id int) (header BufferHeader, payloa
 	return
 }
 
-func (api *GoAgentAPI) GetBuffer(buffer_id int) []byte {
-	return api.agent.GetBuffer(buffer_id)
+func (api *GoAgentAPI) ExtractBuffer(buffer_id int) (header BufferHeader, payload []byte) {
+	return api.agent.ExtractBuffer(buffer_id)
 }
 
 func ExtractBufferHeader(buffer []byte) (header BufferHeader) {
 	var cheader C.TraceHeader
 	C.hindsight_agentapi_read_buffer_header(unsafe.Pointer(&buffer[0]), &cheader)
-	header.trace_id = uint64(cheader.trace_id)
-	header.acquired = uint64(cheader.acquired)
-	header.completed = uint64(cheader.completed)
-	header.size = uint32(cheader.size)
-	header.buffer_number = int16(cheader.buffer_number)
-	header.null_buffer_count = int16(cheader.null_buffer_count)
+	header.Trace_id = uint64(cheader.trace_id)
+	header.Acquired = uint64(cheader.acquired)
+	header.Completed = uint64(cheader.completed)
+	header.Size = uint32(cheader.size)
+	header.Buffer_number = int16(cheader.buffer_number)
+	header.Null_buffer_count = int16(cheader.null_buffer_count)
 	return
 }
