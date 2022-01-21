@@ -39,3 +39,9 @@ void hindsight_agentapi_get_breadcrumbs_nonblocking(HindsightAgentAPI* api, Brea
         batch->breadcrumb_addrs[i] = batch->breadcrumbs[i].address;
     }
 }
+
+void hindsight_agentapi_read_buffer_header(HindsightAgentAPI* api, int buffer_id, TraceHeader* header) {
+    size_t offset = buffer_id * api->mgr.meta->buffer_size;
+    void* ptr = api->mgr.pool + offset;
+    *header = *((TraceHeader*) ptr);
+}
