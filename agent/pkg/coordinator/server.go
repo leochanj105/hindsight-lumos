@@ -157,7 +157,7 @@ func (cs *CoordinatorServer) runCoordinator(ctx context.Context) {
 
 /* An agent has sent us a trigger */
 func (s *CoordinatorServer) LocalTrigger(ctx context.Context, in *datapb.TriggerRequest) (*datapb.TriggerReply, error) {
-	fmt.Println("Received a local trigger!", in.Src, in.Triggers)
+	// fmt.Println("Received a local trigger!", in.Src, in.Triggers)
 	select {
 	case s.incoming_triggers <- in:
 		break
@@ -170,7 +170,7 @@ func (s *CoordinatorServer) LocalTrigger(ctx context.Context, in *datapb.Trigger
 
 /* An agent has sent us breadcrumbs */
 func (s *CoordinatorServer) Breadcrumbs(ctx context.Context, in *datapb.BreadcrumbsRequest) (*datapb.BreadcrumbsReply, error) {
-	fmt.Println("Received breadcrumbs!", in.Src, in.Breadcrumbs)
+	// fmt.Println("Received breadcrumbs!", in.Src, in.Breadcrumbs)
 	select {
 	case s.incoming_breadcrumbs <- in:
 		break

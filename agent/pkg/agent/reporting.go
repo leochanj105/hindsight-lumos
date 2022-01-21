@@ -2,13 +2,12 @@ package agent
 
 import (
 	"context"
+	"encoding/binary"
 	"fmt"
+	"net"
 	"time"
 
-	"github.com/geraldleizhang/hindsight/agent/pkg/datapb"
 	"github.com/geraldleizhang/hindsight/agent/pkg/memory"
-	"github.com/geraldleizhang/hindsight/agent/pkg/util"
-	"google.golang.org/grpc"
 
 	"github.com/juju/ratelimit"
 )
@@ -45,54 +44,56 @@ func (r *Reporting) Init(api *memory.GoAgentAPI, rate_limit_mb float64, enabled 
 	r.remote_addr = remote_addr
 }
 
-/* Reports trace data to the collector TODO grpc? */
-func (r *Reporting) reportData(buffers []int) error {
-	// fmt.Printf("Reporting trace %d with %d buffers, breadcrumbs: ", trace_id, len(trace.Buffers))
-	// for i, addr := range trace.Breadcrumbs {
-	// 	fmt.Printf("(%d: %s) ", i, addr)
-	// }
-	// fmt.Printf("\n")
+func doWrite(conn net.Conn, src []byte) error {
+	for len(src) > 0 {
+		written, err := conn.Write(src)
+		if err != nil {
+			return err
+		}
 
+		src = src[written:]
+	}
+	return nil
+}
+
+func writeLengthPrefixed(conn net.Conn, buf []byte) (err error) {
+	sizebuf := make([]byte, 4)
+	binary.LittleEndian.PutUint32(sizebuf, uint32(len(buf)))
+	err = doWrite(conn, sizebuf)
+	if err != nil {
+		return
+	}
+	err = doWrite(conn, buf)
+	return
+}
+
+/* Reports trace data to the collector TODO grpc? */
+func (r *Reporting) reportData(conn net.Conn, buffers []int) (err error) {
+	// Apply rate-limiting
 	if r.bucket != nil {
 		r.bucket.Wait(int64(len(buffers) * r.buffer_size))
 	}
 
 	if r.enabled {
-		var entry []int32
-		var trace_data []byte
-		var addrs []string
-		addrs = append(addrs, util.Server_addr+":"+util.Server_port)
-
 		for _, buffer_id := range buffers {
-			entry = append(entry, int32(buffer_id))
+			// Get the buffer data from the buffer pool
 			header, data := r.api.ExtractBuffer(buffer_id)
-			trace_data = append(trace_data, data[0:header.Size]...)
-			// fmt.Println(header)
+			data = data[0:header.Size]
+
+			// Send it
+			err = writeLengthPrefixed(conn, data)
+			if err != nil {
+				break // Stop writing and allow error to propagate; always return all buffers to pool
+			}
 		}
-
-		// ctx, cancel := context.WithTimeout(context.Background(), 1000000000*time.Nanosecond)
-		// defer cancel()
-
-		// TODO: report differently; not as RPC, and buffers only
-		// TODO: configurable whether to actually report or not.
-		// r.collector.Report(ctx, &datapb.Trace{
-		// 	RequestId: int64(0),
-		// 	Entry:     entry,
-		// 	Trace:     trace_data,
-		// 	Addrs:     addrs})
 	}
-
-	// if err != nil {
-	// 	fmt.Println("report", err)
-	// 	// return
-	// }
 
 	// Return the buffers
 	if len(buffers) > 0 {
 		r.api.Available <- buffers
 	}
 
-	return nil
+	return
 }
 
 /* TODO: not sure we'll actually use grpc for reporting */
@@ -106,8 +107,7 @@ func (r *Reporting) DataLoop(ctx context.Context) {
 		default:
 			break
 		}
-
-		conn, err := grpc.Dial(r.remote_addr, grpc.WithInsecure(), grpc.WithTimeout(100*time.Millisecond))
+		conn, err := net.Dial("tcp", r.remote_addr)
 		if err != nil {
 			if firsttime {
 				fmt.Println("Unable to connect to reporting backend, retrying every 2 seconds", r.remote_addr, err)
@@ -118,9 +118,7 @@ func (r *Reporting) DataLoop(ctx context.Context) {
 		}
 		defer conn.Close()
 
-		coordinator := datapb.NewCoordinatorClient(conn)
-
-		err = r.ReportData(ctx, coordinator)
+		err = r.ReportData(ctx, conn)
 		if err != nil {
 			if firsttime {
 				fmt.Println("Error in DataLoop:", err, " -- will retry every 2 seconds")
@@ -134,13 +132,13 @@ func (r *Reporting) DataLoop(ctx context.Context) {
 	}
 }
 
-func (r *Reporting) ReportData(ctx context.Context, coordinator datapb.CoordinatorClient) error {
+func (r *Reporting) ReportData(ctx context.Context, conn net.Conn) error {
 	for {
 		select {
 		case <-ctx.Done():
 			return nil
 		case buffers := <-r.data:
-			err := r.reportData(buffers)
+			err := r.reportData(conn, buffers)
 			if err != nil {
 				return err
 			}

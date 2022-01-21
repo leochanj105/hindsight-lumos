@@ -39,10 +39,16 @@ func (i *triggerRateLimitFlags) Set(value string) error {
 	return nil
 }
 
-func resolveConfigValue(key string, value string, legacyconfigvalue string, service_name string) string {
+func resolveConfigValue(key string, value string, legacyconfigvalue string, defaultvalue string, service_name string) string {
 	if value == "" {
 		value = legacyconfigvalue
-		fmt.Printf("  %s=%s (%s.conf)\n", key, value, service_name)
+
+		if value == "" || value == ":" {
+			value = defaultvalue
+			fmt.Printf("  %s=%s (default fallback)\n", key, value)
+		} else {
+			fmt.Printf("  %s=%s (%s.conf)\n", key, value, service_name)
+		}
 	} else {
 		fmt.Printf("  %s=%s (command line)\n", key, value)
 	}
@@ -60,7 +66,7 @@ func main() {
 	// isReport := flag.Bool("report", true, "If report to LC (or local mode)")
 	delayf := flag.Int("delay", 0, "Used for experimental purposes.  If specified, this delays the reporting of triggers by the specified delay (in nanoseconds).  Default to 0 - no delay.")
 	reportingratelimit := flag.Float64("rate", 0, "Rate limit for reporting traces in MB/s.  Set to 0 to disable.  Default 0.")
-	triggerratelimit := flag.Float64("triggerrate", 0, "Rate limit for a spammy trigger in triggers/s.  Set to 0 to disable.  Default 10000.")
+	triggerratelimit := flag.Float64("triggerrate", 10000, "Rate limit for a spammy trigger in triggers/s.  Set to 0 to disable.  Default 10000.")
 
 	per_trigger_limits := make(triggerRateLimitFlags)
 	flag.Var(&per_trigger_limits, "l", "A per-trigger reporting rate limit in the form queue_id,rate where queue_id is an integer and rate is a float representing a reporting limit in MB/s.  This flag can be set multiple times to provide rate limits for different triggers.")
@@ -76,10 +82,10 @@ func main() {
 	}
 
 	fmt.Println("Running agent", *serv)
-	*hostname = resolveConfigValue("hostname", *hostname, util.Server_addr, *serv)
-	*port = resolveConfigValue("port", *port, util.Server_port, *serv)
-	*lc_addr = resolveConfigValue("lc_addr", *lc_addr, util.Coordinator_addr+":"+util.Coordinator_port, *serv)
-	*r_addr = resolveConfigValue("r_addr", *r_addr, util.Reporting_addr+":"+util.Reporting_port, *serv)
+	*hostname = resolveConfigValue("hostname", *hostname, util.Server_addr, "127.0.0.1", *serv)
+	*port = resolveConfigValue("port", *port, util.Server_port, "5050", *serv)
+	*lc_addr = resolveConfigValue("lc_addr", *lc_addr, util.Coordinator_addr+":"+util.Coordinator_port, "127.0.0.1:5252", *serv)
+	*r_addr = resolveConfigValue("r_addr", *r_addr, util.Reporting_addr+":"+util.Reporting_port, "127.0.0.1:5253", *serv)
 
 	ctx, _ := context.WithCancel(context.Background())
 
