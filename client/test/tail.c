@@ -1,7 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#include "tracer.h"
+#include "hindsight.h"
 
 int main(int argc, char const *argv[]) {
 	hindsight_init("tail");

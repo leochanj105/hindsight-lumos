@@ -5,8 +5,6 @@
 #include "assert.h"
 #include "common.h"
 
-#include "tracer.h"
-
 void do_test_sampling_threshold(float f, uint64_t expected) {
 	uint64_t actual = multiply_by(UINT64_MAX, f);
 	printf("%.7f is %lu (expected %lu)\n", f, actual, expected);

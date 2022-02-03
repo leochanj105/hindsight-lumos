@@ -6,6 +6,7 @@ ARFLAGS = rcs
 
 LIBDIR = lib
 SRCDIR = src
+INCLUDEDIR = include
 BINDIR = bin
 TESTDIR = test
 JNIDIR = jni
@@ -16,15 +17,15 @@ STATIC_LDFLAGS = -fPIC
 LDFLAGS = $(STATIC_LDFLAGS) -shared
 LIBRARY = $(LIBDIR)/libtracer.so
 STATIC_LIBRARY = $(LIBDIR)/libtracer.a
-SRCFILES = $(SRCDIR)/tracer.c $(SRCDIR)/queue.c $(SRCDIR)/buffer.c $(SRCDIR)/tracestate.c $(SRCDIR)/trigger.c $(SRCDIR)/breadcrumb.c $(SRCDIR)/hindsight.c $(SRCDIR)/agentapi.c $(SRCDIR)/common.c
+SRCFILES = $(SRCDIR)/agentapi.c $(SRCDIR)/breadcrumb.c $(SRCDIR)/buffer.c $(SRCDIR)/common.c $(SRCDIR)/hindsight.c $(SRCDIR)/queue.c $(SRCDIR)/tracestate.c $(SRCDIR)/trigger.c
 
 DEPFILES := $(SRCFILES:%.c=$(DEPDIR)/%.d)
 DEPFLAGS = -MT $@ -MMD -MP -MF $(DEPDIR)/$*.d
 OBJFILES = ${SRCFILES:.c=.o}
-INCLUDEFLAGS = -I $(SRCDIR)
+INCLUDEFLAGS = -I $(SRCDIR) -I $(INCLUDEDIR)
 PTHREADFLAGS = -lpthread -lm
 
-TARGET = dirs bin/breadcrumbs_test bin/benchmark_test bin/triggers_test bin/trigger_benchmark_test bin/buffer_test bin/queue_test bin/tracer_test bin/client_test bin/multi_client_test bin/hindsight_test bin/hindsight2_test bin/data_test bin/sampling_test bin/exception_test bin/tail_test $(LIBRARY) $(STATIC_LIBRARY)
+TARGET = dirs bin/breadcrumbs_test bin/benchmark_test bin/triggers_test bin/trigger_benchmark_test bin/buffer_test bin/queue_test bin/hindsight_test bin/hindsight2_test bin/sampling_test bin/exception_test bin/tail_test $(LIBRARY) $(STATIC_LIBRARY)
 .PHONY: all debug
 
 all: $(TARGET)
@@ -57,7 +58,8 @@ install:
 	rm -rf /usr/local/include/tracer /usr/local/lib/libtracer.so
 	cp lib/libtracer.so /usr/local/lib
 	cp lib/libtracer.a /usr/local/lib
-	cp -r src /usr/local/include/tracer
+	cp -r $(SRCDIR) /usr/local/include/tracer
+	cp -r $(INCLUDEDIR) /usr/local/include/tracer
 	mkdir -p /etc/hindsight_conf
 	cp ../conf/* /etc/hindsight_conf/
 

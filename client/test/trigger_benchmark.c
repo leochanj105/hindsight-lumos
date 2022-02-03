@@ -8,7 +8,6 @@
 #include <string.h>
 
 #include "buffer.h"
-#include "tracer.h"
 #include "hindsight.h"
 #include "agentapi.h"
 #include "common.h"
