@@ -71,24 +71,34 @@ go run cmd/agent2/main.go --help
 ```
 Usage of /tmp/go-build2373230828/b001/exe/main:
   -delay int
-        Used for experimental purposes.  If specified, this delays the reporting of triggers by the specified delay (in nanoseconds).  Default to 0 - no delay.
+        Used for experimental purposes.  If specified, this delays the reporting
+        of triggers by the specified delay (in nanoseconds).  Default to 0 - no 
+        delay.
   -host addr
-        Hostname or IP of this agent.  If not specified, uses addr from the legacy config file
+        Hostname or IP of this agent.  If not specified, uses addr from the lega
+        cy config file
   -l value
-        A per-trigger reporting rate limit in the form queue_id,rate where queue_id is an integer and rate is a float representing a reporting limit in MB/s.  This flag can be set multiple times to provide rate limits
-for different triggers.
+        A per-trigger reporting rate limit in the form queue_id,rate where queue
+        _id is an integer and rate is a float representing a reporting limit in 
+        MB/s.  This flag can be set multiple times to provide rate limits for di
+        fferent triggers.
   -lc lc_addr
-        Address of the log collector in form hostname:port.  If not specified, uses lc_addr:`lc_port` from the legacy config file.
+        Address of the log collector in form hostname:port.  If not specified, u
+        ses lc_addr:`lc_port` from the legacy config file.
   -port port
-        Port to run the agent on.  If not specified, uses port from the legacy config file.
+        Port to run the agent on.  If not specified, uses port from the legacy c
+        onfig file.
   -r r_addr
-        Address of the reporting backend in form hostname:port.  If not specified, uses r_addr:`r_port` from the legacy config file.
+        Address of the reporting backend in form hostname:port.  If not specifie
+        d, uses r_addr:`r_port` from the legacy config file.
   -rate float
-        Rate limit for reporting traces in MB/s.  Set to 0 to disable.  Default 0.
+        Rate limit for reporting traces in MB/s.  Set to 0 to disable.  Default 
+        0.
   -serv string
         Service name
   -triggerrate float
-        Rate limit for a spammy trigger in triggers/s.  Set to 0 to disable.  Default 10000. (default 10000)
+        Rate limit for a spammy trigger in triggers/s.  Set to 0 to disable.  De
+        fault 10000. (default 10000)
 ```
 
 Where noted, some port and address configurations can be specified via the `service_name.conf` file, and overridden by command line arguments.  For information about the configuration file, see [configuration.md](configuration.md)
