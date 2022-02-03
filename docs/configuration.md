@@ -5,12 +5,22 @@ For environment setup, see [environment](environment.md)
 The default Hindsight configuration can be found in `conf/default.conf`:
 
 ```
-cap 1000000
-buf_length 50
+cap 10000
+buf_length 32768
 addr 127.0.0.1
 port 5050
 lc_addr 127.0.0.1
 lc_port 5252
+r_addr 127.0.0.1
+r_port 5253
+retroactive_sampling_percentage 1.0
+head_sampling_probability 0.0
+```
+
+There are some other configuration values that are used for experiments and are here for convenience until they can be refactored:
+
+```
+payload 1000
 ```
 
 **Reminder:** there are three categories of process that use Hindsight: clients, which are spread across many machines; agents, also spread across machines -- agents are separate go processes that run side-by-side with clients; and a single centralized log collector.
