@@ -23,21 +23,31 @@ There are some other configuration values that are used for experiments and are 
 payload 1000
 ```
 
-**Reminder:** there are three categories of process that use Hindsight: clients, which are spread across many machines; agents, also spread across machines -- agents are separate go processes that run side-by-side with clients; and a single centralized log collector.
+**Reminder:** there are four categories of process that use Hindsight: [clients](clients.md), [agents](agents.md), the [coordinator](coordinator.md) and the [collector](collector.md).  Some configuration values are used by multiple prcesses.
 
-* `cap`: The default number of buffers in Hindsight's buffer pool
-* `buf_length`: The default buffer size, in bytes, of buffers in Hindsight's buffer pools
+Configuring the per-node buffer pool (relevant to clients and agents)
+
+* `cap`: The default number of buffers in Hindsight's buffer pool.  Used by clients exclusively.
+* `buf_length`: The default buffer size, in bytes, of buffers in Hindsight's buffer pools.  Used by clients exclusively.
   * *The size, in bytes, of Hindsight's buffer pool is `cap * buf_length`*
-* `addr`: The hostname or IP address of the host loading this config file
-* `port`: The port to be used by the agent
-* `lc_addr`: The hostname or IP address of the log collector
-* `lc_port`: The port of the log collector
 
-## How is config used?
+Configuring client-side sampling probabilities
 
-* Each agent will read the config and create a gRPC server listening on `addr:port`; the log collector can contact the agent using this gRPC server
-* Each client will set up its own shared memory using `cap` and `buf_length`
-* Each client will pass `addr:port` as a breadcrumb inside any propagated contexts
+* `head_sampling_probability`: An optional head-based sampling probability, by default set to 0. Accepts values 0 to 1.  If set, then traces will be eagerly triggered with a random probability.
+* `retroactive_sampling_percentage`: By default Hindsight does retroactive tracing for 100% of requests.  This config value reduces this percentage, which thereby reduces overheads.  For example if set to 50% then 50% of requests will not generate any data at all.
+
+Configuring addresses 
+
+* `addr`: The local hostname or IP address of the host loading this config file.  Hindsight clients will use this as their local breadcrumb
+* `port`: The port to be used by the agent.  Hindsight clients will use this as their local breadcrumb.  The Hindsight agent will listen on this port.
+* `lc_addr`: The hostname or IP address of the [coordinator](coordinator.md).
+* `lc_port`: The port of the coordinator of the [coordinator](coordinator.md)
+* `r_addr`: The hostname or IP address of the [collector](collector.md).
+* `r_port`: The port of the [collector](collector.md).
+
+Experiment-specific
+
+* `payload`: No idea
 
 ## Process names
 
@@ -57,12 +67,16 @@ cp conf/default.conf conf/datanode.conf
 ```
 Then edit `conf/datanode.conf`:
 ```
-cap 1000000
-buf_length 50
-addr 196.168.0.101
+cap 10000
+buf_length 32768
+addr 127.0.0.1
 port 5050
-lc_addr 192.168.0.99
+lc_addr 127.0.0.1
 lc_port 5252
+r_addr 127.0.0.1
+r_port 5253
+retroactive_sampling_percentage 1.0
+head_sampling_probability 0.0
 ```
 Then
 ```

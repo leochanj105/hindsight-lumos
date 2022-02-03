@@ -4,7 +4,7 @@ Client applications must be instrumented with Hindsight in order to generate dat
 
 Hindsight offers two ways to instrument client applications.  Applications can use Hindsight's OpenTelemetry integration and instrument against OpenTelemetry APIS.  (TODO: instructions).
 
-Alternatively applications can instrument directly against Hindsight's APIs defined in [hindsight.h](../client/src/hindsight.h) (TODO: structure C project properly).
+Alternatively applications can instrument directly against Hindsight's APIs defined in [hindsight.h](../client/include/hindsight.h)
 
 # Initializing
 
