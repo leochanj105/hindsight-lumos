@@ -142,6 +142,7 @@ func (agent *Agent) processCompletedBuffers(batch memory.CompleteBatch) {
 */
 func (agent *Agent) processBreadcrumbs(batch memory.BreadcrumbBatch) {
 	to_report := make(map[uint64][]string)
+	num_to_report := 0
 	for trace_id, breadcrumbs := range batch {
 		/* Ignore trace ID 0 */
 		if trace_id == 0 {
@@ -152,6 +153,7 @@ func (agent *Agent) processBreadcrumbs(batch memory.BreadcrumbBatch) {
 		breadcrumbs := agent.dm.AddBreadcrumbs(trace_id, breadcrumbs)
 		if len(breadcrumbs) > 0 {
 			to_report[trace_id] = breadcrumbs
+			num_to_report += len(breadcrumbs)
 		}
 	}
 
@@ -161,8 +163,7 @@ func (agent *Agent) processBreadcrumbs(batch memory.BreadcrumbBatch) {
 		case agent.coordinator.breadcrumbs <- to_report:
 			break
 		default:
-			// Connection to coordinator is bottlenecked; drop the breadcrumbs
-			fmt.Println("processBreadcrumbs coordinator bottlenecked!")
+			agent.metrics.dropped_breadcrumbs += num_to_report
 		}
 	}
 }
@@ -170,6 +171,7 @@ func (agent *Agent) processBreadcrumbs(batch memory.BreadcrumbBatch) {
 func (agent *Agent) processTriggers(batch []memory.Trigger) {
 	triggers_to_forward := make([]memory.Trigger, 0, len(batch))
 	breadcrumbs_to_forward := make(map[uint64][]string)
+	num_breadcrumbs_to_forward := 0
 	for _, t := range batch {
 		/* Add to the DataManager */
 		// TODO: update C struct to send lateral trace ids all in one or have two ids
@@ -185,6 +187,7 @@ func (agent *Agent) processTriggers(batch []memory.Trigger) {
 		for trace_id, addrs := range breadcrumbs {
 			if len(addrs) > 0 {
 				breadcrumbs_to_forward[trace_id] = append(breadcrumbs_to_forward[trace_id], addrs...)
+				num_breadcrumbs_to_forward += len(addrs)
 			}
 		}
 	}
@@ -196,7 +199,7 @@ func (agent *Agent) processTriggers(batch []memory.Trigger) {
 			break
 		default:
 			// Connection to coordinator is bottlenecked; drop the triggers
-			fmt.Println("processTriggers triggers coordinator bottlenecked!")
+			agent.metrics.dropped_triggers += len(triggers_to_forward)
 		}
 	}
 	if len(breadcrumbs_to_forward) > 0 {
@@ -205,13 +208,14 @@ func (agent *Agent) processTriggers(batch []memory.Trigger) {
 			break
 		default:
 			// Connection to coordinator is bottlenecked; drop the breadcrumbs
-			fmt.Println("processTriggers breadcrumbs coordinator bottlenecked!")
+			agent.metrics.dropped_breadcrumbs += num_breadcrumbs_to_forward
 		}
 	}
 }
 
 func (agent *Agent) processRemoteTriggers(batch []memory.Trigger) {
 	breadcrumbs_to_forward := make(map[uint64][]string)
+	num_breadcrumbs_to_forward := 0
 	for _, t := range batch {
 		queue := agent.tm.getQueue(t.Queue_id)
 		// TODO: update C struct to send lateral trace ids all in one or have two ids
@@ -221,6 +225,7 @@ func (agent *Agent) processRemoteTriggers(batch []memory.Trigger) {
 		for trace_id, addrs := range breadcrumbs {
 			if len(addrs) > 0 {
 				breadcrumbs_to_forward[trace_id] = append(breadcrumbs_to_forward[trace_id], addrs...)
+				num_breadcrumbs_to_forward += len(addrs)
 			}
 		}
 	}
@@ -231,7 +236,7 @@ func (agent *Agent) processRemoteTriggers(batch []memory.Trigger) {
 			break
 		default:
 			// Connection to coordinator is bottlenecked; drop the breadcrumbs
-			fmt.Println("processRemoteTriggers breadcrumbs coordinator bottlenecked!")
+			agent.metrics.dropped_breadcrumbs += num_breadcrumbs_to_forward
 		}
 	}
 }

@@ -16,9 +16,11 @@ type TriggerMetrics struct {
 }
 
 type AgentMetrics struct {
-	complete_batches int
-	complete_buffers int
-	event_horizon    time.Duration
+	complete_batches    int
+	complete_buffers    int
+	event_horizon       time.Duration
+	dropped_triggers    int
+	dropped_breadcrumbs int
 }
 
 type Stats struct {
@@ -28,6 +30,8 @@ type Stats struct {
 	buffer_throughput_mb float64
 	mean_batchsize       float64
 	event_horizon        time.Duration
+	dropped_triggers     int
+	dropped_breadcrumbs  int
 
 	queue_totals QueueStats
 	queue_ids    []int
@@ -82,7 +86,8 @@ func (s *Stats) Str() string {
 	fmt.Fprintf(&b, "EH: %d ms ", s.event_horizon/time.Millisecond)
 	fmt.Fprintf(&b, "%.3f MB/s ", s.buffer_throughput_mb)
 	fmt.Fprintf(&b, "(%.0f bufs/s, %d bufs total), ", s.buffer_throughput, s.complete_buffers)
-	fmt.Fprintf(&b, "Avg batch %.1f; ", s.mean_batchsize)
+	fmt.Fprintf(&b, "Avg batch %.1f, ", s.mean_batchsize)
+	fmt.Fprintf(&b, "Drops %d,%d ", s.dropped_triggers, s.dropped_breadcrumbs)
 	if s.diagnostics != nil {
 		fmt.Fprintf(&b, "  ||  %v", s.diagnostics.Str())
 	}
@@ -114,6 +119,8 @@ func (agent *Agent) calculateAgentStats(duration_nanos float64, debug bool) Stat
 		stats.mean_batchsize = float64(metrics.complete_buffers) / float64(metrics.complete_batches)
 	}
 	stats.event_horizon = metrics.event_horizon
+	stats.dropped_triggers = metrics.dropped_triggers
+	stats.dropped_breadcrumbs = metrics.dropped_breadcrumbs
 
 	if debug {
 		diagnostics := agent.calculateDiagnostics()
