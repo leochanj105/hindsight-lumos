@@ -35,7 +35,7 @@ func InitAgent2(fname string, local_hostname string, local_port string, coordina
 	fmt.Println("Init agent", fname)
 
 	if trigger_delay > 0 {
-		fmt.Printf("  Triggers are delayed by %d nanoseconds before firing\n", trigger_delay)
+		fmt.Printf("  Triggers are delayed by %d milliseconds before firing\n", trigger_delay)
 	} else {
 		fmt.Println("  Triggers fire immediately")
 	}
@@ -65,19 +65,9 @@ func InitAgent2(fname string, local_hostname string, local_port string, coordina
 	if trigger_delay == 0 {
 		agent.localtriggers = agent.api.Triggers
 	} else {
-		proxy := make(chan []memory.Trigger, 10000)
-		agent.localtriggers = proxy
-		go func() {
-			for {
-				select {
-				case fired := <-agent.api.Triggers:
-					go func() {
-						time.Sleep(time.Duration(trigger_delay) * time.Nanosecond)
-						proxy <- fired
-					}()
-				}
-			}
-		}()
+		fmt.Printf("Delaying triggers by %d milliseconds", trigger_delay)
+		delayer := delayTriggers(time.Duration(trigger_delay)*time.Millisecond, agent.api.Triggers)
+		agent.localtriggers = delayer.Outgoing
 	}
 
 	fmt.Println("Go Agent cache capacity", agent.cache_capacity)

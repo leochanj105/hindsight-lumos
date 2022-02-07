@@ -64,7 +64,7 @@ func main() {
 	lc_addr := flag.String("lc", "", "Address of the log collector in form hostname:port.  If not specified, uses `lc_addr`:`lc_port` from the legacy config file.")
 	r_addr := flag.String("r", "", "Address of the reporting backend in form hostname:port.  If not specified, uses `r_addr`:`r_port` from the legacy config file.")
 	// isReport := flag.Bool("report", true, "If report to LC (or local mode)")
-	delayf := flag.Int("delay", 0, "Used for experimental purposes.  If specified, this delays the reporting of triggers by the specified delay (in nanoseconds).  Default to 0 - no delay.")
+	delayf := flag.Int("delay", 0, "Used for experimental purposes.  If specified, this delays the reporting of triggers by the specified delay (in milliseconds).  Default to 0 - no delay.")
 	reportingratelimit := flag.Float64("rate", 0, "Rate limit for reporting traces in MB/s.  Set to 0 to disable.  Default 0.")
 	triggerratelimit := flag.Float64("triggerrate", 10000, "Rate limit for a spammy trigger in triggers/s.  Set to 0 to disable.  Default 10000.")
 
@@ -73,7 +73,7 @@ func main() {
 
 	flag.Parse()
 
-	delay := uint64(1000000 * (*delayf))
+	delay := uint64((*delayf))
 
 	isConfig := util.Conf_init(*serv)
 	if !isConfig {
