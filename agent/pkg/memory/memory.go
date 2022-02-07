@@ -4,7 +4,7 @@ package memory
 //   export CGO_LDFLAGS_ALLOW=".*"
 
 /*
-#cgo CFLAGS: -I${SRCDIR}/../../../client/src
+#cgo CFLAGS: -I${SRCDIR}/../../../client/src -I${SRCDIR}/../../../client/include
 #cgo LDFLAGS: ${SRCDIR}/../../../client/lib/libtracer.a -lm
 
 #include "agentapi.h"
