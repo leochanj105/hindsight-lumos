@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/geraldleizhang/hindsight/agent/pkg/memory"
+	"github.com/geraldleizhang/hindsight/agent/pkg/telemetry"
 )
 
 type Agent struct {
@@ -24,14 +25,16 @@ type Agent struct {
 	/* Wraps api.Triggers, possibly adding a delay for experiments */
 	localtriggers <-chan []memory.Trigger // triggers from shm
 
-	metrics AgentMetrics
+	metrics  AgentMetrics
+	reporter *telemetry.Reporter
 
 	vc int // Virtual clock used for fair sharing
 }
 
 func InitAgent2(fname string, local_hostname string, local_port string, coordinator_addr string,
 	reporting_addr string, trigger_delay uint64, reporting_rate_limit float64,
-	trigger_rate_limit float64, per_trigger_rate_limits map[int]float64) *Agent {
+	trigger_rate_limit float64, per_trigger_rate_limits map[int]float64,
+	telemetry_filename string, verbose bool) *Agent {
 	fmt.Println("Init agent", fname)
 
 	if trigger_delay > 0 {
@@ -61,7 +64,8 @@ func InitAgent2(fname string, local_hostname string, local_port string, coordina
 	agent.triggered_capacity = agent.cache_capacity / 2   // TODO: not hardcoded
 	agent.trigger_timeout = time.Duration(-5) * time.Minute
 
-	// This delayed trigger stuff is only used for experiments with intentional trigger delay
+	/* Trigger delay isn't a feature of Hindsight, but we use it for some of the
+	Hindsight experiments to inject artificial delay in triggers firing. */
 	if trigger_delay == 0 {
 		agent.localtriggers = agent.api.Triggers
 	} else {
@@ -72,7 +76,53 @@ func InitAgent2(fname string, local_hostname string, local_port string, coordina
 
 	fmt.Println("Go Agent cache capacity", agent.cache_capacity)
 
+	/* Initialize the telemetry reporting */
+	report_interval := time.Duration(1) * time.Second // Seems overkill to add this as an argument at the moment
+	debug := true                                     // Currently, debug telemetry is lightweight and pretty useful.
+	agent.initTelemetry(report_interval, telemetry_filename, verbose, debug)
+
 	return &agent
+}
+
+/* Invoked during agent initialization; just creates and links up the
+the appropriate telemetry loggers according to agent init arguments */
+func (agent *Agent) initTelemetry(report_interval time.Duration, telemetry_filename string, verbose bool, debug bool) error {
+	/* Create the receivers */
+	var receivers []telemetry.Receiver
+	if telemetry_filename != "" {
+		fmt.Println("Outputting telemetry to", telemetry_filename)
+		r, err := telemetry.NewCsvReceiver(telemetry_filename)
+		if err != nil {
+			return err
+		}
+		receivers = append(receivers, r)
+	}
+	if verbose {
+		fmt.Println("Outputting telemetry to stdout")
+		receivers = append(receivers, telemetry.NewStdoutReceiver(" "))
+	}
+
+	/* Only generate telemetry if there is one or more receiver */
+	if len(receivers) == 0 {
+		return nil
+	}
+
+	/* If there are 2 or more receivers, wrap them in a MultiReceiver */
+	var receiver telemetry.Receiver
+	if len(receivers) == 1 {
+		receiver = receivers[0]
+	} else {
+		receiver = telemetry.NewMultiReceiver(receivers)
+	}
+
+	/* Create the AgentTelemetryGenerator defined in metrics.go */
+	var generator AgentTelemetryGenerator
+	generator.Init(agent, debug)
+
+	/* Link up with the reporter */
+	agent.reporter = new(telemetry.Reporter)
+	agent.reporter.Init(report_interval, &generator, receiver)
+	return nil
 }
 
 /*
@@ -292,7 +342,7 @@ func (agent *Agent) RunProcessingLoop(ctx context.Context) {
 
 func (agent *Agent) Run(ctx context.Context) {
 	wg := new(sync.WaitGroup)
-	wg.Add(5)
+	wg.Add(6)
 	go func() {
 		agent.RunProcessingLoop(ctx)
 	}()
@@ -310,6 +360,15 @@ func (agent *Agent) Run(ctx context.Context) {
 	}()
 	go func() {
 		agent.printLoop(ctx)
+		wg.Done()
+	}()
+	go func() {
+		if agent.reporter != nil {
+			err := agent.reporter.Run(ctx)
+			if err != nil {
+				fmt.Println("Error in telemetry reporter:", err)
+			}
+		}
 		wg.Done()
 	}()
 	wg.Wait()

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -253,4 +254,45 @@ func (agent *Agent) printLoop(ctx context.Context) {
 			}
 		}
 	}
+}
+
+type AgentTelemetryGenerator struct {
+	agent *Agent
+	debug bool
+}
+
+func (g *AgentTelemetryGenerator) Init(agent *Agent, debug bool) {
+	g.agent = agent
+	g.debug = debug
+}
+
+/* TelemetryGenerator interface */
+func (g *AgentTelemetryGenerator) Headers() []string {
+	return []string{
+		"total_buffers",
+		"total_buffer_batches",
+		"mean_buffer_batchsize",
+		"buffer_throughput",
+		"buffer_throughput_mb",
+		"event_horizon_milliseconds",
+		"coordinator_bottleneck_percent",
+	}
+}
+
+/* TelemetryGenerator interface */
+func (g *AgentTelemetryGenerator) NextData(now time.Time, interval time.Duration) (rows []map[string]string) {
+	stats := g.agent.calculateAgentStats(float64(interval.Nanoseconds()), g.debug)
+
+	row := make(map[string]string)
+
+	row["total_buffers"] = strconv.Itoa(stats.complete_buffers)
+	row["total_buffer_batches"] = strconv.Itoa(stats.complete_batches)
+	row["mean_buffer_batchsize"] = strconv.FormatFloat(stats.mean_batchsize, 'f', 1, 64)
+	row["buffer_throughput"] = strconv.FormatFloat(stats.buffer_throughput, 'f', 0, 64)
+	row["buffer_throughput_mb"] = strconv.FormatFloat(stats.buffer_throughput_mb, 'f', 3, 64)
+	row["event_horizon_milliseconds"] = strconv.FormatFloat(float64(stats.event_horizon)/float64(time.Millisecond), 'f', 1, 64)
+	row["coordinator_bottleneck_percent"] = "todo"
+
+	rows = append(rows, row)
+	return rows
 }
