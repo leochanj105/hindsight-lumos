@@ -342,7 +342,7 @@ func (agent *Agent) RunProcessingLoop(ctx context.Context) {
 
 func (agent *Agent) Run(ctx context.Context) {
 	wg := new(sync.WaitGroup)
-	wg.Add(6)
+	wg.Add(5)
 	go func() {
 		agent.RunProcessingLoop(ctx)
 	}()
@@ -356,10 +356,6 @@ func (agent *Agent) Run(ctx context.Context) {
 	}()
 	go func() {
 		agent.api.Run(ctx)
-		wg.Done()
-	}()
-	go func() {
-		agent.printLoop(ctx)
 		wg.Done()
 	}()
 	go func() {
