@@ -1,4 +1,4 @@
-package agent
+package telemetry
 
 import (
 	"fmt"
@@ -41,7 +41,7 @@ func TestStdoutReceiver(t *testing.T) {
 
 	receiver := NewStdoutReceiver(" ")
 	generator := new(generatorForTest)
-	reporter := new(PeriodicReporter)
+	reporter := new(Reporter)
 
 	reporter.Init(time.Duration(1)*time.Second, generator, receiver)
 
@@ -59,7 +59,7 @@ func TestCsvReceiver(t *testing.T) {
 	assert.NoError(err, "Unable to create test.csv")
 
 	generator := new(generatorForTest)
-	reporter := new(PeriodicReporter)
+	reporter := new(Reporter)
 
 	reporter.Init(time.Duration(1)*time.Second, generator, receiver)
 
@@ -76,10 +76,10 @@ func TestMultiReceiver(t *testing.T) {
 	csvreceiver, err := NewCsvReceiver("multitest.csv")
 	assert.NoError(err, "Unable to create multitest.csv")
 	stdoutreceiver := NewStdoutReceiver(" ")
-	receiver := NewMultiReceiver([]TelemetryReceiver{csvreceiver, stdoutreceiver})
+	receiver := NewMultiReceiver([]Receiver{csvreceiver, stdoutreceiver})
 
 	generator := new(generatorForTest)
-	reporter := new(PeriodicReporter)
+	reporter := new(Reporter)
 
 	reporter.Init(time.Duration(1)*time.Second, generator, receiver)
 

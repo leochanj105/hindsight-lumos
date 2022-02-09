@@ -1,4 +1,4 @@
-package agent
+package telemetry
 
 import (
 	"encoding/csv"
@@ -10,8 +10,8 @@ import (
 /* Interface for recipient of telemetry.  Hindsight processes
 have flags for specifying whether to report telemetry to a local file,
 to stdout, or over the network.  Each option is a different
-TelemetryReceiver implementation */
-type TelemetryReceiver interface {
+Receiver implementation */
+type Receiver interface {
 	Init(headers []string) error
 	Close() error
 	Report(rows []map[string]string) error
@@ -34,10 +34,10 @@ func (r *NullReceiver) Report(rows []map[string]string) error {
 }
 
 type MultiReceiver struct {
-	receivers []TelemetryReceiver
+	receivers []Receiver
 }
 
-func NewMultiReceiver(receivers []TelemetryReceiver) *MultiReceiver {
+func NewMultiReceiver(receivers []Receiver) *MultiReceiver {
 	var r MultiReceiver
 	r.receivers = receivers
 	return &r
@@ -98,7 +98,7 @@ func NewStdoutReceiver(separator string) *StdoutReceiver {
 
 func (r *StdoutReceiver) Init(headers []string) error {
 	r.headers = headers
-	fmt.Println(strings.Join(headers, r.separator))
+	fmt.Println("TelemetryHeaders:", strings.Join(headers, r.separator))
 	return nil
 }
 
@@ -116,7 +116,7 @@ func (r *StdoutReceiver) Report(rows []map[string]string) error {
 				values = append(values, "")
 			}
 		}
-		fmt.Println(strings.Join(values, r.separator))
+		fmt.Println("Telemetry:", strings.Join(values, r.separator))
 	}
 	return nil
 }

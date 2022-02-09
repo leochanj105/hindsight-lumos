@@ -1,4 +1,4 @@
-package agent
+package telemetry
 
 import (
 	"context"
@@ -7,19 +7,19 @@ import (
 )
 
 /* Ties generators to receivers; reports telemetry with a configurable interval */
-type PeriodicReporter struct {
+type Reporter struct {
 	interval  time.Duration
-	generator TelemetryGenerator
-	receiver  TelemetryReceiver
+	generator Generator
+	receiver  Receiver
 }
 
-func (reporter *PeriodicReporter) Init(interval time.Duration, generator TelemetryGenerator, receiver TelemetryReceiver) {
+func (reporter *Reporter) Init(interval time.Duration, generator Generator, receiver Receiver) {
 	reporter.interval = interval
 	reporter.generator = generator
 	reporter.receiver = receiver
 }
 
-func (reporter *PeriodicReporter) Run(ctx context.Context) (err error) {
+func (reporter *Reporter) Run(ctx context.Context) (err error) {
 	// User must call Init before calling Run
 	if reporter.generator == nil || reporter.receiver == nil {
 		return fmt.Errorf("Attempted to run an uninitialized reporter")
@@ -43,7 +43,6 @@ func (reporter *PeriodicReporter) Run(ctx context.Context) (err error) {
 			interval := now.Sub(last_report)
 			err = reporter.receiver.Report(reporter.generator.NextData(now, interval))
 			if err != nil {
-				fmt.Println("Error reporting telemetry", err)
 				return
 			}
 			last_report = now
