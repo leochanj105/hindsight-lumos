@@ -15,6 +15,7 @@ type TriggerMetrics struct {
 	remote           int // Number of remote triggers
 	dropped          int // Number of triggers dropped by rate limiting in ManagedQueue
 	evicted          int // Number of triggers evicted by cache pressure
+	buffers          int // Total number of triggered buffers
 	reported_buffers int // Reporting throughput of this trigger
 	evicted_buffers  int // Buffers that should have been reported but were evicted
 }
@@ -50,6 +51,7 @@ type QueueStats struct {
 	local_trigger_count           int
 	remote_trigger_count          int
 	dropped_count                 int
+	buffers                       int
 	reported_buffers              int
 	evicted_buffers               int
 	queue_throughput              float64
@@ -68,6 +70,7 @@ func (stats *QueueStats) add(other *QueueStats) {
 	stats.local_trigger_count += other.local_trigger_count
 	stats.remote_trigger_count += other.remote_trigger_count
 	stats.dropped_count += other.dropped_count
+	stats.buffers += other.buffers
 	stats.reported_buffers += other.reported_buffers
 	stats.queue_throughput += other.queue_throughput
 	stats.reported_buffer_throughput += other.reported_buffer_throughput
@@ -180,6 +183,7 @@ func (agent *Agent) calculateQueueStats(duration_nanos float64, queue *ManagedQu
 	stats.local_trigger_count = metrics.local
 	stats.remote_trigger_count = metrics.remote
 	stats.dropped_count = metrics.dropped
+	stats.buffers = metrics.buffers
 	stats.reported_buffers = metrics.reported_buffers
 	stats.queue_throughput = float64(metrics.count*1000000000) / duration_nanos
 	stats.reported_buffer_throughput = float64(metrics.reported_buffers*1000000000) / duration_nanos
@@ -305,53 +309,79 @@ func (g *AgentTelemetryGenerator) Headers() []string {
 	}
 }
 
-/* TelemetryGenerator interface */
-func (g *AgentTelemetryGenerator) NextData(now time.Time, interval time.Duration) (rows []map[string]string) {
-	stats := g.agent.calculateAgentStats(float64(interval.Nanoseconds()), g.debug)
-
+func generateDataRow(agent *Agent, now time.Time, interval time.Duration, queue *QueueStats, queueid string) map[string]string {
 	row := make(map[string]string)
 
-	data_mb := float64(stats.complete_buffers*g.agent.tm.buffer_size) / float64(1024*1024)
-	reported_mb := float64(stats.queue_totals.reported_buffers*g.agent.tm.buffer_size) / float64(1024*1024)
-	evicted_mb := float64(stats.queue_totals.evicted_buffers*g.agent.tm.buffer_size) / float64(1024*1024)
-
-	internal_bottleneck := 100 * float64(stats.dropped_triggers) / float64(stats.queue_totals.trigger_count)
+	data_mb := float64(queue.buffers*agent.tm.buffer_size) / float64(1024*1024)
+	reported_mb := float64(queue.reported_buffers*agent.tm.buffer_size) / float64(1024*1024)
+	evicted_mb := float64(queue.evicted_buffers*agent.tm.buffer_size) / float64(1024*1024)
 
 	// Preamble
 	row["t"] = strconv.FormatInt(now.UTC().UnixNano(), 10)
 	row["interval_ms"] = strconv.FormatInt(interval.Milliseconds(), 10)
-	row["queue_id"] = "total"
+	row["queue_id"] = queueid
 
 	// Totals
 	row["data_mb"] = strconv.FormatFloat(data_mb, 'f', 2, 64)
 	row["reported_mb"] = strconv.FormatFloat(reported_mb, 'f', 2, 64)
 	row["evicted_mb"] = strconv.FormatFloat(evicted_mb, 'f', 2, 64)
-	row["triggers"] = strconv.Itoa(stats.queue_totals.trigger_count)
-	row["local_triggers"] = strconv.Itoa(stats.queue_totals.local_trigger_count)
-	row["remote_triggers"] = strconv.Itoa(stats.queue_totals.remote_trigger_count)
-	row["dropped_triggers"] = strconv.Itoa(stats.queue_totals.dropped_count)
-	row["evicted_triggers"] = strconv.Itoa(stats.queue_totals.eviction_count)
+	row["triggers"] = strconv.Itoa(queue.trigger_count)
+	row["local_triggers"] = strconv.Itoa(queue.local_trigger_count)
+	row["remote_triggers"] = strconv.Itoa(queue.remote_trigger_count)
+	row["dropped_triggers"] = strconv.Itoa(queue.dropped_count)
+	row["evicted_triggers"] = strconv.Itoa(queue.eviction_count)
 
 	// Throughputs
 	interval_s := float64(interval) / float64(time.Second)
 	row["tput_data_mb"] = strconv.FormatFloat(data_mb/interval_s, 'f', 2, 64)
 	row["tput_reported_mb"] = strconv.FormatFloat(reported_mb/interval_s, 'f', 2, 64)
 	row["tput_evicted_mb"] = strconv.FormatFloat(evicted_mb/interval_s, 'f', 2, 64)
-	row["tput_triggers"] = strconv.FormatFloat(float64(stats.queue_totals.trigger_count)/interval_s, 'f', 0, 64)
-	row["tput_local_triggers"] = strconv.FormatFloat(float64(stats.queue_totals.local_trigger_count)/interval_s, 'f', 0, 64)
-	row["tput_remote_triggers"] = strconv.FormatFloat(float64(stats.queue_totals.remote_trigger_count)/interval_s, 'f', 0, 64)
-	row["tput_dropped_triggers"] = strconv.FormatFloat(float64(stats.queue_totals.dropped_count)/interval_s, 'f', 0, 64)
-	row["tput_evicted_triggers"] = strconv.FormatFloat(float64(stats.queue_totals.eviction_count)/interval_s, 'f', 0, 64)
+	row["tput_triggers"] = strconv.FormatFloat(float64(queue.trigger_count)/interval_s, 'f', 0, 64)
+	row["tput_local_triggers"] = strconv.FormatFloat(float64(queue.local_trigger_count)/interval_s, 'f', 0, 64)
+	row["tput_remote_triggers"] = strconv.FormatFloat(float64(queue.remote_trigger_count)/interval_s, 'f', 0, 64)
+	row["tput_dropped_triggers"] = strconv.FormatFloat(float64(queue.dropped_count)/interval_s, 'f', 0, 64)
+	row["tput_evicted_triggers"] = strconv.FormatFloat(float64(queue.eviction_count)/interval_s, 'f', 0, 64)
 
 	// Other percentages and instantaneous measurements
-	if stats.queue_totals.diagnostics != nil {
-		row["cache_occupancy"] = strconv.FormatFloat(stats.queue_totals.diagnostics.buffers_percent, 'f', 1, 64)
+	if queue.diagnostics != nil {
+		row["cache_occupancy"] = strconv.FormatFloat(queue.diagnostics.buffers_percent, 'f', 1, 64)
 	}
-	row["eviction_percent"] = strconv.FormatFloat(stats.queue_totals.eviction_percent, 'f', 1, 64)
+	row["eviction_percent"] = strconv.FormatFloat(queue.eviction_percent, 'f', 1, 64)
+
+	return row
+}
+
+func generateTotalsRow(agent *Agent, now time.Time, interval time.Duration, stats *Stats) map[string]string {
+	// Most totals data is generated in the same way as per-queue data
+	row := generateDataRow(agent, now, interval, &stats.queue_totals, "total")
+
+	// Totals use different calculation for data_mb
+	data_mb := float64(stats.complete_buffers*agent.tm.buffer_size) / float64(1024*1024)
+	interval_s := float64(interval) / float64(time.Second)
+	row["data_mb"] = strconv.FormatFloat(data_mb, 'f', 2, 64)
+	row["tput_data_mb"] = strconv.FormatFloat(data_mb/interval_s, 'f', 2, 64)
+
+	// internal_bottleneck and event_horizon are only reported for the totals, not per-queue
+	internal_bottleneck := 100 * float64(stats.dropped_triggers) / float64(stats.queue_totals.trigger_count)
 	row["internal_bottleneck"] = strconv.FormatFloat(internal_bottleneck, 'f', 1, 64)
 	row["event_horizon_ms"] = strconv.FormatFloat(float64(stats.event_horizon)/float64(time.Millisecond), 'f', 0, 64)
 
-	rows = append(rows, row)
+	return row
+}
+
+/* TelemetryGenerator interface */
+func (g *AgentTelemetryGenerator) NextData(now time.Time, interval time.Duration) (rows []map[string]string) {
+	stats := g.agent.calculateAgentStats(float64(interval.Nanoseconds()), g.debug)
+
+	// Add the totals
+	rows = append(rows, generateTotalsRow(g.agent, now, interval, &stats))
+
+	// Add a row for each queue
+	for i, queue_id := range stats.queue_ids {
+		queue_stats := stats.queues[i]
+		row := generateDataRow(g.agent, now, interval, &queue_stats, strconv.Itoa(queue_id))
+		rows = append(rows, row)
+	}
 
 	if g.print_summary {
 		log.Print(stats.Str())
