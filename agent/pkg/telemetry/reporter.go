@@ -32,17 +32,21 @@ func (reporter *PeriodicReporter) Run(ctx context.Context) (err error) {
 
 	// Write data forever
 	ticker := time.NewTicker(reporter.interval)
+	last_report := time.Now()
 	for {
 		select {
 		case <-ctx.Done():
 			err = reporter.receiver.Close()
 			return
 		case <-ticker.C:
-			err = reporter.receiver.Report(reporter.generator.NextData())
+			now := time.Now()
+			interval := now.Sub(last_report)
+			err = reporter.receiver.Report(reporter.generator.NextData(now, interval))
 			if err != nil {
 				fmt.Println("Error reporting telemetry", err)
 				return
 			}
+			last_report = now
 		}
 	}
 }

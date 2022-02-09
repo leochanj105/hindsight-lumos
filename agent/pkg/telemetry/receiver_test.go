@@ -13,16 +13,16 @@ type generatorForTest struct {
 }
 
 func (generator *generatorForTest) Headers() []string {
-	return []string{"time", "id", "c", "a", "f", "b", "d"}
+	return []string{"time", "interval", "id", "c", "a", "f", "b", "d"}
 }
 
-func (generator *generatorForTest) NextData() []map[string]string {
-	now := fmt.Sprintf("%v", time.Now())
+func (generator *generatorForTest) NextData(now time.Time, interval time.Duration) []map[string]string {
 	var rows []map[string]string
 	for i := 0; i < 3; i++ {
 		row := make(map[string]string)
 		row["id"] = fmt.Sprintf("%d", i)
-		row["time"] = now
+		row["time"] = fmt.Sprintf("%v", now)
+		row["interval"] = fmt.Sprintf("%v", interval)
 		if i == 0 {
 			row["a"] = "va"
 		}
@@ -30,7 +30,7 @@ func (generator *generatorForTest) NextData() []map[string]string {
 			row["b"] = "vb"
 		}
 		row["c"] = "vc"
-		row["c"] = "vd"
+		row["d"] = "vd"
 		rows = append(rows, row)
 	}
 	return rows

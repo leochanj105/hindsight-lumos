@@ -1,9 +1,11 @@
 package agent
 
+import "time"
+
 /* Interface for generating telemetry.  Hindsight's
 agent, coordinator, and collector all implement this interface
 to provide telemetry data */
 type TelemetryGenerator interface {
 	Headers() []string
-	NextData() []map[string]string
+	NextData(now time.Time, interval time.Duration) []map[string]string
 }
