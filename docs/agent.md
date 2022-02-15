@@ -85,6 +85,8 @@ Usage of /tmp/go-build2373230828/b001/exe/main:
   -lc lc_addr
         Address of the log collector in form hostname:port.  If not specified, u
         ses lc_addr:`lc_port` from the legacy config file.
+  -output string
+        Filename for outputting agent telemetry.  If specified, will write a csv of agent telemetry data.  Disabled by default.
   -port port
         Port to run the agent on.  If not specified, uses port from the legacy c
         onfig file.
@@ -99,6 +101,8 @@ Usage of /tmp/go-build2373230828/b001/exe/main:
   -triggerrate float
         Rate limit for a spammy trigger in triggers/s.  Set to 0 to disable.  De
         fault 10000. (default 10000)
+  -verbose
+        If set to true, prints telemetry to the command line.  False by default.
 ```
 
 Where noted, some port and address configurations can be specified via the `service_name.conf` file, and overridden by command line arguments.  For information about the configuration file, see [configuration.md](configuration.md)
@@ -129,3 +133,6 @@ go run cmd/agent2/main.go -serv my_service -l 1,5 -l 2,1 -rate 10 -triggerrate 1
 
 In the above example for a service called `my_service` we have imposed a global reporting rate limit of 10 MB/s, and additionally restrict queue 1 to 5 MB/s and queue 2 to 1 MB/s.  We also prevent more than 1,000 local triggers/second.
 
+# Telemetry
+
+For details on the `-output` and `-verbose` flags, see [telemetry.md](telemetry.md)

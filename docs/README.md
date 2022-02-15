@@ -8,6 +8,7 @@
 * The respective documentation for [cliends](clients.md), [agent](agent.md), [coordinator](coordinator.md), and [collector](collector.md) outline the command-line configuration of those processes
 * [configuration.md](configuration.md) gives an overview of the Hindsight configuration file
 * [workload.md](workload.md) gives an overview of a simple Hindsight workload generator
+* [telemetry.md](telemetry.md) explains configuration of Agent telemetry files.
 
 ## Running Hindsight Processes
 
