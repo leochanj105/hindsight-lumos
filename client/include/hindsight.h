@@ -108,6 +108,14 @@ void hindsight_begin_sampling(uint64_t trace_id);
 // The current thread has completed execution
 void hindsight_end();
 
+// Takes the trace state from the current thread, without ending it.
+// Must either be reattached with hindsight_attach later, or ended with
+// tracestate_end
+TraceState hindsight_detach();
+
+// Reattach a previous trace state
+void hindsight_attach(TraceState* state);
+
 // Copies the provided data.
 void hindsight_tracepoint(char* buf, size_t buf_size);
 
