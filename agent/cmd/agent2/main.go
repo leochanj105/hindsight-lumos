@@ -67,6 +67,8 @@ func main() {
 	delayf := flag.Int("delay", 0, "Used for experimental purposes.  If specified, this delays the reporting of triggers by the specified delay (in milliseconds).  Default to 0 - no delay.")
 	reportingratelimit := flag.Float64("rate", 0, "Rate limit for reporting traces in MB/s.  Set to 0 to disable.  Default 0.")
 	triggerratelimit := flag.Float64("triggerrate", 10000, "Rate limit for a spammy trigger in triggers/s.  Set to 0 to disable.  Default 10000.")
+	outputfile := flag.String("output", "", "Filename for outputting agent telemetry.  If specified, will write a csv of agent telemetry data.  Disabled by default.")
+	verbose := flag.Bool("verbose", false, "If set to true, prints telemetry to the command line.  False by default.")
 
 	per_trigger_limits := make(triggerRateLimitFlags)
 	flag.Var(&per_trigger_limits, "l", "A per-trigger reporting rate limit in the form queue_id,rate where queue_id is an integer and rate is a float representing a reporting limit in MB/s.  This flag can be set multiple times to provide rate limits for different triggers.")
@@ -89,6 +91,6 @@ func main() {
 
 	ctx, _ := context.WithCancel(context.Background())
 
-	agent := agent.InitAgent2(*serv, *hostname, *port, *lc_addr, *r_addr, delay, *reportingratelimit, *triggerratelimit, per_trigger_limits)
+	agent := agent.InitAgent2(*serv, *hostname, *port, *lc_addr, *r_addr, delay, *reportingratelimit, *triggerratelimit, per_trigger_limits, *outputfile, *verbose)
 	agent.Run(ctx)
 }

@@ -192,6 +192,17 @@ void hindsight_end() {
     tracestate_end(&hindsight_tls, mgr);
 }
 
+TraceState hindsight_detach() {
+    TraceState current = hindsight_tls;
+    hindsight_tls = tracestate_create();
+    return current;
+}
+
+void hindsight_attach(TraceState* state) {
+    hindsight_end();
+    hindsight_tls = *state;
+}
+
 void hindsight_tracepoint(char* buf, size_t buf_size) {
     if (tracestate_try_write(&hindsight_tls, buf, buf_size)) return;
     tracestate_write(&hindsight_tls, mgr, buf, buf_size);

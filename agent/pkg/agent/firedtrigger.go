@@ -102,6 +102,7 @@ into reporting state if it is not already reporting.
 func (f *FiredTrigger) buffersAdded(count int) {
 	f.buffer_count += count
 	f.queue.buffer_count += count
+	f.queue.metrics.buffers += count
 	f.state = f.state.buffersAdded(f)
 }
 

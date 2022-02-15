@@ -81,12 +81,15 @@ func (queue *TriggerQueue) EvictToCapacity(target_capacity int) []int {
 		reaching the target_capacity, which is OK
 	*/
 	var evicted []int
+	eviction_count := 0
 	for len(evicted) < num_to_evict && queue.reporting.Size() > 0 {
 		id := queue.reporting.PopNearMax()
 		trigger := queue.fired[id]
 		evicted = append(evicted, trigger.Evict()...)
+		eviction_count++
 	}
 
+	queue.metrics.evicted += eviction_count
 	queue.metrics.evicted_buffers += len(evicted)
 
 	return evicted
