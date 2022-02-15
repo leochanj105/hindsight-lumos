@@ -102,9 +102,8 @@ func (agent *Agent) initTelemetry(report_interval time.Duration, telemetry_filen
 		receivers = append(receivers, telemetry.NewStdoutReceiver(" "))
 	}
 
-	/* Only generate telemetry if there is one or more receiver */
 	if len(receivers) == 0 {
-		return nil
+		receivers = append(receivers, &telemetry.NullReceiver{})
 	}
 
 	/* If there are 2 or more receivers, wrap them in a MultiReceiver */
