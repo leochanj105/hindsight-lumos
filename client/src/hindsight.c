@@ -69,7 +69,7 @@ HindsightConfig hindsight_load_config_file(const char* fname) {
         char* temp = strchr(line, '\n');
         int index = (int)(temp - line);
 
-        char* new_line = malloc(sizeof(char)*32);
+        char* new_line = malloc(sizeof(char)*64);
         if (index == strlen(line)-1) {
             strncpy(new_line, line, index);
         } else {
@@ -130,7 +130,6 @@ HindsightConfig hindsight_load_config_file(const char* fname) {
     // Addr in the conf struct is a single string of address:port
     conf.address = (char*) malloc(32 * sizeof(char));
     memset(conf.address, 0, 32*sizeof(char));
-
     strcpy(conf.address, conf_addr);
     strcat(conf.address, ":");
     strncat(conf.address, conf_port, 4);
