@@ -43,10 +43,10 @@ func Conf_init(service_name string) bool {
 		// if strings.Contains(scanner.Text(), "buf_length") {
 		// 	Buf_length, _ = strconv.Atoi(strings.Split(scanner.Text(), " ")[1])
 		// }
-		if strings.Contains(scanner.Text(), "addr") && !strings.Contains(scanner.Text(), "lc") {
+		if strings.Contains(scanner.Text(), "addr") && !strings.Contains(scanner.Text(), "lc_") && !strings.Contains(scanner.Text(), "r_") {
 			Server_addr = strings.Split(scanner.Text(), " ")[1]
 		}
-		if strings.Contains(scanner.Text(), "port") && !strings.Contains(scanner.Text(), "lc") {
+		if strings.Contains(scanner.Text(), "port") && !strings.Contains(scanner.Text(), "lc_") && !strings.Contains(scanner.Text(), "r_") {
 			Server_port = strings.Split(scanner.Text(), " ")[1]
 		}
 		if strings.Contains(scanner.Text(), "lc_addr") {
