@@ -12,25 +12,37 @@ Expected output:
 
 ```
 Running coordinator
-  port=5253 (default)
+  port=5253 (lc.conf)
 Collector listening on TCP port 5253
-1.38 MB/s
-0.23 MB/s
-0.53 MB/s
+2022/03/26 21:08:46 Not writing trace data to disk
+2022/03/26 21:08:47 0.00 MB/s
+2022/03/26 21:08:48 0.00 MB/s
 ```
 
 If there are agents generating data, the collector will periodically print the throughput of received data as shown above. 
+
+# Writing data to disk
+
+By default the collector does not write received data to disk.  You can do this with the `-out` argument:
+
+```
+go run cmd/collector/main.go -out /local/tracedata.out
+```
+
+For now the collector writes all data to a single file.  There is a utility program in the [hindsight-grpc](https://gitlab.mpi-sws.org/cld/tracing/hindsight-grpc) repo that you can use for calculating trace completeness.
 
 # Configuring the Collector
 
 By default Hindsight's collector will listen on port `5253`.  You can change the port of the collector with the `-port` flag.  
 
-See the full collector options with the `--help` flag:
+See the full collector options with the `-help` flag:
 
 ```
 Usage of /tmp/go-build229934906/b001/exe/main:
+  -out string
+    	Filename to write trace data to.  If not specified, trace data won't be written to disk.  If you're at MPI, don't write to your home directory!
   -port r_port
-        Collector port.  If not specified, uses r_port from the legacy config lc.conf file, or 5253 as a backup
+    	Collector port.  If not specified, uses r_port from the legacy config lc.conf file, or 5253 as a backup
 ```
 
 # Configuring Agents to Point to the Collector
