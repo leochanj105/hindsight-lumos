@@ -63,7 +63,7 @@ void tracestate_begin_with_sampling(TraceState* trace, BufManager* mgr, uint64_t
 
         // If traceID is different, need to return the old buffer
         if (trace->recording) {
-            trace->current->completed = tracestate_get_time();
+            // trace->current->completed = tracestate_get_time();
             trace->current->size = trace->buffer.ptr - trace->buffer.base;
             bufmanager_return(mgr, trace->header.trace_id, &trace->buffer);
         }
@@ -92,6 +92,8 @@ void tracestate_begin_with_sampling(TraceState* trace, BufManager* mgr, uint64_t
             // TODO: probably shouldn't be implemented like this
             trace->header.null_buffer_count++;
         }
+        trace->header.buffer_id = trace->buffer.id;
+        trace->header.prev_buffer_id = trace->header.buffer_id; // First buffer points to itself
         tracestate_write_header(trace);
     }
 }
@@ -101,7 +103,7 @@ void tracestate_end(TraceState* trace, BufManager* mgr) {
 
     if (trace->recording) {
         // Finish buffer data
-        trace->current->completed = tracestate_get_time();
+        // trace->current->completed = tracestate_get_time();
         trace->current->size = trace->buffer.ptr - trace->buffer.base;
 
         // Return the current buffer
@@ -131,16 +133,19 @@ void tracestate_write_data(TraceState* trace,
     buffer_write(&trace->buffer, write_size, dst, dst_size);
     if (*dst_size != 0) return;
 
+    int prev_buffer_id = trace->header.buffer_id;
+
     // Buffer is full, return old buffer
-    uint64_t now = tracestate_get_time();
-    trace->current->completed = now;
+    // trace->current->completed = tracestate_get_time();
     trace->current->size = trace->buffer.ptr - trace->buffer.base;
     bufmanager_return(mgr, trace->header.trace_id, &trace->buffer);
 
     // Acquire new buffer and write header
     bufmanager_acquire(mgr, &trace->buffer);
     trace->header.buffer_number++;
-    trace->header.acquired = now;
+    trace->header.acquired = tracestate_get_time();
+    trace->header.buffer_id = trace->buffer.id;
+    trace->header.prev_buffer_id = prev_buffer_id;
     if (trace->buffer.id == -2) {
         // TODO: probably shouldn't be implemented like this
         trace->header.null_buffer_count++;
