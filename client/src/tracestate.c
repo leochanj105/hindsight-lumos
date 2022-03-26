@@ -25,10 +25,18 @@ void tracestate_write_header(TraceState* trace) {
     trace->current = (TraceHeader*) dst;
 }
 
-time_t tracestate_get_time() {
-    struct timespec ts;
-    timespec_get(&ts, TIME_UTC);
-    return ts.tv_sec * 1000000000 + ts.tv_nsec; 
+// time_t tracestate_get_time() {
+//     struct timespec ts;
+//     timespec_get(&ts, TIME_UTC);
+//     return ts.tv_sec * 1000000000 + ts.tv_nsec; 
+// }
+
+uint64_t tracestate_get_time() {
+    unsigned int lo, hi;
+
+    // RDTSC copies contents of 64-bit TSC into EDX:EAX
+    asm volatile("rdtsc" : "=a" (lo), "=d" (hi));
+    return (unsigned long long)hi << 32 | lo;
 }
 
 void tracestate_begin(TraceState* trace, BufManager* mgr, uint64_t trace_id) {
@@ -124,14 +132,15 @@ void tracestate_write_data(TraceState* trace,
     if (*dst_size != 0) return;
 
     // Buffer is full, return old buffer
-    trace->current->completed = tracestate_get_time();
+    uint64_t now = tracestate_get_time();
+    trace->current->completed = now;
     trace->current->size = trace->buffer.ptr - trace->buffer.base;
     bufmanager_return(mgr, trace->header.trace_id, &trace->buffer);
 
     // Acquire new buffer and write header
     bufmanager_acquire(mgr, &trace->buffer);
     trace->header.buffer_number++;
-    trace->header.acquired = tracestate_get_time();
+    trace->header.acquired = now;
     if (trace->buffer.id == -2) {
         // TODO: probably shouldn't be implemented like this
         trace->header.null_buffer_count++;
