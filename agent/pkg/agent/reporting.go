@@ -20,17 +20,20 @@ type Reporting struct {
 	buffer_size int
 	bucket      *ratelimit.Bucket
 
+	agent_addr  string     // Address of this agent
 	remote_addr string     // Address of the trace data backend (not the coordinator)
 	data        chan []int // Buffers to be reported to collector
 }
 
-func InitReporting(api *memory.GoAgentAPI, rate_limit_mb float64, enabled bool, remote_addr string) *Reporting {
+func InitReporting(api *memory.GoAgentAPI, rate_limit_mb float64, enabled bool, remote_addr string,
+	local_hostname string, local_port string) *Reporting {
 	var r Reporting
-	r.Init(api, rate_limit_mb, enabled, remote_addr)
+	r.Init(api, rate_limit_mb, enabled, remote_addr, local_hostname, local_port)
 	return &r
 }
 
-func (r *Reporting) Init(api *memory.GoAgentAPI, rate_limit_mb float64, enabled bool, remote_addr string) {
+func (r *Reporting) Init(api *memory.GoAgentAPI, rate_limit_mb float64, enabled bool, remote_addr string,
+	local_hostname string, local_port string) {
 	r.api = api
 	r.data = make(chan []int, 4)               // 4 somewhat arbitrary
 	r.enabled = enabled                        // used for testing/dev
@@ -41,6 +44,7 @@ func (r *Reporting) Init(api *memory.GoAgentAPI, rate_limit_mb float64, enabled 
 		r.bucket = ratelimit.NewBucketWithRate(r.rate_limit, int64(r.rate_limit))
 	}
 
+	r.agent_addr = local_hostname + ":" + local_port
 	r.remote_addr = remote_addr
 }
 
@@ -96,6 +100,12 @@ func (r *Reporting) reportData(conn net.Conn, buffers []int) (err error) {
 	return
 }
 
+/* We need to inform the reporting backend of this agent's identity */
+func (r *Reporting) writeConnectionHandshake(conn net.Conn) error {
+	agent_addr_bytes := []byte(r.agent_addr)
+	return writeLengthPrefixed(conn, agent_addr_bytes)
+}
+
 /* TODO: not sure we'll actually use grpc for reporting */
 func (r *Reporting) DataLoop(ctx context.Context) {
 	fmt.Println("DataLoop connecting to", r.remote_addr)
@@ -132,13 +142,17 @@ func (r *Reporting) DataLoop(ctx context.Context) {
 	}
 }
 
-func (r *Reporting) ReportData(ctx context.Context, conn net.Conn) error {
+func (r *Reporting) ReportData(ctx context.Context, conn net.Conn) (err error) {
+	err = r.writeConnectionHandshake(conn)
+	if err != nil {
+		return err
+	}
 	for {
 		select {
 		case <-ctx.Done():
 			return nil
 		case buffers := <-r.data:
-			err := r.reportData(conn, buffers)
+			err = r.reportData(conn, buffers)
 			if err != nil {
 				return err
 			}

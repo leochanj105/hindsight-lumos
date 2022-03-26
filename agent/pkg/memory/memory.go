@@ -455,9 +455,11 @@ func (api *GoAgentAPI) GetBuffer(buffer_id int) []byte {
 // Buffer header appears at the start of the buffer
 // size includes the size of bufferheader
 type BufferHeader struct {
-	Trace_id          uint64
-	Acquired          uint64
-	Completed         uint64
+	Trace_id uint64
+	Acquired uint64
+	// Completed         uint64
+	Buffer_id         int32
+	Prev_buffer_id    int32
 	Size              uint32
 	Buffer_number     int16
 	Null_buffer_count int16
@@ -479,7 +481,9 @@ func ExtractBufferHeader(buffer []byte) (header BufferHeader) {
 	C.hindsight_agentapi_read_buffer_header(unsafe.Pointer(&buffer[0]), &cheader)
 	header.Trace_id = uint64(cheader.trace_id)
 	header.Acquired = uint64(cheader.acquired)
-	header.Completed = uint64(cheader.completed)
+	// header.Completed = uint64(cheader.completed)
+	header.Buffer_id = int32(cheader.buffer_id)
+	header.Prev_buffer_id = int32(cheader.prev_buffer_id)
 	header.Size = uint32(cheader.size)
 	header.Buffer_number = int16(cheader.buffer_number)
 	header.Null_buffer_count = int16(cheader.null_buffer_count)

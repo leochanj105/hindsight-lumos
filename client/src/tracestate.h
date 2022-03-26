@@ -10,7 +10,9 @@
 typedef struct TraceHeader {
     uint64_t trace_id;
     uint64_t acquired;
-    uint64_t completed;
+    // uint64_t completed;
+    int buffer_id;
+    int prev_buffer_id;
     uint32_t size;
     short buffer_number;
     short null_buffer_count;

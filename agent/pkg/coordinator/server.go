@@ -285,7 +285,7 @@ func (a *Agent) doSend(rpcclient datapb.AgentClient, triggers []Trigger) error {
 }
 
 func (a *Agent) SendTriggers(triggers []Trigger) {
-	fmt.Println("Forwarding triggers!", a.addr, triggers)
+	// fmt.Println("Forwarding triggers!", a.addr, triggers)
 	select {
 	case a.outgoing_triggers <- triggers:
 		break

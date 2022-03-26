@@ -28,6 +28,7 @@ func resolveConfigValue(key string, value string, legacyconfigvalue string, defa
 // TODO different main methods for different cmds..........
 func main() {
 
+	tracefile := flag.String("out", "", "Filename to write trace data to.  If not specified, trace data won't be written to disk.  If you're at MPI, don't write to your home directory!")
 	port := flag.String("port", "", "Collector port.  If not specified, uses `r_port` from the legacy config lc.conf file, or 5253 as a backup")
 
 	flag.Parse()
@@ -44,6 +45,6 @@ func main() {
 	ctx, _ := context.WithCancel(context.Background())
 
 	var c collector.Collector
-	c.Init(*port)
+	c.Init(*port, *tracefile)
 	c.Run(ctx)
 }

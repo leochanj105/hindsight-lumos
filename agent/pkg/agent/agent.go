@@ -55,7 +55,7 @@ func InitAgent2(fname string, local_hostname string, local_port string, coordina
 	var agent Agent
 	agent.dm.Init()
 	agent.api.Init(fname)
-	agent.reporting.Init(&agent.api, reporting_rate_limit, true, reporting_addr)
+	agent.reporting.Init(&agent.api, reporting_rate_limit, true, reporting_addr, local_hostname, local_port)
 	agent.coordinator.Init(true, local_hostname, local_port, coordinator_addr)
 	agent.tm.Init(&agent.dm, agent.api.BufferSize(), trigger_rate_limit)
 	agent.tm.ConfigureRateLimits(per_trigger_rate_limits)
