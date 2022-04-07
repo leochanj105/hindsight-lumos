@@ -2,7 +2,9 @@
 
 Hindsight's coordinator is responsible for disseminating breadcrumbs and triggers between agents.
 
-Running the coordinator:
+## Basic coordinator
+
+Run the coordinator:
 
 ```
 go run cmd/coordinator/main.go
@@ -11,18 +13,32 @@ go run cmd/coordinator/main.go
 Expected output:
 
 ```
-Running coordinator
+2022/04/07 20:31:10 Running coordinator
   port=5252 (command line)
-CoordinatorServer main goroutine running
-Listening for agent connections on port 5252
-Forwarding triggers! 127.0.0.1:5053 [{{10 2531011} [2531011]} {{10 541671788154} [541671788154]} {{10 115924804400733013} [115924804400733013]}]
-Connecting to agent 127.0.0.1:5053
-Forwarding triggers! 127.0.0.1:5053 [{{10 16991129148439470276} [16991129148439470276]}]
-Forwarding triggers! 127.0.0.1:5053 [{{10 8096914980992404599} [8096914980992404599]}]
-Forwarding triggers! 127.0.0.1:5053 [{{10 13267775073337824606} [13267775073337824606]}]
+2022/04/07 20:31:10 CoordinatorServer main goroutine running
+2022/04/07 20:31:10 Listening for agent connections on port 5252
 ```
 
-**TODO: suppress verbose trigger printing, print stats instead **
+## Coordinator with logging
+
+This logs statistics about breadcrumb traversal time to a file
+
+Run the coordinator:
+
+```
+go run cmd/coordinator/main.go -out example.out
+```
+
+Expected output:
+
+```
+2022/04/07 20:32:20 Running coordinator
+  port=5252 (command line)
+2022/04/07 20:32:20 Logging breadcrumb stats to example.out
+2022/04/07 20:32:20 Logger goroutine running
+2022/04/07 20:32:20 CoordinatorServer main goroutine running
+2022/04/07 20:32:20 Listening for agent connections on port 5252
+```
 
 # Configuring the Coordinator
 
@@ -31,6 +47,8 @@ By default Hindsight's coordinator will listen on port `5252`.  You can change t
 See the full coordinator options with the `--help` flag:
 
 ```Usage of /tmp/go-build1913113332/b001/exe/main:
+  -out string
+        Output filename for writing breadcrumb dissemination statistics.  If not specified, will not be written to file
   -port lc_port
         Coordinator port.  If not specified, uses lc_port from the legacy config lc.conf file. (default "5252")
 ```
@@ -65,3 +83,34 @@ lc_port 5252
 ```
 go run cmd/agent2/main.go --serv my_agent
 ```
+
+# Breadcrumb traversal stats
+
+The coordinator writes breadcrumb traversal statistics to the output file (if you specified it as a cmd line argument)
+
+The file is a simple CSV with one row per trigger, e.g.
+
+```
+t,queue,total_agents,dissemination_time_ms
+21,7,2,7
+21,7,2,7
+21,7,2,7
+21,7,2,7
+21,7,2,7
+21,7,2,7
+21,7,2,7
+21,7,2,7
+21,7,2,7
+21,7,2,7
+21,7,2,7
+21,7,2,7
+21,7,2,7
+21,7,2,7
+```
+
+The columns are:
+
+* `t` time in seconds
+* `queue` the queue_id for the fired trigger
+* `total_agents` the total number of agents traversed by breadcrumbs
+* `dissemination_time_ms` the total time between the coordinator first learning of the trigger, and the final breadcrumb received

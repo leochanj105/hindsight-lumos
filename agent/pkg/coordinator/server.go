@@ -12,17 +12,30 @@ import (
 	"google.golang.org/grpc"
 )
 
+type IncomingBreadcrumbs struct {
+	req *datapb.BreadcrumbsRequest
+	ret chan error
+}
+
+type IncomingTriggers struct {
+	req *datapb.TriggerRequest
+	ret chan error
+}
+
 type CoordinatorServer struct {
 	datapb.UnimplementedCoordinatorServer
 
-	ctx    context.Context   // For shutdown
-	c      Coordinator       // Manages coordination data
-	agents map[string]*Agent // connections to agents
+	ctx     context.Context   // For shutdown
+	timeout time.Duration     // Time before expiring triggers / traces
+	c       Coordinator       // Manages coordination data
+	agents  map[string]*Agent // connections to agents
 
 	listen_port string // Port to listen for connections from agents
 
-	incoming_triggers    chan *datapb.TriggerRequest
-	incoming_breadcrumbs chan *datapb.BreadcrumbsRequest
+	incoming_triggers    chan *IncomingTriggers
+	incoming_breadcrumbs chan *IncomingBreadcrumbs
+
+	logger *CsvLogger
 }
 
 type Agent struct {
@@ -31,12 +44,19 @@ type Agent struct {
 	outgoing_triggers chan []Trigger
 }
 
-func (s *CoordinatorServer) Init(port string) {
+func (s *CoordinatorServer) Init(port string, logfile string) (err error) {
 	s.c.Init()
+	s.timeout = -60 * time.Second
 	s.agents = make(map[string]*Agent)
 	s.listen_port = port
-	s.incoming_triggers = make(chan *datapb.TriggerRequest, 1000)
-	s.incoming_breadcrumbs = make(chan *datapb.BreadcrumbsRequest, 1000)
+	s.incoming_triggers = make(chan *IncomingTriggers, 1000)
+	s.incoming_breadcrumbs = make(chan *IncomingBreadcrumbs, 1000)
+	if logfile != "" {
+		s.logger, err = NewCsvLogger(logfile)
+	} else {
+		s.logger = nil
+	}
+	return
 }
 
 func (a *Agent) Init(addr string) {
@@ -50,29 +70,45 @@ func (s *CoordinatorServer) Run(ctx context.Context) {
 	wg := new(sync.WaitGroup)
 	wg.Add(2)
 	go func() {
-		s.runServer()
+		s.runServer(ctx)
 		wg.Done()
 	}()
 	go func() {
 		s.runCoordinator(ctx)
 		wg.Done()
 	}()
-	wg.Wait()
+	if s.logger != nil {
+		cancel := s.logger.Run()
+		wg.Wait()
+		cancel() // Done like this to ensure everything gets drained properly
+		s.logger.AwaitCompletion()
+	} else {
+		wg.Wait()
+	}
 }
 
 /* Run the RPC server that receives triggers and breadcrumbs */
-func (cs *CoordinatorServer) runServer() {
-	for true {
-		lis, err := net.Listen("tcp", ":"+cs.listen_port)
-		if err != nil {
-			log.Fatalf("failed to listen: %v", err)
+func (cs *CoordinatorServer) runServer(ctx context.Context) {
+	lis, err := net.Listen("tcp", ":"+cs.listen_port)
+	if err != nil {
+		log.Fatalf("failed to listen: %v", err)
+	}
+	log.Println("Listening for agent connections on port", cs.listen_port)
+	grpcserver := grpc.NewServer()
+	datapb.RegisterCoordinatorServer(grpcserver, cs)
+
+	go func() {
+		select {
+		case <-ctx.Done():
+			log.Println("Shutting down gRPC server")
+			grpcserver.GracefulStop()
 		}
-		fmt.Println("Listening for agent connections on port", cs.listen_port)
-		grpcserver := grpc.NewServer()
-		datapb.RegisterCoordinatorServer(grpcserver, cs)
-		if err := grpcserver.Serve(lis); err != nil {
-			log.Fatalf("failed to serve: %v", err)
-		}
+	}()
+
+	if err := grpcserver.Serve(lis); err != nil {
+		log.Fatalf("Failed to serve: %v", err)
+	} else {
+		log.Println("gRPC server finished serving.")
 	}
 }
 
@@ -88,7 +124,21 @@ func (cs *CoordinatorServer) GetAgent(addr string) *Agent {
 	}
 }
 
-func (cs *CoordinatorServer) processTriggersRequest(req *datapb.TriggerRequest) {
+func (cs *CoordinatorServer) checkExpirations() {
+	cs.c.now = time.Now()
+	cs.c.checkTraceExpiration(cs.c.now.Add(cs.timeout))
+	finished := cs.c.checkTriggerExpiration(cs.c.now.Add(cs.timeout))
+	if cs.logger != nil {
+		for _, f := range finished {
+			cs.logger.Finished <- f
+		}
+	}
+}
+
+func (cs *CoordinatorServer) processTriggersRequest(incoming *IncomingTriggers) {
+	cs.c.now = time.Now()
+	req := incoming.req
+
 	triggers_to_forward := make(map[string][]Trigger)
 	for _, t := range req.Triggers {
 		// Store the received trigger
@@ -108,15 +158,20 @@ func (cs *CoordinatorServer) processTriggersRequest(req *datapb.TriggerRequest) 
 	for addr, triggers := range triggers_to_forward {
 		cs.GetAgent(addr).SendTriggers(triggers)
 	}
+
+	cs.checkExpirations()
+	incoming.ret <- nil
 }
 
-func (cs *CoordinatorServer) processBreadcrumbRequest(req *datapb.BreadcrumbsRequest) {
+func (cs *CoordinatorServer) processBreadcrumbRequest(incoming *IncomingBreadcrumbs) {
+	cs.c.now = time.Now()
+	req := incoming.req
+
 	origin := cs.GetAgent(req.Src)
 
 	// Breadcrumbs are received as IDs; unravel into addr strings
 	for _, a := range req.Addresses {
 		origin.id_to_addr[a.Id] = a.Addr
-		fmt.Println(req.Src, "Mapping", a.Id, "to", a.Addr)
 	}
 
 	breadcrumbs := make(map[uint64][]string)
@@ -125,7 +180,8 @@ func (cs *CoordinatorServer) processBreadcrumbRequest(req *datapb.BreadcrumbsReq
 			if addr, ok := origin.id_to_addr[addr_id]; ok {
 				breadcrumbs[b.TraceId] = append(breadcrumbs[b.TraceId], addr)
 			} else {
-				log.Fatal("Received addr_id", addr_id, "from", req.Src, "that hasn't been mapped to an address")
+				incoming.ret <- fmt.Errorf("Received addr_id %d from %s that hasn't been mapped to an address", addr_id, req.Src)
+				return
 			}
 		}
 	}
@@ -148,15 +204,25 @@ func (cs *CoordinatorServer) processBreadcrumbRequest(req *datapb.BreadcrumbsReq
 	for addr, triggers := range triggers_to_forward {
 		cs.GetAgent(addr).SendTriggers(triggers)
 	}
+
+	cs.checkExpirations()
+	incoming.ret <- nil
 }
 
 /* The "main" thread that receives incoming stuff and sends outgoing stuff */
 func (cs *CoordinatorServer) runCoordinator(ctx context.Context) {
-	fmt.Println("CoordinatorServer main goroutine running")
+	log.Println("CoordinatorServer main goroutine running")
 	for {
 		select {
 		case <-ctx.Done():
-			fmt.Println("CoordinatorServer main goroutine exiting")
+			log.Println("CoordinatorServer main goroutine exiting")
+			if cs.logger != nil {
+				/* Expire everything, so that it flushes to log */
+				finished := cs.c.checkTriggerExpiration(time.Now().Add(1 * time.Second))
+				for _, f := range finished {
+					cs.logger.Finished <- f
+				}
+			}
 			return
 		case req := <-cs.incoming_triggers:
 			/* Received some triggers from an agent over RPC*/
@@ -169,29 +235,45 @@ func (cs *CoordinatorServer) runCoordinator(ctx context.Context) {
 }
 
 /* An agent has sent us a trigger */
-func (s *CoordinatorServer) LocalTrigger(ctx context.Context, in *datapb.TriggerRequest) (*datapb.TriggerReply, error) {
+func (s *CoordinatorServer) LocalTrigger(ctx context.Context, req *datapb.TriggerRequest) (rsp *datapb.TriggerReply, err error) {
 	// fmt.Println("Received a local trigger!", in.Src, in.Triggers)
+	var incoming IncomingTriggers
+	incoming.req = req
+	incoming.ret = make(chan error)
+
 	select {
-	case s.incoming_triggers <- in:
-		break
+	case s.incoming_triggers <- &incoming:
+		err = <-incoming.ret
+		if err != nil {
+			fmt.Println("Breadcrumbs error:", err.Error())
+		}
 	default:
 		// TODO: counters here
 		fmt.Println("LocalTrigger incoming_triggers bottlenecked!")
 	}
-	return &datapb.TriggerReply{}, nil
+	rsp = &datapb.TriggerReply{}
+	return
 }
 
 /* An agent has sent us breadcrumbs */
-func (s *CoordinatorServer) Breadcrumbs(ctx context.Context, in *datapb.BreadcrumbsRequest) (*datapb.BreadcrumbsReply, error) {
+func (s *CoordinatorServer) Breadcrumbs(ctx context.Context, req *datapb.BreadcrumbsRequest) (rsp *datapb.BreadcrumbsReply, err error) {
 	// fmt.Println("Received breadcrumbs!", in.Src, in.Breadcrumbs)
+	var incoming IncomingBreadcrumbs
+	incoming.req = req
+	incoming.ret = make(chan error)
+
 	select {
-	case s.incoming_breadcrumbs <- in:
-		break
+	case s.incoming_breadcrumbs <- &incoming:
+		err = <-incoming.ret
+		if err != nil {
+			fmt.Println("Breadcrumbs error:", err)
+		}
 	default:
 		// TODO: counters here
 		fmt.Println("LocalTrigger incoming_breadcrumbs bottlenecked!")
 	}
-	return &datapb.BreadcrumbsReply{}, nil
+	rsp = &datapb.BreadcrumbsReply{}
+	return
 }
 
 func (a *Agent) Run(ctx context.Context) {

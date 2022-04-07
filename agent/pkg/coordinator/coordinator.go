@@ -15,6 +15,12 @@ type Trigger struct {
 	trace_ids []uint64
 }
 
+type FinishedTrigger struct {
+	queue_id           int
+	total_agents       int
+	dissemination_time time.Duration
+}
+
 type Coordinator struct {
 	now         time.Time
 	traces      map[uint64]*tracestate      // All known traces
@@ -92,7 +98,7 @@ func (c *Coordinator) getTrace(id uint64) *tracestate {
 	return &trace
 }
 
-func (c *Coordinator) checkTriggerExpiration(cutoff time.Time) {
+func (c *Coordinator) checkTriggerExpiration(cutoff time.Time) (finished []FinishedTrigger) {
 	for c.trigger_lru.Len() > 0 {
 		trigger := c.trigger_lru.Back().Value.(*triggerstate)
 		if trigger.last_modified.After(cutoff) {
@@ -104,7 +110,14 @@ func (c *Coordinator) checkTriggerExpiration(cutoff time.Time) {
 		}
 		delete(c.triggers, trigger.id)
 		c.trigger_lru.Remove(trigger.lru_entry)
+
+		var ft FinishedTrigger
+		ft.queue_id = trigger.id.queue_id
+		ft.total_agents = len(trigger.known_at)
+		ft.dissemination_time = trigger.last_modified.Sub(trigger.created)
+		finished = append(finished, ft)
 	}
+	return
 }
 
 func (c *Coordinator) checkTraceExpiration(cutoff time.Time) {
