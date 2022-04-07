@@ -27,6 +27,7 @@ type CoordinatorServer struct {
 
 type Agent struct {
 	addr              string
+	id_to_addr        map[int32]string
 	outgoing_triggers chan []Trigger
 }
 
@@ -40,6 +41,7 @@ func (s *CoordinatorServer) Init(port string) {
 
 func (a *Agent) Init(addr string) {
 	a.addr = addr
+	a.id_to_addr = make(map[int32]string)
 	a.outgoing_triggers = make(chan []Trigger, 100)
 }
 
@@ -109,17 +111,28 @@ func (cs *CoordinatorServer) processTriggersRequest(req *datapb.TriggerRequest) 
 }
 
 func (cs *CoordinatorServer) processBreadcrumbRequest(req *datapb.BreadcrumbsRequest) {
-	// Breadcrumbs are received inverted; reverse this
-	inverted := make(map[uint64][]string)
+	origin := cs.GetAgent(req.Src)
+
+	// Breadcrumbs are received as IDs; unravel into addr strings
+	for _, a := range req.Addresses {
+		origin.id_to_addr[a.Id] = a.Addr
+		fmt.Println(req.Src, "Mapping", a.Id, "to", a.Addr)
+	}
+
+	breadcrumbs := make(map[uint64][]string)
 	for _, b := range req.Breadcrumbs {
-		for _, trace_id := range b.TraceIds {
-			inverted[trace_id] = append(inverted[trace_id], b.Addr)
+		for _, addr_id := range b.Addrs {
+			if addr, ok := origin.id_to_addr[addr_id]; ok {
+				breadcrumbs[b.TraceId] = append(breadcrumbs[b.TraceId], addr)
+			} else {
+				log.Fatal("Received addr_id", addr_id, "from", req.Src, "that hasn't been mapped to an address")
+			}
 		}
 	}
 
 	// Now process them
 	triggers_to_forward := make(map[string][]Trigger)
-	for trace_id, addrs := range inverted {
+	for trace_id, addrs := range breadcrumbs {
 		// Store the received breadcrumbs
 		to_forward := cs.c.AddBreadcrumb(req.Src, trace_id, addrs)
 

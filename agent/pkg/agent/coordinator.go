@@ -45,39 +45,6 @@ func (r *Coordinator) Init(enabled bool, local_hostname string, local_port strin
 	r.remotetriggers = make(chan []memory.Trigger, 500)
 }
 
-/* Send a batch of breadcrumbs to the coordinator */
-func (r *Coordinator) sendBreadcrumbs(rpcclient datapb.CoordinatorClient, accumulated_breadcrumbs []map[uint64][]string) error {
-	// For the RPC call we invert the map to avoid duplicating strings
-	inverted := make(map[string][]uint64)
-	for _, breadcrumbs := range accumulated_breadcrumbs {
-		for trace_id, addrs := range breadcrumbs {
-			for _, addr := range addrs {
-				inverted[addr] = append(inverted[addr], trace_id)
-			}
-		}
-	}
-
-	// Construct RPC request object
-	var request datapb.BreadcrumbsRequest
-	request.Src = r.local_addr
-	for addr, trace_ids := range inverted {
-		var bcs datapb.Breadcrumbs
-		bcs.Addr = addr
-		bcs.TraceIds = trace_ids
-		request.Breadcrumbs = append(request.Breadcrumbs, &bcs)
-	}
-
-	if r.enabled {
-		ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
-		defer cancel()
-
-		_, err := rpcclient.Breadcrumbs(ctx, &request)
-
-		return err
-	}
-	return nil
-}
-
 /* Send a batch of local triggers to the coordinator */
 func (r *Coordinator) sendTriggers(rpcclient datapb.CoordinatorClient, triggers []memory.Trigger) error {
 	var request datapb.TriggerRequest
@@ -171,6 +138,9 @@ func (r *Coordinator) BreadcrumbsLoop(ctx context.Context) {
 }
 
 func (r *Coordinator) ReportBreadcrumbs(ctx context.Context, rpcclient datapb.CoordinatorClient) error {
+	addr_to_id := make(map[string]int32)
+	seed := int32(0)
+
 	for {
 		// Accumulate a batch of up to 100 breadcrumbs
 		var accumulated []map[uint64][]string
@@ -200,11 +170,41 @@ func (r *Coordinator) ReportBreadcrumbs(ctx context.Context, rpcclient datapb.Co
 			}
 		}
 
-		// Send them
-		err := r.sendBreadcrumbs(rpcclient, accumulated)
+		// Construct RPC request object, mapping from string addrs to ints
+		var request datapb.BreadcrumbsRequest
+		request.Src = r.local_addr
+		for _, breadcrumbs := range accumulated {
+			for trace_id, addrs := range breadcrumbs {
+				var bcs datapb.Breadcrumbs
+				bcs.TraceId = trace_id
+				request.Breadcrumbs = append(request.Breadcrumbs, &bcs)
 
-		if err != nil {
-			return err
+				for _, addr := range addrs {
+					if addr_id, ok := addr_to_id[addr]; ok {
+						bcs.Addrs = append(bcs.Addrs, addr_id)
+
+					} else {
+						var bca datapb.BreadcrumbAddress
+						bca.Addr = addr
+						bca.Id = seed
+						request.Addresses = append(request.Addresses, &bca)
+
+						addr_to_id[addr] = seed
+						bcs.Addrs = append(bcs.Addrs, seed)
+						seed++
+					}
+				}
+			}
+		}
+
+		if r.enabled {
+			ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+			defer cancel()
+
+			_, err := rpcclient.Breadcrumbs(ctx, &request)
+			if err != nil {
+				return err
+			}
 		}
 	}
 }

@@ -27,14 +27,20 @@ message TriggerRequest {
 message TriggerReply {
 }
 
+message BreadcrumbAddress {
+	int32 id = 1;
+	string addr = 2;
+}
+
 message Breadcrumbs {
-	string addr = 1;
-	repeated fixed64 trace_ids = 2;
+	fixed64 trace_id = 1;
+	repeated int32 addrs = 2;
 }
 
 message BreadcrumbsRequest {
 	string src = 1;
-	repeated Breadcrumbs breadcrumbs = 2;
+	repeated BreadcrumbAddress addresses = 2;
+	repeated Breadcrumbs breadcrumbs = 3;
 }
 
 message BreadcrumbsReply {
