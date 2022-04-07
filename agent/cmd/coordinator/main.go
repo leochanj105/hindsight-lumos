@@ -4,8 +4,12 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"log"
+	"os"
+	"os/signal"
 	"strconv"
 	"strings"
+	"syscall"
 
 	"github.com/geraldleizhang/hindsight/agent/pkg/coordinator"
 	"github.com/geraldleizhang/hindsight/agent/pkg/util"
@@ -58,17 +62,34 @@ func main() {
 
 	isConfig := util.Conf_init("lc")
 	if !isConfig {
-		fmt.Println("Failed to load config file for lc")
+		log.Println("Failed to load config file for lc")
 		return
 	}
 
-	fmt.Println("Running coordinator")
+	log.Println("Running coordinator")
 	*port = resolveConfigValue("port", *port, util.Server_port, "lc")
 
-	ctx, _ := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(context.Background())
 
 	// // Not sure if needed
 	// util.Conf_init("lc")
+
+	ch := make(chan os.Signal)
+	signal.Notify(ch, os.Interrupt, syscall.SIGTERM)
+	go func() {
+		<-ch
+		log.Println("Initiating graceful shutdown...")
+
+		ch2 := make(chan os.Signal)
+		signal.Notify(ch2, os.Interrupt, syscall.SIGTERM)
+		go func() {
+			<-ch2
+			log.Println("Exiting without graceful shutdown")
+			os.Exit(0)
+		}()
+
+		cancel()
+	}()
 
 	var c coordinator.CoordinatorServer
 	c.Init(*port)

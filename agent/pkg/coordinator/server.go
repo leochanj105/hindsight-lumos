@@ -50,7 +50,7 @@ func (s *CoordinatorServer) Run(ctx context.Context) {
 	wg := new(sync.WaitGroup)
 	wg.Add(2)
 	go func() {
-		s.runServer()
+		s.runServer(ctx)
 		wg.Done()
 	}()
 	go func() {
@@ -61,18 +61,27 @@ func (s *CoordinatorServer) Run(ctx context.Context) {
 }
 
 /* Run the RPC server that receives triggers and breadcrumbs */
-func (cs *CoordinatorServer) runServer() {
-	for true {
-		lis, err := net.Listen("tcp", ":"+cs.listen_port)
-		if err != nil {
-			log.Fatalf("failed to listen: %v", err)
+func (cs *CoordinatorServer) runServer(ctx context.Context) {
+	lis, err := net.Listen("tcp", ":"+cs.listen_port)
+	if err != nil {
+		log.Fatalf("failed to listen: %v", err)
+	}
+	log.Println("Listening for agent connections on port", cs.listen_port)
+	grpcserver := grpc.NewServer()
+	datapb.RegisterCoordinatorServer(grpcserver, cs)
+
+	go func() {
+		select {
+		case <-ctx.Done():
+			log.Println("Shutting down gRPC server")
+			grpcserver.GracefulStop()
 		}
-		fmt.Println("Listening for agent connections on port", cs.listen_port)
-		grpcserver := grpc.NewServer()
-		datapb.RegisterCoordinatorServer(grpcserver, cs)
-		if err := grpcserver.Serve(lis); err != nil {
-			log.Fatalf("failed to serve: %v", err)
-		}
+	}()
+
+	if err := grpcserver.Serve(lis); err != nil {
+		log.Fatalf("Failed to serve: %v", err)
+	} else {
+		log.Println("gRPC server finished serving.")
 	}
 }
 
@@ -152,11 +161,11 @@ func (cs *CoordinatorServer) processBreadcrumbRequest(req *datapb.BreadcrumbsReq
 
 /* The "main" thread that receives incoming stuff and sends outgoing stuff */
 func (cs *CoordinatorServer) runCoordinator(ctx context.Context) {
-	fmt.Println("CoordinatorServer main goroutine running")
+	log.Println("CoordinatorServer main goroutine running")
 	for {
 		select {
 		case <-ctx.Done():
-			fmt.Println("CoordinatorServer main goroutine exiting")
+			log.Println("CoordinatorServer main goroutine exiting")
 			return
 		case req := <-cs.incoming_triggers:
 			/* Received some triggers from an agent over RPC*/
