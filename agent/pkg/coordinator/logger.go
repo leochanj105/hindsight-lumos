@@ -7,6 +7,7 @@ import (
 	"log"
 	"os"
 	"sync"
+	"time"
 )
 
 type CsvLogger struct {
@@ -14,6 +15,7 @@ type CsvLogger struct {
 	file     *os.File
 	writer   *csv.Writer
 
+	begin    time.Time
 	wg       *sync.WaitGroup
 	Finished chan FinishedTrigger
 }
@@ -25,8 +27,9 @@ func NewCsvLogger(filename string) (r *CsvLogger, err error) {
 		return
 	}
 	r.writer = csv.NewWriter(r.file)
-	headers := []string{"t", "queue", "total_agents", "dissemination_time"}
+	headers := []string{"t", "queue", "total_agents", "dissemination_time_ms"}
 	r.writer.Write(headers)
+	r.begin = time.Now()
 	r.wg = new(sync.WaitGroup)
 	r.Finished = make(chan FinishedTrigger, 1000)
 	return
@@ -34,6 +37,16 @@ func NewCsvLogger(filename string) (r *CsvLogger, err error) {
 
 func (r *CsvLogger) AwaitCompletion() {
 	r.wg.Wait()
+}
+
+func (r *CsvLogger) write(t *FinishedTrigger) {
+	now := fmt.Sprintf("%.0f", time.Now().Sub(r.begin).Seconds())
+	queue := fmt.Sprintf("%d", t.queue_id)
+	total_agents := fmt.Sprintf("%d", t.total_agents)
+	dissemination_time := fmt.Sprintf("%d", t.dissemination_time.Milliseconds())
+
+	row := []string{now, queue, total_agents, dissemination_time}
+	r.writer.Write(row)
 }
 
 func (r *CsvLogger) Run() context.CancelFunc {
@@ -48,10 +61,12 @@ func (r *CsvLogger) Run() context.CancelFunc {
 					log.Println("Logger draining remaining stats to file")
 					for {
 						select {
-						case <-r.Finished:
+						case f := <-r.Finished:
+							r.write(&f)
 							// fmt.Println("Finished drain one")
 						default:
 							log.Println("Logger complete")
+							r.writer.Flush()
 							err := r.file.Close()
 							if err != nil {
 								fmt.Println("Logger error closing file", err)
@@ -61,8 +76,8 @@ func (r *CsvLogger) Run() context.CancelFunc {
 						}
 					}
 				}
-			case <-r.Finished:
-				// fmt.Println("Finished one")
+			case f := <-r.Finished:
+				r.write(&f)
 			}
 		}
 	}()

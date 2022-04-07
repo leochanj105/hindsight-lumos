@@ -46,7 +46,7 @@ type Agent struct {
 
 func (s *CoordinatorServer) Init(port string, logfile string) (err error) {
 	s.c.Init()
-	s.timeout = -1 * time.Second
+	s.timeout = -60 * time.Second
 	s.agents = make(map[string]*Agent)
 	s.listen_port = port
 	s.incoming_triggers = make(chan *IncomingTriggers, 1000)
@@ -172,7 +172,6 @@ func (cs *CoordinatorServer) processBreadcrumbRequest(incoming *IncomingBreadcru
 	// Breadcrumbs are received as IDs; unravel into addr strings
 	for _, a := range req.Addresses {
 		origin.id_to_addr[a.Id] = a.Addr
-		fmt.Println(req.Src, "Mapping", a.Id, "to", a.Addr)
 	}
 
 	breadcrumbs := make(map[uint64][]string)
@@ -218,7 +217,11 @@ func (cs *CoordinatorServer) runCoordinator(ctx context.Context) {
 		case <-ctx.Done():
 			log.Println("CoordinatorServer main goroutine exiting")
 			if cs.logger != nil {
-				cs.calculateBreadcrumbDissemination()
+				/* Expire everything, so that it flushes to log */
+				finished := cs.c.checkTriggerExpiration(time.Now().Add(1 * time.Second))
+				for _, f := range finished {
+					cs.logger.Finished <- f
+				}
 			}
 			return
 		case req := <-cs.incoming_triggers:
@@ -229,10 +232,6 @@ func (cs *CoordinatorServer) runCoordinator(ctx context.Context) {
 			cs.processBreadcrumbRequest(req)
 		}
 	}
-}
-
-func (cs *CoordinatorServer) calculateBreadcrumbDissemination() {
-	log.Println("Calculating breadcrumb dissemination")
 }
 
 /* An agent has sent us a trigger */
