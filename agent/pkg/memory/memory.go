@@ -160,7 +160,11 @@ func (api *GoAgentAPI) completeLoop(ctx context.Context) {
 	max_backoff := 100000
 	min_backoff := 10
 	backoff := int(10)
+
 	min_bs := 20
+	add_delay := 10
+	remove_delay := 40
+	reset_delay := 100
 	for {
 		select {
 		case <-ctx.Done():
@@ -170,18 +174,19 @@ func (api *GoAgentAPI) completeLoop(ctx context.Context) {
 			// Keep processing batches so long as they are BATCHSIZE/2 large
 			total := api.drainBatches(ctx, min_bs)
 
-			if total < min_bs {
-				// Back off exponentially
-				backoff *= 2
-			} else {
+			if total > reset_delay {
 				backoff = min_backoff
+			} else if total > remove_delay {
+				backoff /= 2
+			} else if total < add_delay {
+				backoff *= 2
 			}
 
 			// Keep within bounds
 			if backoff > max_backoff {
 				backoff = max_backoff
 			}
-			time.Sleep(time.Duration(backoff) * time.Nanosecond)
+			time.Sleep(time.Duration(backoff) * time.Microsecond)
 		}
 	}
 }
@@ -212,7 +217,12 @@ func (api *GoAgentAPI) triggerLoop(ctx context.Context) {
 	max_backoff := 100000
 	min_backoff := 10
 	backoff := int(10)
+
 	min_bs := 20
+	add_delay := 10
+	remove_delay := 40
+	reset_delay := 100
+
 	count := 0
 	// next_print := time.NewTimer(1 * time.Millisecond)
 	for {
@@ -231,18 +241,19 @@ func (api *GoAgentAPI) triggerLoop(ctx context.Context) {
 			total := api.drainTriggers(ctx, min_bs)
 			count += total
 
-			if total < min_bs {
-				// Back off exponentially
-				backoff *= 2
-			} else {
+			if total > reset_delay {
 				backoff = min_backoff
+			} else if total > remove_delay {
+				backoff /= 2
+			} else if total < add_delay {
+				backoff *= 2
 			}
 
 			// Keep within bounds
 			if backoff > max_backoff {
 				backoff = max_backoff
 			}
-			time.Sleep(time.Duration(backoff) * time.Nanosecond)
+			time.Sleep(time.Duration(backoff) * time.Microsecond)
 		}
 	}
 }
@@ -273,7 +284,11 @@ func (api *GoAgentAPI) breadcrumbsLoop(ctx context.Context) {
 	max_backoff := 100000
 	min_backoff := 10
 	backoff := int(10)
+
 	min_bs := 20
+	add_delay := 10
+	remove_delay := 40
+	reset_delay := 100
 	for {
 		select {
 		case <-ctx.Done():
@@ -283,18 +298,19 @@ func (api *GoAgentAPI) breadcrumbsLoop(ctx context.Context) {
 			// Keep processing batches so long as they are BATCHSIZE/2 large
 			total := api.drainBreadcrumbs(ctx, min_bs)
 
-			if total < min_bs {
-				// Back off exponentially
-				backoff *= 2
-			} else {
+			if total > reset_delay {
 				backoff = min_backoff
+			} else if total > remove_delay {
+				backoff /= 2
+			} else if total < add_delay {
+				backoff *= 2
 			}
 
 			// Keep within bounds
 			if backoff > max_backoff {
 				backoff = max_backoff
 			}
-			time.Sleep(time.Duration(backoff) * time.Nanosecond)
+			time.Sleep(time.Duration(backoff) * time.Microsecond)
 		}
 	}
 }
