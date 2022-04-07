@@ -293,48 +293,56 @@ func (agent *Agent) processRemoteTriggers(batch []memory.Trigger) {
 func (agent *Agent) RunProcessingLoop(ctx context.Context) {
 	fmt.Println("Agent goroutine running")
 	var data_to_report []int
+	timer := time.NewTimer(0 * time.Second)
 	for {
 		agent.dm.now = time.Now()
 
-	Reporting:
-		for {
-			/* Attempt to send the report to the reporter.  The reporter
-			has only a very short blocking queue, so this will often fail */
-			if len(data_to_report) > 0 {
-				select {
-				case agent.reporting.data <- data_to_report:
-					data_to_report = nil
-				default:
-					break Reporting // Queue of pending reports is full
-				}
+		if len(data_to_report) == 0 {
+			/* We have no data to report currently, so we periodically
+			check if there's anything to report */
+			select {
+			case <-ctx.Done():
+				fmt.Println("Agent goroutine exiting")
+				return
+			case <-timer.C:
+				data_to_report = agent.tm.GetNextBatchToReport()
+				timer.Reset(100 * time.Millisecond)
+			case triggers := <-agent.coordinator.remotetriggers:
+				/* Received some triggers from the coordinator */
+				agent.processRemoteTriggers(triggers)
+			case triggers := <-agent.localtriggers:
+				/* Received some triggers from the shm triggers queue */
+				agent.processTriggers(triggers)
+			case buffers := <-agent.api.Complete:
+				/* Received some buffers from the shm complete queue */
+				agent.processCompletedBuffers(buffers)
+			case breadcrumbs := <-agent.api.Breadcrumbs:
+				/* Received some breadcrumbs from the shm breadcrumbs queue */
+				agent.processBreadcrumbs(breadcrumbs)
 			}
-
-			// Prepare the next report
-			data_to_report = agent.tm.GetNextBatchToReport()
-			if len(data_to_report) == 0 {
-				break Reporting
+		} else {
+			/* We do have data to report, so we attempt to report it,
+			and after doing so check if there's anything more to report */
+			select {
+			case <-ctx.Done():
+				fmt.Println("Agent goroutine exiting")
+				return
+			case agent.reporting.data <- data_to_report:
+				data_to_report = agent.tm.GetNextBatchToReport()
+				timer.Reset(100 * time.Millisecond)
+			case triggers := <-agent.coordinator.remotetriggers:
+				/* Received some triggers from the coordinator */
+				agent.processRemoteTriggers(triggers)
+			case triggers := <-agent.localtriggers:
+				/* Received some triggers from the shm triggers queue */
+				agent.processTriggers(triggers)
+			case buffers := <-agent.api.Complete:
+				/* Received some buffers from the shm complete queue */
+				agent.processCompletedBuffers(buffers)
+			case breadcrumbs := <-agent.api.Breadcrumbs:
+				/* Received some breadcrumbs from the shm breadcrumbs queue */
+				agent.processBreadcrumbs(breadcrumbs)
 			}
-		}
-
-		select {
-		case <-ctx.Done():
-			fmt.Println("Agent goroutine exiting")
-			return
-		case triggers := <-agent.coordinator.remotetriggers:
-			/* Received some triggers from the coordinator */
-			agent.processRemoteTriggers(triggers)
-		case triggers := <-agent.localtriggers:
-			/* Received some triggers from the shm triggers queue */
-			agent.processTriggers(triggers)
-		case buffers := <-agent.api.Complete:
-			/* Received some buffers from the shm complete queue */
-			agent.processCompletedBuffers(buffers)
-		case breadcrumbs := <-agent.api.Breadcrumbs:
-			/* Received some breadcrumbs from the shm breadcrumbs queue */
-			agent.processBreadcrumbs(breadcrumbs)
-		default:
-			/* Do nothing; try reporting again */
-			// TODO: separate channel for remote triggers
 		}
 	}
 }
@@ -344,6 +352,7 @@ func (agent *Agent) Run(ctx context.Context) {
 	wg.Add(5)
 	go func() {
 		agent.RunProcessingLoop(ctx)
+		wg.Done()
 	}()
 	go func() {
 		agent.coordinator.Run(ctx)
