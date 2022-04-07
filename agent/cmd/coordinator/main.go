@@ -57,6 +57,7 @@ func resolveConfigValue(key string, value string, legacyconfigvalue string, serv
 func main() {
 
 	port := flag.String("port", "5252", "Coordinator port.  If not specified, uses `lc_port` from the legacy config lc.conf file.")
+	outfile := flag.String("out", "", "Output filename for writing breadcrumb dissemination statistics.  If not specified, will not be written to file")
 
 	flag.Parse()
 
@@ -91,7 +92,16 @@ func main() {
 		cancel()
 	}()
 
+	if *outfile != "" {
+		log.Println("Logging breadcrumb stats to", *outfile)
+	}
+
 	var c coordinator.CoordinatorServer
-	c.Init(*port)
-	c.Run(ctx)
+	err := c.Init(*port, *outfile)
+
+	if err != nil {
+		fmt.Println("Error initializing coordinator:", err)
+	} else {
+		c.Run(ctx)
+	}
 }
