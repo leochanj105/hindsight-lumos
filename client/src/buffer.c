@@ -83,14 +83,20 @@ BufManager bufmanager_init(const char* name,
     m.stats.null_acquired = 0;
     m.stats.pool_released = 0;
     m.stats.null_released = 0;
+    
+    size_t metadata_size = sizeof(PoolMetadata);
+    if (metadata_size % 1024 != 0) {
+        /* Align metadata to 1024 boundary to avoid fragmentation of buffers */
+        metadata_size = (1 + metadata_size / 1024) * 1024;
+    }
 
     const char* fname = POOL_SHM_FILENAME(name);
-    size_t pool_size = sizeof(PoolMetadata) + capacity * buffer_size;
+    size_t pool_size = metadata_size + capacity * buffer_size;
     m.baseptr = bufmanager_pool_init(fname, pool_size);
     m.meta = (PoolMetadata*) m.baseptr;
     m.meta->capacity = capacity;
     m.meta->buffer_size = buffer_size;
-    m.pool = m.baseptr + sizeof(PoolMetadata);
+    m.pool = m.baseptr + metadata_size;
 
     printf("Created buffer pool, ");
     printf("capacity=%ld ", m.meta->capacity);
@@ -119,10 +125,16 @@ BufManager bufmanager_init_existing(const char* name) {
     m.stats.pool_released = 0;
     m.stats.null_released = 0;
 
+    size_t metadata_size = sizeof(PoolMetadata);
+    if (metadata_size % 1024 != 0) {
+        /* Align metadata to 1024 boundary to avoid fragmentation of buffers */
+        metadata_size = (1 + metadata_size / 1024) * 1024;
+    }
+
     const char* fname = POOL_SHM_FILENAME(name);
     m.baseptr = bufmanager_pool_init_existing(fname);
     m.meta = (PoolMetadata*) m.baseptr;
-    m.pool = m.baseptr + sizeof(PoolMetadata);
+    m.pool = m.baseptr + metadata_size;
 
     while (!m.meta->initialized) {
         printf("Waiting for pool initialization...\n");
