@@ -386,6 +386,7 @@ func (a *Agent) SendTriggers(triggers []Trigger) {
 		break
 	default:
 		// TODO: counters here
-		fmt.Println("Agent SendTriggers bottlenecked!", a.addr)
+		// This can happen if the agent isn't running / contactable
+		// fmt.Println("Agent SendTriggers bottlenecked!", a.addr)
 	}
 }
