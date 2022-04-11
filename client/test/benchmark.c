@@ -34,13 +34,16 @@ static struct argp_option options[] = {
   { 0 }
 };
 
-static inline unsigned long long getticks(void)
-{
-    unsigned int lo, hi;
+static inline uint64_t ticksbegin(void) {
+    uint32_t lo, hi;
+    asm volatile("lfence;rdtsc" : "=a" (lo), "=d" (hi));
+    return (uint64_t) hi << 32 | lo;
+}
 
-    // RDTSC copies contents of 64-bit TSC into EDX:EAX
+static inline uint64_t ticksend(void) {
+    uint32_t lo, hi;
     asm volatile("rdtscp;lfence" : "=a" (lo), "=d" (hi));
-    return (unsigned long long)hi << 32 | lo;
+    return (uint64_t) hi << 32 | lo;
 }
 
 struct arguments {
@@ -175,7 +178,7 @@ void client_thread_main(volatile int *alive,
     }
 
     int tracepoints_per_request = arguments->tracepoints_per_request;
-    uint64_t ts[4];
+    uint64_t ts[6];
 
     int traces = 0;
     int invalid_traces = 0;
@@ -186,31 +189,34 @@ void client_thread_main(volatile int *alive,
     uint64_t sum_ends = 0;
 
     uint64_t begin = nanos();
-    uint64_t tbegin = getticks();
+    uint64_t tbegin = ticksbegin();
     while (*alive) {
-        ts[0] = getticks();
-        hindsight_begin(rand_uint64());
-        ts[1] = getticks();
+        uint64_t trace_id = rand_uint64();
+        ts[0] = ticksbegin();
+        hindsight_begin(trace_id);
+        ts[1] = ticksend();
+        ts[2] = ticksbegin();
         for (int i = 0; i < tracepoints_per_request; i++) {
             hindsight_tracepoint(payload, payload_src_size);
         }
-        ts[2] = getticks();
-        bool is_valid = (hindsight_null_buffer_count() == 0);
+        ts[3] = ticksend();
+        ts[4] = ticksbegin();
         // usleep(50);
         hindsight_end();
-        ts[3] = getticks();
+        ts[5] = ticksend();
         uint64_t end = nanos();
 
         uint64_t duration = (end - begin);
-        uint64_t ts_duration = ts[3] - tbegin;
+        uint64_t ts_duration = ts[5] - tbegin;
 
         traces++;
+        bool is_valid = (hindsight_null_buffer_count() == 0);
         if (!is_valid)
             invalid_traces++;
         count += tracepoints_per_request;
         sum_begins += (duration * (ts[1]-ts[0])) / ts_duration;
-        sum_tracepoints += (duration * (ts[2]-ts[1])) / ts_duration;
-        sum_ends += (duration * (ts[3]-ts[2])) / ts_duration;
+        sum_tracepoints += (duration * (ts[3]-ts[2])) / ts_duration;
+        sum_ends += (duration * (ts[5]-ts[4])) / ts_duration;
 
         if (traces == batchsize) {
             __sync_fetch_and_add(&stats->count, count);
