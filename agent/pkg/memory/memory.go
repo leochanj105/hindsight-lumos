@@ -16,6 +16,7 @@ import "C"
 import (
 	"context"
 	"fmt"
+	"log"
 	"sync"
 	"time"
 	"unsafe"
@@ -27,6 +28,7 @@ const BATCHSIZE = 100
 
 /* For directly putting and getting stuff from shm */
 type AgentAPI struct {
+	fname string
 	c_api *C.HindsightAgentAPI
 }
 
@@ -66,6 +68,7 @@ func InitAgentAPI(fname string) *AgentAPI {
 }
 
 func (agent *AgentAPI) Init(fname string) {
+	agent.fname = fname
 	agent.c_api = C.hindsight_agentapi_init(C.CString(fname))
 	fmt.Println("Initialize buffers: done")
 	fmt.Println("Queue states:")
@@ -98,7 +101,7 @@ func (api *GoAgentAPI) BufferSize() int {
 }
 
 func (api *GoAgentAPI) Run(ctx context.Context) {
-	fmt.Println("shm queue goroutine running")
+	log.Printf("Attaching to shm queues /dev/shm/%s_*\n", api.agent.fname)
 	wg := new(sync.WaitGroup)
 	wg.Add(4)
 	go func() {
@@ -118,14 +121,13 @@ func (api *GoAgentAPI) Run(ctx context.Context) {
 		wg.Done()
 	}()
 	wg.Wait()
-	fmt.Println("shm queue goroutine exiting")
+	log.Printf("Detached from shm queues /dev/shm/%s_*\n", api.agent.fname)
 }
 
 func (api *GoAgentAPI) availableLoop(ctx context.Context) {
 	for {
 		select {
 		case <-ctx.Done():
-			fmt.Println("available exiting")
 			return
 		case bufids := <-api.Available:
 			api.agent.PutAvailable(bufids)
@@ -139,7 +141,6 @@ func (api *GoAgentAPI) drainBatches(ctx context.Context, min_bs int) int {
 	for {
 		select {
 		case <-ctx.Done():
-			fmt.Println("batches exiting")
 			return 0
 		default:
 			count, completed := api.agent.GetCompleteBatches()
@@ -156,7 +157,6 @@ func (api *GoAgentAPI) drainBatches(ctx context.Context, min_bs int) int {
 }
 
 func (api *GoAgentAPI) completeLoop(ctx context.Context) {
-	fmt.Println("completeLoop")
 	max_backoff := 100000
 	min_backoff := 10
 	backoff := int(10)
@@ -168,7 +168,6 @@ func (api *GoAgentAPI) completeLoop(ctx context.Context) {
 	for {
 		select {
 		case <-ctx.Done():
-			fmt.Println("completeLoop exiting")
 			return
 		default:
 			// Keep processing batches so long as they are BATCHSIZE/2 large
@@ -228,7 +227,6 @@ func (api *GoAgentAPI) triggerLoop(ctx context.Context) {
 	for {
 		select {
 		case <-ctx.Done():
-			fmt.Println("triggers exiting")
 			return
 		// case <-next_print.C:
 		// 	{
@@ -264,7 +262,6 @@ func (api *GoAgentAPI) drainBreadcrumbs(ctx context.Context, min_bs int) int {
 	for {
 		select {
 		case <-ctx.Done():
-			fmt.Println("breadcrumbs exiting")
 			return 0
 		default:
 			count, breadcrumbs := api.agent.GetBreadcrumbBatches()
@@ -292,7 +289,6 @@ func (api *GoAgentAPI) breadcrumbsLoop(ctx context.Context) {
 	for {
 		select {
 		case <-ctx.Done():
-			fmt.Println("breadcrumbs exiting")
 			return
 		default:
 			// Keep processing batches so long as they are BATCHSIZE/2 large

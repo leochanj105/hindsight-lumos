@@ -3,7 +3,7 @@ package agent
 import (
 	"context"
 	"encoding/binary"
-	"fmt"
+	"log"
 	"net"
 	"time"
 
@@ -106,13 +106,13 @@ func (r *Reporting) writeConnectionHandshake(conn net.Conn) error {
 	return writeLengthPrefixed(conn, agent_addr_bytes)
 }
 
-/* TODO: not sure we'll actually use grpc for reporting */
-func (r *Reporting) DataLoop(ctx context.Context) {
-	fmt.Println("DataLoop connecting to", r.remote_addr)
+func (r *Reporting) Run(ctx context.Context) {
+	log.Println("Reporting triggered trace data to", r.remote_addr)
 	firsttime := true
 	for {
 		select {
 		case <-ctx.Done():
+			log.Println("Stopped reporting triggered trace data")
 			return
 		default:
 			break
@@ -120,10 +120,16 @@ func (r *Reporting) DataLoop(ctx context.Context) {
 		conn, err := net.Dial("tcp", r.remote_addr)
 		if err != nil {
 			if firsttime {
-				fmt.Println("Unable to connect to reporting backend, retrying every 2 seconds", r.remote_addr, err)
+				log.Println("Unable to connect to reporting backend, retrying every 2 seconds", r.remote_addr, err)
 				firsttime = false
 			}
-			time.Sleep(time.Duration(2) * time.Second)
+			select {
+			case <-ctx.Done():
+				log.Println("Stopped reporting triggered trace data")
+				return
+			case <-time.After(2 * time.Second):
+				continue
+			}
 			continue
 		}
 		defer conn.Close()
@@ -131,7 +137,7 @@ func (r *Reporting) DataLoop(ctx context.Context) {
 		err = r.ReportData(ctx, conn)
 		if err != nil {
 			if firsttime {
-				fmt.Println("Error in DataLoop:", err, " -- will retry every 2 seconds")
+				log.Println("Error in DataLoop:", err, " -- will retry every 2 seconds")
 				firsttime = false
 			}
 			time.Sleep(time.Duration(2) * time.Second)
@@ -158,10 +164,4 @@ func (r *Reporting) ReportData(ctx context.Context, conn net.Conn) (err error) {
 			}
 		}
 	}
-}
-
-func (r *Reporting) Run(ctx context.Context) {
-	fmt.Println("Reporting goroutine running")
-
-	r.DataLoop(ctx)
 }

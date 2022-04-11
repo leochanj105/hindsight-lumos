@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"fmt"
+	"log"
 	"sync"
 	"time"
 
@@ -291,7 +292,7 @@ func (agent *Agent) processRemoteTriggers(batch []memory.Trigger) {
 }
 
 func (agent *Agent) RunProcessingLoop(ctx context.Context) {
-	fmt.Println("Agent goroutine running")
+	log.Println("Begun receiving trace data from application")
 	var data_to_report []int
 	timer := time.NewTimer(0 * time.Second)
 	for {
@@ -302,7 +303,7 @@ func (agent *Agent) RunProcessingLoop(ctx context.Context) {
 			check if there's anything to report */
 			select {
 			case <-ctx.Done():
-				fmt.Println("Agent goroutine exiting")
+				log.Println("Stopped receiving trace data from application")
 				return
 			case <-timer.C:
 				data_to_report = agent.tm.GetNextBatchToReport()
@@ -325,7 +326,7 @@ func (agent *Agent) RunProcessingLoop(ctx context.Context) {
 			and after doing so check if there's anything more to report */
 			select {
 			case <-ctx.Done():
-				fmt.Println("Agent goroutine exiting")
+				log.Println("Stopped receiving trace data from application")
 				return
 			case agent.reporting.data <- data_to_report:
 				data_to_report = agent.tm.GetNextBatchToReport()
@@ -347,7 +348,7 @@ func (agent *Agent) RunProcessingLoop(ctx context.Context) {
 	}
 }
 
-func (agent *Agent) Run(ctx context.Context) {
+func (agent *Agent) Run(ctx context.Context, cancel context.CancelFunc) {
 	wg := new(sync.WaitGroup)
 	wg.Add(5)
 	go func() {
@@ -355,7 +356,7 @@ func (agent *Agent) Run(ctx context.Context) {
 		wg.Done()
 	}()
 	go func() {
-		agent.coordinator.Run(ctx)
+		agent.coordinator.Run(ctx, cancel)
 		wg.Done()
 	}()
 	go func() {

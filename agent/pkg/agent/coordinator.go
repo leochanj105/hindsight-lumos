@@ -2,7 +2,6 @@ package agent
 
 import (
 	"context"
-	"fmt"
 	"log"
 	"net"
 	"sync"
@@ -100,7 +99,6 @@ func (r *Coordinator) RemoteTrigger(ctx context.Context, in *datapb.TriggerReque
 
 /* After we are connected to the coordinator, this loops over the outgoing breadcrumbs, reporting them in batches */
 func (r *Coordinator) BreadcrumbsLoop(ctx context.Context) {
-	fmt.Println("BreadcrumbsLoop connecting to", r.remote_addr)
 	firsttime := true
 	for {
 		select {
@@ -113,10 +111,15 @@ func (r *Coordinator) BreadcrumbsLoop(ctx context.Context) {
 		conn, err := grpc.Dial(r.remote_addr, grpc.WithInsecure(), grpc.WithTimeout(100*time.Millisecond))
 		if err != nil {
 			if firsttime {
-				fmt.Println("Unable to connect to coordinator, retrying every 2 seconds", r.remote_addr, err)
+				log.Printf("Unable to send breadcrumbs to %s; will retry every 2 seconds (reason: %s)\n", r.remote_addr, err.Error())
 				firsttime = false
 			}
-			time.Sleep(time.Duration(2) * time.Second)
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(2 * time.Second):
+				continue
+			}
 			continue
 		}
 		defer conn.Close()
@@ -126,10 +129,15 @@ func (r *Coordinator) BreadcrumbsLoop(ctx context.Context) {
 		err = r.ReportBreadcrumbs(ctx, rpcclient)
 		if err != nil {
 			if firsttime {
-				fmt.Println("Error in BreadcrumbsLoop:", err, " -- will retry every 2 seconds")
+				log.Printf("Unable to send breadcrumbs to %s; will retry every 2 seconds (reason: %s)\n", r.remote_addr, err.Error())
 				firsttime = false
 			}
-			time.Sleep(time.Duration(2) * time.Second)
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(2 * time.Second):
+				continue
+			}
 			continue
 		}
 
@@ -148,6 +156,8 @@ func (r *Coordinator) ReportBreadcrumbs(ctx context.Context, rpcclient datapb.Co
 		// Block waiting for some breadcrumbs
 		for len(accumulated) == 0 {
 			select {
+			case <-ctx.Done():
+				return nil
 			case breadcrumbs := <-r.breadcrumbs:
 				if len(breadcrumbs) > 0 {
 					accumulated = append(accumulated, breadcrumbs)
@@ -210,7 +220,6 @@ func (r *Coordinator) ReportBreadcrumbs(ctx context.Context, rpcclient datapb.Co
 }
 
 func (r *Coordinator) TriggersLoop(ctx context.Context) {
-	fmt.Println("TriggersLoop connecting to", r.remote_addr)
 	firsttime := true
 	for {
 		select {
@@ -223,7 +232,7 @@ func (r *Coordinator) TriggersLoop(ctx context.Context) {
 		conn, err := grpc.Dial(r.remote_addr, grpc.WithInsecure(), grpc.WithTimeout(100*time.Millisecond))
 		if err != nil {
 			if firsttime {
-				fmt.Println("Unable to connect to coordinator, retrying every 2 seconds", r.remote_addr, err)
+				log.Printf("Unable to send local triggers to %s; will retry every 2 seconds (reason: %s)\n", r.remote_addr, err.Error())
 				firsttime = false
 			}
 			time.Sleep(time.Duration(2) * time.Second)
@@ -236,7 +245,7 @@ func (r *Coordinator) TriggersLoop(ctx context.Context) {
 		err = r.ReportTriggers(ctx, rpcclient)
 		if err != nil {
 			if firsttime {
-				fmt.Println("Error in TriggersLoop:", err, " -- will retry every 2 seconds")
+				log.Printf("Unable to send local triggers to %s; will retry every 2 seconds (reason: %s)\n", r.remote_addr, err.Error())
 				firsttime = false
 			}
 			time.Sleep(time.Duration(2) * time.Second)
@@ -255,6 +264,8 @@ func (r *Coordinator) ReportTriggers(ctx context.Context, rpcclient datapb.Coord
 		// Block waiting for some triggers
 		for len(accumulated) == 0 {
 			select {
+			case <-ctx.Done():
+				return nil
 			case triggers := <-r.localtriggers:
 				accumulated = append(accumulated, triggers...)
 			}
@@ -282,31 +293,47 @@ func (r *Coordinator) ReportTriggers(ctx context.Context, rpcclient datapb.Coord
 	}
 }
 
-func (r *Coordinator) Run(ctx context.Context) {
-	fmt.Println("Coordinator goroutine running - coordinator at: ", r.remote_addr)
+func (r *Coordinator) Run(ctx context.Context, cancel context.CancelFunc) {
+	log.Println("Receiving remote triggers on:", r.local_port)
 
 	lis, err := net.Listen("tcp", ":"+r.local_port)
 	if err != nil {
-		log.Fatalf("failed to listen: %v", err)
+		log.Printf("Coordinator unable to listen for remote triggers: %v\n", err)
+		cancel()
+		return
 	}
 	s := grpc.NewServer()
 	datapb.RegisterAgentServer(s, r)
 
+	go func() {
+		select {
+		case <-ctx.Done():
+			s.GracefulStop()
+		}
+	}()
+
 	// Run the GRPC server
 	go func() {
 		if err := s.Serve(lis); err != nil {
-			log.Fatalf("GRPC Server: %v", err)
+			log.Printf("Coordinator server stopped unexpectedly: %v\n", err)
+			cancel()
+			return
 		}
+		log.Println("Stopped receiving remote triggers from coordinator")
 	}()
 
 	wg := new(sync.WaitGroup)
 	wg.Add(2)
 	go func() {
+		log.Println("Breadcrumbs will be reported to", r.remote_addr)
 		r.BreadcrumbsLoop(ctx)
+		log.Println("Stopped sending breadcrumbs to coordinator")
 		wg.Done()
 	}()
 	go func() {
+		log.Println("Triggers will be reported to", r.remote_addr)
 		r.TriggersLoop(ctx)
+		log.Println("Stopped sending local triggers to coordinator")
 		wg.Done()
 	}()
 	wg.Wait()

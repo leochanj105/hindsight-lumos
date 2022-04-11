@@ -4,8 +4,12 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"log"
+	"os"
+	"os/signal"
 	"strconv"
 	"strings"
+	"syscall"
 
 	"github.com/geraldleizhang/hindsight/agent/pkg/agent"
 	"github.com/geraldleizhang/hindsight/agent/pkg/util"
@@ -83,14 +87,31 @@ func main() {
 		return
 	}
 
-	fmt.Println("Running agent", *serv)
+	log.Println("Running agent", *serv)
 	*hostname = resolveConfigValue("hostname", *hostname, util.Server_addr, "127.0.0.1", *serv)
 	*port = resolveConfigValue("port", *port, util.Server_port, "5050", *serv)
 	*lc_addr = resolveConfigValue("lc_addr", *lc_addr, util.Coordinator_addr+":"+util.Coordinator_port, "127.0.0.1:5252", *serv)
 	*r_addr = resolveConfigValue("r_addr", *r_addr, util.Reporting_addr+":"+util.Reporting_port, "127.0.0.1:5253", *serv)
 
-	ctx, _ := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(context.Background())
+
+	ch := make(chan os.Signal)
+	signal.Notify(ch, os.Interrupt, syscall.SIGTERM)
+	go func() {
+		<-ch
+		log.Println("Initiating graceful shutdown...")
+
+		go func() {
+			<-ch
+			log.Println("Exiting without graceful shutdown")
+			os.Exit(0)
+		}()
+
+		cancel()
+	}()
 
 	agent := agent.InitAgent2(*serv, *hostname, *port, *lc_addr, *r_addr, delay, *reportingratelimit, *triggerratelimit, per_trigger_limits, *outputfile, *verbose)
-	agent.Run(ctx)
+	agent.Run(ctx, cancel)
+	log.Println("Agent exiting")
+	os.Exit(0)
 }
