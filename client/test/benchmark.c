@@ -39,7 +39,7 @@ static inline unsigned long long getticks(void)
     unsigned int lo, hi;
 
     // RDTSC copies contents of 64-bit TSC into EDX:EAX
-    asm volatile("rdtsc" : "=a" (lo), "=d" (hi));
+    asm volatile("rdtscp;lfence" : "=a" (lo), "=d" (hi));
     return (unsigned long long)hi << 32 | lo;
 }
 

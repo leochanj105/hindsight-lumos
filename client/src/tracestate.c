@@ -170,7 +170,7 @@ void tracestate_write_data(TraceState* trace,
     trace->header.acquired = tracestate_get_time();
     trace->header.buffer_id = trace->buffer.id;
     trace->header.prev_buffer_id = prev_buffer_id;
-    if (trace->buffer.id == -2) {
+    if (actual_buffer.id == -2) {
         // TODO: probably shouldn't be implemented like this
         trace->header.null_buffer_count++;
     }
