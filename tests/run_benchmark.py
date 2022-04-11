@@ -71,21 +71,30 @@ def run(args):
     # cmds = [make_client_cmd(args), make_agent_cmd(args)]
 
     client = subprocess.Popen(make_client_cmd(args), stdout=subprocess.PIPE, cwd="../client")
-    agent = subprocess.Popen(make_agent_cmd(args), stdout=subprocess.PIPE, cwd="../agent")
+    # agent = subprocess.Popen(make_agent_cmd(args), stdout=subprocess.PIPE, stderr=subprocess.PIPE, cwd="../agent")
+    agent = subprocess.Popen(make_agent_cmd(args), stdout=subprocess.PIPE, cwd="../agent", preexec_fn=os.setsid)
 
-    lines = []
-    while True:
-        line = client.stdout.readline().decode().strip()
-        if not line:
-            break
-        lines.append(line)
+    try:
+        lines = []
+        while True:
+            line = client.stdout.readline().decode().strip()
+            if not line:
+                break
+            lines.append(line)
 
-    with open(args.output, "w") as f:
-        for line in lines:
-            f.write(line + "\n")
+        with open(args.output, "w") as f:
+            for line in lines:
+                f.write(line + "\n")
 
-    # agent.terminate()     # for some reason no longer working
-    os.killpg(os.getpgid(agent.pid), signal.SIGINT)
+        # agent.send_signal(signal.SIGTERM)
+        # agent.terminate()
+        os.killpg(os.getpgid(agent.pid), signal.SIGINT)
+        agent.wait()
+    except:
+        print("Killing agent")
+        os.killpg(os.getpgid(agent.pid), signal.SIGINT)
+        agent.wait()
+        raise
 
 if __name__ == '__main__':
     args = parser.parse_args()
