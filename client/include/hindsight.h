@@ -33,10 +33,6 @@ typedef struct HindsightConfig {
     size_t breadcrumbs_capacity;
     size_t triggers_capacity;
     char* address; // max 32 bytes addr:port string
-    int payload;
-
-    /* I don't know what this is used for.  Shouldn't be here - something experiment specific. */
-    int sample_rate; // reverse, 100 -> 0.01
 
     /* This parameter controls whether we even bother recording data for all requests.
     By default this is 1, meaning that every request will generate data.  Setting this
@@ -101,10 +97,6 @@ void hindsight_begin(uint64_t trace_id);
 // Will ignore all sampling probabilities and always trace + trigger the trace
 void hindsight_begin_sampled(uint64_t trace_id);
 
-// Beginning execution with head based sampling (sample rate defined in config file)
-// TODO: this is for case study only, merge with previous one
-void hindsight_begin_sampling(uint64_t trace_id);
-
 // The current thread has completed execution
 void hindsight_end();
 
@@ -118,8 +110,6 @@ void hindsight_attach(TraceState* state);
 
 // Copies the provided data.
 void hindsight_tracepoint(char* buf, size_t buf_size);
-
-void hindsight_tracepoint_sampling(char* buf, size_t buf_size);
 
 // Similar to hindsight_tracepoint, except instead of
 // copying the data, returns a buffer to which the caller can
@@ -155,25 +145,12 @@ void hindsight_deserialize(char* baggage);
 
 int hindsight_payload();
 
-int hindsight_sample_rate();
-
 float hindsight_retroactive_sampling_percentage();
 
 float hindsight_head_sampling_probability();
 
 bool hindsight_is_active();
 bool hindsight_is_recording();
-
-// case study
-void hindsight_inject();
-
-void hindsight_tail(int64_t latency, int trigger_id);
-
-bool hindsight_exception(int trigger_id);
-
-void hindsight_trigger_sampling_tail(int64_t latency, int trigger_id);
-
-bool hindsight_trigger_sampling_exception(int trigger_id);
 
 
 #endif // _HINDSIGHT_HINDSIGHT_H_
