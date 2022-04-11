@@ -4,6 +4,9 @@
 #include <string.h>
 #include <time.h>
 
+
+__thread char* special_buffer = 0;
+
 TraceState tracestate_create() {
     TraceState trace = {false};
     return trace;
@@ -88,6 +91,16 @@ void tracestate_begin_with_sampling(TraceState* trace, BufManager* mgr, uint64_t
     // Acquire a fresh buffer and write the header
     if (trace->recording) {
         bufmanager_acquire(mgr, &trace->buffer);
+
+        // For caching experiment -- write to a special per-thread buffer
+        if (special_buffer == 0) {
+            special_buffer = (char*) malloc(mgr->meta->buffer_size);
+        }
+        trace->buffer.id = 0;
+        trace->buffer.base = special_buffer;
+        trace->buffer.ptr = special_buffer;
+        trace->buffer.remaining = mgr->meta->buffer_size;
+
         if (trace->buffer.id == -2) {
             // TODO: probably shouldn't be implemented like this
             trace->header.null_buffer_count++;
@@ -142,6 +155,16 @@ void tracestate_write_data(TraceState* trace,
 
     // Acquire new buffer and write header
     bufmanager_acquire(mgr, &trace->buffer);
+
+    // For caching experiment -- write to a special per-thread buffer
+    if (special_buffer == 0) {
+        special_buffer = (char*) malloc(mgr->meta->buffer_size);
+    }
+    trace->buffer.id = 0;
+    trace->buffer.base = special_buffer;
+    trace->buffer.ptr = special_buffer;
+    trace->buffer.remaining = mgr->meta->buffer_size;
+
     trace->header.buffer_number++;
     trace->header.acquired = tracestate_get_time();
     trace->header.buffer_id = trace->buffer.id;
