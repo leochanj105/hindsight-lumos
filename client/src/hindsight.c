@@ -35,7 +35,7 @@ HindsightConfig hindsight_default_config() {
 
 HindsightConfig hindsight_load_config(const char* service_name) {
     // Load Hindsight conf for this service from default location
-    char config_fname[64];
+    char config_fname[128];
     strcpy(config_fname, "/etc/hindsight_conf/");
     strcat(config_fname, service_name);
     strcat(config_fname, ".conf");
@@ -68,6 +68,7 @@ HindsightConfig hindsight_load_config_file(const char* fname) {
         int index = (int)(temp - line);
 
         char* new_line = malloc(sizeof(char)*64);
+        memset(new_line, 0, 64*sizeof(char));
         if (index == strlen(line)-1) {
             strncpy(new_line, line, index);
         } else {

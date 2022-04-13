@@ -14,8 +14,8 @@
 
 
 char* get_shm_fname(char* dst1, char* dst2) {
-    char* name = malloc(sizeof(char)*64);
-    memset(name, 0, sizeof(char)*64);
+    char* name = malloc(sizeof(char)*128);
+    memset(name, 0, sizeof(char)*128);
     strcpy(name, "/dev/shm/");
     strcat(name, dst1);
     strcat(name, "__");
