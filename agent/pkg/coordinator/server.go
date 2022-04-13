@@ -243,9 +243,13 @@ func (s *CoordinatorServer) LocalTrigger(ctx context.Context, req *datapb.Trigge
 
 	select {
 	case s.incoming_triggers <- &incoming:
-		err = <-incoming.ret
-		if err != nil {
-			fmt.Println("Breadcrumbs error:", err.Error())
+		select {
+		case <-ctx.Done():
+			return
+		case err = <-incoming.ret:
+			if err != nil {
+				fmt.Println("Breadcrumbs error:", err.Error())
+			}
 		}
 	default:
 		// TODO: counters here
@@ -264,9 +268,13 @@ func (s *CoordinatorServer) Breadcrumbs(ctx context.Context, req *datapb.Breadcr
 
 	select {
 	case s.incoming_breadcrumbs <- &incoming:
-		err = <-incoming.ret
-		if err != nil {
-			fmt.Println("Breadcrumbs error:", err)
+		select {
+		case <-ctx.Done():
+			return
+		case err = <-incoming.ret:
+			if err != nil {
+				fmt.Println("Breadcrumbs error:", err)
+			}
 		}
 	default:
 		// TODO: counters here
@@ -300,7 +308,12 @@ func (a *Agent) AgentLoop(ctx context.Context) {
 				fmt.Println("Unable to connect to coordinator, retrying every 2 seconds", a.addr, err)
 				firsttime = false
 			}
-			time.Sleep(time.Duration(2) * time.Second)
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(2 * time.Second):
+				continue
+			}
 			continue
 		}
 		defer conn.Close()
@@ -313,7 +326,12 @@ func (a *Agent) AgentLoop(ctx context.Context) {
 				fmt.Println("Error with agent", a.addr, err, " -- will retry every 2 seconds")
 				firsttime = false
 			}
-			time.Sleep(time.Duration(2) * time.Second)
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(2 * time.Second):
+				continue
+			}
 			continue
 		}
 
@@ -329,6 +347,8 @@ func (a *Agent) ReportTriggers(ctx context.Context, rpcclient datapb.AgentClient
 		// Block waiting for some triggers
 		for len(accumulated) == 0 {
 			select {
+			case <-ctx.Done():
+				return nil
 			case triggers := <-a.outgoing_triggers:
 				if len(triggers) > 0 {
 					accumulated = append(accumulated, triggers...)
