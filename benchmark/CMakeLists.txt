@@ -14,7 +14,8 @@ set(CMAKE_CXX_FLAGS_RELEASE "-O3")
 find_package(Threads REQUIRED)
 
 # Hindsight include
-include_directories(/usr/local/include/tracer/)
+#include_directories(/usr/local/include/tracer/)
+include_directories(../client/src/ ../client/include/)
 
 # Source directory
 file (GLOB CPP_FILES src/*.cc) 
@@ -26,5 +27,5 @@ foreach(_target
   benchmark)
   add_executable(${_target} "src/${_target}.cc" ${CPP_FILES})
   target_include_directories(${_target} PRIVATE)
-  target_link_libraries(${_target} tracer Threads::Threads)
+  target_link_libraries(${_target} Threads::Threads ${CMAKE_SOURCE_DIR}/../client/lib/libtracer.a)
 endforeach()
