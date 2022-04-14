@@ -245,6 +245,8 @@ func (s *CoordinatorServer) LocalTrigger(ctx context.Context, req *datapb.Trigge
 	incoming.req = req
 	incoming.ret = make(chan error)
 
+	rsp = &datapb.TriggerReply{}
+
 	select {
 	case s.incoming_triggers <- &incoming:
 		select {
@@ -259,7 +261,6 @@ func (s *CoordinatorServer) LocalTrigger(ctx context.Context, req *datapb.Trigge
 		// TODO: counters here
 		fmt.Println("LocalTrigger incoming_triggers bottlenecked!")
 	}
-	rsp = &datapb.TriggerReply{}
 	return
 }
 
@@ -269,6 +270,8 @@ func (s *CoordinatorServer) Breadcrumbs(ctx context.Context, req *datapb.Breadcr
 	var incoming IncomingBreadcrumbs
 	incoming.req = req
 	incoming.ret = make(chan error)
+
+	rsp = &datapb.BreadcrumbsReply{}
 
 	select {
 	case s.incoming_breadcrumbs <- &incoming:
@@ -284,7 +287,6 @@ func (s *CoordinatorServer) Breadcrumbs(ctx context.Context, req *datapb.Breadcr
 		// TODO: counters here
 		fmt.Println("LocalTrigger incoming_breadcrumbs bottlenecked!")
 	}
-	rsp = &datapb.BreadcrumbsReply{}
 	return
 }
 
@@ -384,7 +386,7 @@ func (a *Agent) ReportTriggers(ctx context.Context, rpcclient datapb.AgentClient
 	}
 }
 
-/* Send a batch of local triggers to the coordinator */
+/* Send a batch of remove triggers to an agent */
 func (a *Agent) doSend(rpcclient datapb.AgentClient, triggers []Trigger) error {
 	var request datapb.TriggerRequest
 	for _, trigger := range triggers {
