@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/geraldleizhang/hindsight/agent/pkg/coordinator"
 	"github.com/geraldleizhang/hindsight/agent/pkg/util"
@@ -81,15 +82,18 @@ func main() {
 		<-ch
 		log.Println("Initiating graceful shutdown...")
 
-		ch2 := make(chan os.Signal)
-		signal.Notify(ch2, os.Interrupt, syscall.SIGTERM)
 		go func() {
-			<-ch2
+			<-ch
 			log.Println("Exiting without graceful shutdown")
 			os.Exit(0)
 		}()
 
 		cancel()
+		select {
+		case <-time.After(5 * time.Second):
+			log.Println("Shutdown timeout expired, exiting")
+			os.Exit(0)
+		}
 	}()
 
 	if *outfile != "" {

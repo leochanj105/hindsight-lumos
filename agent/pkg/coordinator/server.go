@@ -71,10 +71,12 @@ func (s *CoordinatorServer) Run(ctx context.Context) {
 	wg.Add(2)
 	go func() {
 		s.runServer(ctx)
+		log.Println("Stopped coordinator server")
 		wg.Done()
 	}()
 	go func() {
 		s.runCoordinator(ctx)
+		log.Println("Stopped main coordinator goroutine")
 		wg.Done()
 	}()
 	if s.logger != nil {
@@ -107,8 +109,6 @@ func (cs *CoordinatorServer) runServer(ctx context.Context) {
 
 	if err := grpcserver.Serve(lis); err != nil {
 		log.Fatalf("Failed to serve: %v", err)
-	} else {
-		log.Println("gRPC server finished serving.")
 	}
 }
 
@@ -128,9 +128,11 @@ func (cs *CoordinatorServer) checkExpirations() {
 	cs.c.now = time.Now()
 	cs.c.checkTraceExpiration(cs.c.now.Add(cs.timeout))
 	finished := cs.c.checkTriggerExpiration(cs.c.now.Add(cs.timeout))
-	if cs.logger != nil {
-		for _, f := range finished {
-			cs.logger.Finished <- f
+	if cs.logger != nil && len(finished) > 0 {
+		select {
+		case cs.logger.Finished <- finished:
+		default:
+			// finished queue full, skip
 		}
 	}
 }
@@ -215,12 +217,14 @@ func (cs *CoordinatorServer) runCoordinator(ctx context.Context) {
 	for {
 		select {
 		case <-ctx.Done():
-			log.Println("CoordinatorServer main goroutine exiting")
 			if cs.logger != nil {
+				log.Println("CoordinatorServer flushing logs")
 				/* Expire everything, so that it flushes to log */
 				finished := cs.c.checkTriggerExpiration(time.Now().Add(1 * time.Second))
-				for _, f := range finished {
-					cs.logger.Finished <- f
+				select {
+				case cs.logger.Finished <- finished:
+				default:
+					// finished queue full, skip
 				}
 			}
 			return

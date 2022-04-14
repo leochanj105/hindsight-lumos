@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/geraldleizhang/hindsight/agent/pkg/agent"
 	"github.com/geraldleizhang/hindsight/agent/pkg/util"
@@ -108,6 +109,11 @@ func main() {
 		}()
 
 		cancel()
+
+		select {
+		case <-time.After(5 * time.Second):
+			os.Exit(0)
+		}
 	}()
 
 	agent := agent.InitAgent2(*serv, *hostname, *port, *lc_addr, *r_addr, delay, *reportingratelimit, *triggerratelimit, per_trigger_limits, *outputfile, *verbose)

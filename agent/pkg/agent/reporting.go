@@ -140,8 +140,13 @@ func (r *Reporting) Run(ctx context.Context) {
 				log.Println("Error in DataLoop:", err, " -- will retry every 2 seconds")
 				firsttime = false
 			}
-			time.Sleep(time.Duration(2) * time.Second)
-			continue
+			select {
+			case <-ctx.Done():
+				log.Println("Stopped reporting triggered trace data")
+				return
+			case <-time.After(2 * time.Second):
+				continue
+			}
 		}
 
 		firsttime = true

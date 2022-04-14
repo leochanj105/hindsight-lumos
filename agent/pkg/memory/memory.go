@@ -106,18 +106,22 @@ func (api *GoAgentAPI) Run(ctx context.Context) {
 	wg.Add(4)
 	go func() {
 		api.availableLoop(ctx)
+		log.Println("Stopped writing to available queue")
 		wg.Done()
 	}()
 	go func() {
 		api.completeLoop(ctx)
+		log.Println("Stopped polling complete queue")
 		wg.Done()
 	}()
 	go func() {
 		api.triggerLoop(ctx)
+		log.Println("Stopped polling trigger queue")
 		wg.Done()
 	}()
 	go func() {
 		api.breadcrumbsLoop(ctx)
+		log.Println("Stopped polling breadcrumb queue")
 		wg.Done()
 	}()
 	wg.Wait()
@@ -185,7 +189,12 @@ func (api *GoAgentAPI) completeLoop(ctx context.Context) {
 			if backoff > max_backoff {
 				backoff = max_backoff
 			}
-			time.Sleep(time.Duration(backoff) * time.Microsecond)
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(time.Duration(backoff) * time.Microsecond):
+				continue
+			}
 		}
 	}
 }
@@ -251,7 +260,12 @@ func (api *GoAgentAPI) triggerLoop(ctx context.Context) {
 			if backoff > max_backoff {
 				backoff = max_backoff
 			}
-			time.Sleep(time.Duration(backoff) * time.Microsecond)
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(time.Duration(backoff) * time.Microsecond):
+				continue
+			}
 		}
 	}
 }
@@ -306,7 +320,13 @@ func (api *GoAgentAPI) breadcrumbsLoop(ctx context.Context) {
 			if backoff > max_backoff {
 				backoff = max_backoff
 			}
-			time.Sleep(time.Duration(backoff) * time.Microsecond)
+
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(time.Duration(backoff) * time.Microsecond):
+				continue
+			}
 		}
 	}
 }
