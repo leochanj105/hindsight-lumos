@@ -155,4 +155,24 @@ public:
   }
 };
 
+class TriggerSet {
+public:
+  std::vector<uint64_t> trace_ids;
+  uint64_t head;
+  uint64_t tail;
+  TriggerSet(size_t size) : trace_ids(size), head(0), tail(0) {}
+
+  void addTrace(uint64_t trace_id) {
+    trace_ids[tail] = trace_id;
+    tail = (tail + 1) % trace_ids.size();
+    if (tail == head) {
+      head = (head + 1) % trace_ids.size();
+    }
+  }
+
+  std::vector<uint64_t>& get() {
+    return trace_ids;
+  }
+};
+
 #endif  // SRC_AUTOTRIGGERS_H_

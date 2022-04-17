@@ -118,6 +118,42 @@ void test_exception_trigger() {
   assert(!trigger_fired);
 }
 
+void test_triggerset() {
+  TriggerSet ts(5);
+
+  for (int i = 7; i < 12; i++) {
+    ts.addTrace(i);
+  }
+
+  auto& cur = ts.get();
+  assert(cur.size() == 5);
+  for (int i = 7; i < 12; i++) {
+    bool found = 0;
+    for (auto trace_id : cur) {
+      if (trace_id == i) {
+        found = true;
+      }
+    }
+    assert(found);
+  }
+
+  ts.addTrace(77);
+  cur = ts.get();
+  for (auto trace_id : cur) {
+    assert(trace_id != 7);
+  }
+  for (int i = 8; i < 12; i++) {
+    bool found = false;
+    for (auto trace_id : cur) {
+      if (trace_id == i) {
+        found = true;
+      }
+    }
+    assert(found);
+  }
+
+}
+
 int main (int argc, char **argv) {
   test_categorytrigger();
   test_filtertrigger_inclusive();
@@ -125,5 +161,6 @@ int main (int argc, char **argv) {
   test_percentiletrigger();
   test_percentiletrigger_perf();
   test_exception_trigger();
+  test_triggerset();
   std::cout << "All tests passed" << std::endl;
 }
