@@ -128,7 +128,7 @@ public:
   SlidingWindowT<T> window;
   uint64_t samples;
 
-  PercentileTrigger(double percentile) : percentile(percentile), windowsize((unsigned) (1.0 / (1.0 - percentile))), window(2*windowsize), samples(0) {
+  PercentileTrigger(double percentile) : percentile(percentile), windowsize((unsigned) (1.0 / (1.0 - percentile))), window(5*windowsize), samples(0) {
   }
 
   bool addSample(T value) {
