@@ -9,6 +9,7 @@ extern "C" {
   #include "hindsight.h"
   #include "agentapi.h"
   #include "common.h"
+  #include "tracestate.h"
 }
 #include <time.h>
 #include <sys/sysinfo.h>
@@ -202,21 +203,28 @@ void client_thread_main(volatile int *alive,
     uint64_t sum_tracepoints = 0;
     uint64_t sum_ends = 0;
 
+    TraceState tracestate;
+
     uint64_t begin = nanos();
     uint64_t tbegin = ticksbegin();
     while (*alive) {
         uint64_t trace_id = rand_uint64();
         ts[0] = ticksbegin();
-        hindsight_begin(trace_id);
+        // hindsight_begin(trace_id);
+        tracestate_begin_with_sampling(&tracestate, mgr, trace_id, 0, UINT64_MAX);
         ts[1] = ticksend();
         ts[2] = ticksbegin();
         for (int i = 0; i < tracepoints_per_request; i++) {
-            hindsight_tracepoint(payload, payload_src_size);
+            // hindsight_tracepoint(payload, payload_src_size);
+            if (!tracestate_try_write(&tracestate, payload, payload_src_size)) {
+              tracestate_write(&tracestate, mgr, payload, payload_src_size);
+            }
         }
         ts[3] = ticksend();
         ts[4] = ticksbegin();
         // usleep(50);
-        hindsight_end();
+        // hindsight_end();
+        tracestate_end(&tracestate, mgr);
         ts[5] = ticksend();
         uint64_t end = nanos();
 
