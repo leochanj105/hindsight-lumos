@@ -18,13 +18,13 @@ find_package(Threads REQUIRED)
 include_directories(../client/src/ ../client/include/)
 
 # Source directory
-file (GLOB CPP_FILES src/*.cc) 
-file (GLOB H_FILES src/*.h) 
+file (GLOB CPP_FILES src/hindsight/*.cc) 
+file (GLOB H_FILES src/hindsight/*.h) 
 set (SOURCE_FILES ${CPP_FILES} ${H_FILES})
 
 # Targets greeter_[async_](client|server)
 foreach(_target
-  benchmark)
+  benchmark test_autotriggers)
   add_executable(${_target} "src/${_target}.cc" ${CPP_FILES})
   target_include_directories(${_target} PRIVATE)
   target_link_libraries(${_target} Threads::Threads ${CMAKE_SOURCE_DIR}/../client/lib/libtracer.a)
