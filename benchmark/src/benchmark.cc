@@ -3,6 +3,9 @@
 #include <unistd.h>
 #include <argp.h>
 #include <pthread.h>
+#include <set>
+#include <string>
+#include <vector>
 
 extern "C" {
   #include "buffer.h"
@@ -15,6 +18,7 @@ extern "C" {
 #include <sys/sysinfo.h>
 
 #include <sched.h>
+#include "hindsight/autotriggers.h"
 
 const char *argp_program_version = "argp-ex3 1.0";
 const char *argp_program_bug_address = "<bug-gnu-utils@gnu.org>";
@@ -37,7 +41,7 @@ static struct argp_option options[] = {
 
 static inline uint64_t ticksbegin(void) {
     uint32_t lo, hi;
-    asm volatile("lfence;rdtsc" : "=a" (lo), "=d" (hi));
+    asm volatile("lfence;rdtsc;lfence" : "=a" (lo), "=d" (hi));
     return (uint64_t) hi << 32 | lo;
 }
 
@@ -143,6 +147,12 @@ typedef struct exp_stats {
     uint64_t invalid_traces;
     uint64_t begins;
     uint64_t tracepoints;
+    uint64_t fts;
+    uint64_t cts;
+    uint64_t pts1;
+    uint64_t pts2;
+    uint64_t pts3;
+    uint64_t pttss;
     uint64_t ends;
 } exp_stats;
 
@@ -193,7 +203,7 @@ void client_thread_main(volatile int *alive,
     }
 
     int tracepoints_per_request = arguments->tracepoints_per_request;
-    uint64_t ts[6];
+    uint64_t ts[18];
 
     int traces = 0;
     int invalid_traces = 0;
@@ -202,13 +212,31 @@ void client_thread_main(volatile int *alive,
     uint64_t sum_begins = 0;
     uint64_t sum_tracepoints = 0;
     uint64_t sum_ends = 0;
+    uint64_t sum_fts = 0;
+    uint64_t sum_cts = 0;
+    uint64_t sum_pts1 = 0;
+    uint64_t sum_pts2 = 0;
+    uint64_t sum_pts3 = 0;
+    uint64_t sum_pttss = 0;
 
     TraceState tracestate;
+
+    std::vector<std::string> regular_labels = {"a", "b", "c", "d", "e", "f", "g"};
+    std::set<std::string> labels = {"outlier"};
+    FilterTrigger ft(labels, true);
+    CategoryTrigger ct(0.1);
+    PercentileTrigger<uint64_t> pt1(0.99);
+    PercentileTrigger<uint64_t> pt2(0.999);
+    PercentileTrigger<uint64_t> pt3(0.9999);
+
+    TriggerSet trigset(10);
+    PercentileTrigger<uint64_t> pt_ts(0.9999);
 
     uint64_t begin = nanos();
     uint64_t tbegin = ticksbegin();
     while (*alive) {
         uint64_t trace_id = rand_uint64();
+        std::string label = regular_labels[trace_id % regular_labels.size()];
         ts[0] = ticksbegin();
         // hindsight_begin(trace_id);
         tracestate_begin_with_sampling(&tracestate, mgr, trace_id, 0, UINT64_MAX);
@@ -221,15 +249,69 @@ void client_thread_main(volatile int *alive,
             }
         }
         ts[3] = ticksend();
+
+
+        if (trace_id % 1000 == 0) {
+          label = "outlier";
+        }
+
+
         ts[4] = ticksbegin();
+        if (ft.shouldTrigger(label)) {
+          hindsight_trigger_manual(trace_id, 1);
+        }
+        ts[5] = ticksend();
+
+        ts[6] = ticksbegin();
+        if (ct.addSample(label)) {
+          hindsight_trigger_manual(trace_id, 2);
+        }
+        ts[7] = ticksend();
+
+        ts[8] = ticksbegin();
+        {
+          if (pt1.addSample(ts[8] - ts[0])) {
+            hindsight_trigger_manual(trace_id, 3);
+          }
+        }
+        ts[9] = ticksend();
+
+        ts[10] = ticksbegin();
+        {
+          if (pt2.addSample(ts[8] - ts[0])) {
+            hindsight_trigger_manual(trace_id, 4);
+          }
+        }
+        ts[11] = ticksend();
+
+        ts[12] = ticksbegin();
+        {
+          if (pt3.addSample(ts[8] - ts[0])) {
+            hindsight_trigger_manual(trace_id, 5);
+          }
+        }
+        ts[13] = ticksend();
+
+        ts[14] = ticksbegin();
+        trigset.addTrace(trace_id);
+        if (pt_ts.addSample(ts[10] - ts[0])) {
+          auto& lateral_ids = trigset.get();
+          for (auto &lateral_id : lateral_ids) {
+            hindsight_trigger_lateral(6, trace_id, lateral_id);
+          }
+        }
+        ts[15] = ticksend();
+
+
+        ts[16] = ticksbegin();
         // usleep(50);
         // hindsight_end();
         tracestate_end(&tracestate, mgr);
-        ts[5] = ticksend();
+        ts[17] = ticksend();
         uint64_t end = nanos();
 
         uint64_t duration = (end - begin);
-        uint64_t ts_duration = ts[5] - tbegin;
+        uint64_t ts_duration = ts[13] - tbegin;
 
         traces++;
         bool is_valid = (hindsight_null_buffer_count() == 0);
@@ -238,7 +320,14 @@ void client_thread_main(volatile int *alive,
         count += tracepoints_per_request;
         sum_begins += (duration * (ts[1]-ts[0])) / ts_duration;
         sum_tracepoints += (duration * (ts[3]-ts[2])) / ts_duration;
-        sum_ends += (duration * (ts[5]-ts[4])) / ts_duration;
+        sum_fts += (duration * (ts[5]-ts[4])) / ts_duration;
+        sum_cts += (duration * (ts[7]-ts[6])) / ts_duration;
+        sum_pts1 += (duration * (ts[9]-ts[8])) / ts_duration;
+        sum_pts2 += (duration * (ts[11]-ts[10])) / ts_duration;
+        sum_pts3 += (duration * (ts[13]-ts[12])) / ts_duration;
+        sum_pttss += (duration * (ts[15]-ts[14])) / ts_duration;
+
+        sum_ends += (duration * (ts[17]-ts[16])) / ts_duration;
 
         if (traces == batchsize) {
             __sync_fetch_and_add(&stats->count, count);
@@ -246,6 +335,12 @@ void client_thread_main(volatile int *alive,
             __sync_fetch_and_add(&stats->invalid_traces, invalid_traces);
             __sync_fetch_and_add(&stats->begins, sum_begins);
             __sync_fetch_and_add(&stats->tracepoints, sum_tracepoints);
+            __sync_fetch_and_add(&stats->fts, sum_fts);
+            __sync_fetch_and_add(&stats->cts, sum_cts);
+            __sync_fetch_and_add(&stats->pts1, sum_pts1);
+            __sync_fetch_and_add(&stats->pts2, sum_pts2);
+            __sync_fetch_and_add(&stats->pts3, sum_pts3);
+            __sync_fetch_and_add(&stats->pttss, sum_pttss);
             __sync_fetch_and_add(&stats->ends, sum_ends);
 
             traces = 0;
@@ -253,6 +348,12 @@ void client_thread_main(volatile int *alive,
             count = 0;
             sum_begins = 0;
             sum_tracepoints = 0;
+            sum_fts = 0;
+            sum_cts = 0;
+            sum_pts1 = 0;
+            sum_pts2 = 0;
+            sum_pts3 = 0;
+            sum_pttss = 0;
             sum_ends = 0;
         }
     }
@@ -270,9 +371,15 @@ void print_thread_main(volatile int *alive, struct arguments *args, exp_stats* s
     uint64_t prev_invalid_traces = 0;
     uint64_t prev_begins = 0;
     uint64_t prev_tracepoints = 0;
+    uint64_t prev_fts = 0;
+    uint64_t prev_cts = 0;
+    uint64_t prev_pts1 = 0;
+    uint64_t prev_pts2 = 0;
+    uint64_t prev_pts3 = 0;
+    uint64_t prev_pttss = 0;
     uint64_t prev_ends = 0;
 
-    printf("headers:\tt\tduration\ttraces\tinvalidtraces\ttracepoints\ttracepoints_tput\tbytes\tpool_acquired\tpool_released\tnull_acquired\tnull_released\tbegin\ttracepoint\tend\n");
+    printf("headers:\tt\tduration\ttraces\tinvalidtraces\ttracepoints\ttracepoints_tput\tbytes\tpool_acquired\tpool_released\tnull_acquired\tnull_released\tbegin\ttracepoint\tfiltertriggers\tcategorytriggers\tp99triggers\tp999triggers\tp9999triggers\tpercentiletriggersets\tend\n");
 
     while (*alive) {
         uint64_t now = nanos();
@@ -300,6 +407,24 @@ void print_thread_main(volatile int *alive, struct arguments *args, exp_stats* s
             uint64_t new_tracepoints = stats->tracepoints;
             uint64_t tracepoints = new_tracepoints - prev_tracepoints;
 
+            uint64_t new_fts = stats->fts;
+            uint64_t fts = new_fts - prev_fts;
+
+            uint64_t new_cts = stats->cts;
+            uint64_t cts = new_cts - prev_cts;
+
+            uint64_t new_pts1 = stats->pts1;
+            uint64_t pts1 = new_pts1 - prev_pts1;
+
+            uint64_t new_pts2 = stats->pts2;
+            uint64_t pts2 = new_pts2 - prev_pts2;
+
+            uint64_t new_pts3 = stats->pts3;
+            uint64_t pts3 = new_pts3 - prev_pts3;
+
+            uint64_t new_pttss = stats->pttss;
+            uint64_t pttss = new_pttss - prev_pttss;
+
             uint64_t new_ends = stats->ends;
             uint64_t ends = new_ends - prev_ends;
 
@@ -310,7 +435,7 @@ void print_thread_main(volatile int *alive, struct arguments *args, exp_stats* s
             delta.pool_released = (delta.pool_released * print_every) / (now - last_print);
             delta.null_released = (delta.null_released * print_every) / (now - last_print);
 
-            printf("data:\t%ld\t%ld\t%ld\t%ld\t%ld\t%ld\t%ld\t%ld\t%ld\t%ld\t%ld\t%.2f\t%.2f\t%.2f\n",
+            printf("data:\t%ld\t%ld\t%ld\t%ld\t%ld\t%ld\t%ld\t%ld\t%ld\t%ld\t%ld\t%.2f\t%.2f\t%.2f\t%.2f\t%.2f\t%.2f\t%.2f\t%.2f\t%.2f\n",
                 now - begin,
                 now - last_print,
                 traces,
@@ -324,6 +449,12 @@ void print_thread_main(volatile int *alive, struct arguments *args, exp_stats* s
                 delta.null_released,
                 traces == 0 ? 0 : begins / (float) traces,
                 tracepoints == 0 ? 0 : tracepoints / (float) count,
+                fts == 0 ? 0 : fts / (float) traces,
+                cts == 0 ? 0 : cts / (float) traces,
+                pts1 == 0 ? 0 : pts1 / (float) traces,
+                pts2 == 0 ? 0 : pts2 / (float) traces,
+                pts3 == 0 ? 0 : pts3 / (float) traces,
+                pttss == 0 ? 0 : pttss / (float) traces,
                 ends == 0 ? 0 : ends / (float) traces
                 );
             last_print = now;
@@ -333,6 +464,12 @@ void print_thread_main(volatile int *alive, struct arguments *args, exp_stats* s
             prev_traces_count = new_traces_count;
             prev_begins = new_begins;
             prev_tracepoints = new_tracepoints;
+            prev_fts = new_fts;
+            prev_cts = new_cts;
+            prev_pts1 = new_pts1;
+            prev_pts2 = new_pts2;
+            prev_pts3 = new_pts3;
+            prev_pttss = new_pttss;
             prev_ends = new_ends;
         }
 
