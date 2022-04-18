@@ -4,12 +4,9 @@
 #include <string.h>
 #include <time.h>
 
-
-__thread char* special_buffer = 0;
-__thread Buffer actual_buffer = {-1};
-
 TraceState tracestate_create() {
     TraceState trace = {false};
+    trace.special_buffer = (char*) malloc(1024*1024);
     return trace;
 }
 
@@ -69,10 +66,10 @@ void tracestate_begin_with_sampling(TraceState* trace, BufManager* mgr, uint64_t
         if (trace->recording) {
             // trace->current->completed = tracestate_get_time();
             trace->current->size = trace->buffer.ptr - trace->buffer.base;
-            bufmanager_return(mgr, trace->header.trace_id, &actual_buffer);
+            bufmanager_return(mgr, trace->header.trace_id, &trace->actual_buffer);
         }
     }
-    buffer_clear(&trace->buffer);
+    buffer_clear(&trace->actual_buffer);
 
     trace->active = true;
 
@@ -91,18 +88,15 @@ void tracestate_begin_with_sampling(TraceState* trace, BufManager* mgr, uint64_t
 
     // Acquire a fresh buffer and write the header
     if (trace->recording) {
-        bufmanager_acquire(mgr, &actual_buffer);
+        bufmanager_acquire(mgr, &trace->actual_buffer);
 
         // For caching experiment -- write to a special per-thread buffer
-        if (special_buffer == 0) {
-            special_buffer = (char*) malloc(mgr->meta->buffer_size);
-        }
         trace->buffer.id = 0;
-        trace->buffer.base = special_buffer;
-        trace->buffer.ptr = special_buffer;
+        trace->buffer.base = trace->special_buffer;
+        trace->buffer.ptr = trace->special_buffer;
         trace->buffer.remaining = mgr->meta->buffer_size;
 
-        if (actual_buffer.id == -2) {
+        if (trace->actual_buffer.id == -2) {
             // TODO: probably shouldn't be implemented like this
             trace->header.null_buffer_count++;
         }
@@ -121,7 +115,7 @@ void tracestate_end(TraceState* trace, BufManager* mgr) {
         trace->current->size = trace->buffer.ptr - trace->buffer.base;
 
         // Return the current buffer
-        bufmanager_return(mgr, trace->header.trace_id, &actual_buffer);
+        bufmanager_return(mgr, trace->header.trace_id, &trace->actual_buffer);
     }
 
     trace->active = false;
@@ -152,25 +146,22 @@ void tracestate_write_data(TraceState* trace,
     // Buffer is full, return old buffer
     // trace->current->completed = tracestate_get_time();
     trace->current->size = trace->buffer.ptr - trace->buffer.base;
-    bufmanager_return(mgr, trace->header.trace_id, &actual_buffer);
+    bufmanager_return(mgr, trace->header.trace_id, &trace->actual_buffer);
 
     // Acquire new buffer and write header
-    bufmanager_acquire(mgr, &actual_buffer);
+    bufmanager_acquire(mgr, &trace->actual_buffer);
 
     // For caching experiment -- write to a special per-thread buffer
-    if (special_buffer == 0) {
-        special_buffer = (char*) malloc(mgr->meta->buffer_size);
-    }
     trace->buffer.id = 0;
-    trace->buffer.base = special_buffer;
-    trace->buffer.ptr = special_buffer;
+    trace->buffer.base = trace->special_buffer;
+    trace->buffer.ptr = trace->special_buffer;
     trace->buffer.remaining = mgr->meta->buffer_size;
 
     trace->header.buffer_number++;
     trace->header.acquired = tracestate_get_time();
     trace->header.buffer_id = trace->buffer.id;
     trace->header.prev_buffer_id = prev_buffer_id;
-    if (actual_buffer.id == -2) {
+    if (trace->actual_buffer.id == -2) {
         // TODO: probably shouldn't be implemented like this
         trace->header.null_buffer_count++;
     }

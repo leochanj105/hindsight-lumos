@@ -26,6 +26,8 @@ typedef struct TraceState {
     TraceHeader header; // The trace header data. Gets written to every buffer.
     TraceHeader* current; // Header within the current active buffer.
     Buffer buffer; // The current active buffer.
+    char* special_buffer;
+    Buffer actual_buffer;
 } TraceState;
 
 // TraceState can also be initialized to {false}
