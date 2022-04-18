@@ -70,7 +70,7 @@ def run(args):
 
     # cmds = [make_client_cmd(args), make_agent_cmd(args)]
 
-    client = subprocess.Popen(make_client_cmd(args), stdout=subprocess.PIPE, cwd="../benchmark/build")
+    client = subprocess.Popen(make_client_cmd(args), stdout=subprocess.PIPE, cwd="../client")
     # agent = subprocess.Popen(make_agent_cmd(args), stdout=subprocess.PIPE, stderr=subprocess.PIPE, cwd="../agent")
     agent = subprocess.Popen(make_agent_cmd(args), stdout=subprocess.PIPE, cwd="../agent", preexec_fn=os.setsid)
 
