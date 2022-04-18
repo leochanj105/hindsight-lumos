@@ -23,6 +23,7 @@ payload_sizes = [4,8,16,32,64,128,256,512,1024,2048,4096]
 
 def make_cmd(args, threads, outdir, trace_size, payload_size):
     tracepoints = int(trace_size / payload_size)
+
     return [str(v) for v in [
         "python3", "run_benchmark2.py",
         "--threads", threads,
