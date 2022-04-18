@@ -125,6 +125,75 @@ def process_results(exps):
     means = df.groupby(["threads", "trace_size", "payload_size"])[columns].mean()
     means.to_csv("%s/latencies.out" % args.out)
 
+def as_latex_table(args):
+    df = pd.read_csv("%s/latencies.out" % args.out)
+    df["triggerset"] = (df["percentiletriggersets"] - df["p9999triggers"])
+    apis = ["begin", "tracepoint", "categorytriggers", "p99triggers", "p999triggers", "p9999triggers", "triggerset", "end"]
+
+    for api in apis:
+        for z in range(3):
+            df2 = df[["threads", "trace_size", "payload_size", api]]
+            df2 = df2.reset_index().pivot(columns='threads', index=["trace_size", "payload_size"], values=api).reset_index()
+            df2["trace_size"] = df2["trace_size"].astype('int32')
+            df2["payload_size"] = df2["payload_size"].astype('int32')
+            if z == 0:
+                include = ["trace_size", "payload_size", 1,2,4,6,8,12,16,24,32]
+            elif z == 1:
+                include = [1,2,4,6,8,12,16,24,32]
+            elif z == 2:
+                include = ["trace_size", "payload_size"]
+            latextable = "\\begin{tabular}{|" + "r"*len(include) + "|}\n\\hline\n"
+            headerrow = ""
+
+            for i, column in enumerate(include):
+                if i > 0:
+                    headerrow += " & "
+                if i == 0 and z != 1:
+                    headerrow += "\\textbf{Trace}"
+                elif i == 1 and z != 1:
+                    headerrow += "\\textbf{Payload}"
+                elif z != 2:
+                    headerrow += "\\textbf{" + str(column) + "}"
+            headerrow += " \\\\\n\\hline\n"
+            latextable += headerrow
+
+            for i, row in df2.iterrows():
+                trace_size = row["trace_size"]
+                payload_size = row["payload_size"]
+                if payload_size > trace_size:
+                    continue
+                latexrow = ""
+                for j, col in enumerate(include):
+                    v = row[col]
+                    if j > 0:
+                        latexrow += " & "
+                    if j == 0 and z != 1:
+                        latexrow += "%d\\,kB" % int(v/1024)
+                    elif j == 1 and z != 1:
+                        if v >= 1024:
+                            latexrow += "%d\\,k" % int(v/1024)
+                        else:
+                            latexrow += "%.0f" % v
+                    else:
+                        latexrow += "%.0f" % v
+                latexrow += " \\\\\n"
+                latextable += latexrow
+            latextable += "\\hline\n\\end{tabular}"
+            outdir = "%s/latex" % args.out
+            if not os.path.isdir(outdir):
+                os.makedirs(outdir)
+            if z == 0:
+                with open("%s/latex/table_appendix_%s.tex" % (args.out, api), "w") as f:
+                    f.write(latextable)
+            elif z == 1:
+                with open("%s/latex/table_appendix_%s_noheader.tex" % (args.out, api), "w") as f:
+                    f.write(latextable)
+            elif z == 2:
+                with open("%s/latex/headers.tex" % (args.out, ), "w") as f:
+                    f.write(latextable)
+
+
 if __name__ == '__main__':
     args = parser.parse_args()
     run_experiments(args)
+    # as_latex_table(args)
