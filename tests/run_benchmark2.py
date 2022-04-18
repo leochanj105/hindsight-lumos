@@ -6,10 +6,11 @@ import time
 import numpy as np
 import math
 import os
+import threading
 
 parser = argparse.ArgumentParser(description='Run a hindsight benchmark')
 parser.add_argument("name", metavar="SERVNAME", type=str, help="Service name")
-parser.add_argument("output", metavar="OUT", type=str, help="Output filename")
+parser.add_argument("out", metavar="OUT", type=str, help="Output directory")
 parser.add_argument('-t', "--threads", metavar="NUM", type=int, default="1", help='Number of threads')
 parser.add_argument('-s', "--buffer_size", metavar="NUM", type=int, default="4096", help='Buffer size')
 parser.add_argument('-c', "--buffer_count", metavar="NUM", type=int, default="25000", help='Buffer Count')
@@ -20,6 +21,7 @@ parser.add_argument('-H', "--headsampling", metavar="NUM", type=float, default="
 parser.add_argument('-R', "--retroactive", metavar="NUM", type=float, default="1", help='Retroactive tracing probability')
 parser.add_argument('-d', "--duration", metavar="NUM", type=int, default="60", help='Experiment duration')
 parser.add_argument('-silent', "--silent", action='store_true', help='Prompt before proceeding')
+parser.add_argument("--header", action='store_true', help='If set, each tracepoint call will write a TraceEvent header from Hindsights OT library')
 
 
 import pathlib
@@ -28,6 +30,11 @@ def find_models(basedir):
     paths = list(Path(basedir).rglob("model.clockwork_params"))
     paths = [str(p)[:-17] for p in paths]
     return paths
+
+def mkdirs(args):
+    if not os.path.isdir(args.out):
+        print("out dir %s does not exist." % args.out)
+        os.makedirs(args.out)
 
 
 def reset_shm(args):
@@ -38,27 +45,43 @@ def reset_shm(args):
         child.wait()
     print("Reset shm")
 
+files = []
 
-def make_client_cmd(args):
-    cmd = [str(v) for v in [
-        "./benchmark",
-        "--threads", args.threads,
-        "--buffer_size", args.buffer_size,
+def run_client(args):
+    cmd_args = ["./benchmark"]
+    cmd_args += ["--threads", args.threads]
+    cmd_args += ["--buffer_size", args.buffer_size,
         "--buffer_count", args.buffer_count,
         "--payload_size", args.payload_size,
         "--tracepoints", args.tracepoints,
         "--trigger", args.trigger,
         "--duration", args.duration,
         "--headsampling", args.headsampling,
-        "--retroactive", args.retroactive,
-        args.name
-    ]]
-    print(" ".join(cmd))
-    return cmd
+        "--retroactive", args.retroactive]
+    if args.header:
+        cmd_args += ["--header"]
+    cmd_args += [args.name]
+    cmd = [str(v) for v in cmd_args]
 
-def make_agent_cmd(args):
+    print(" ".join(cmd))
+
+    output = "%s/benchmark.out" % args.out
+    f = open(output, "w")
+    files.append(f)
+
+    p = subprocess.Popen(cmd, stdout=f, stderr=f, cwd="../benchmark/build", preexec_fn=os.setsid)
+    return p
+
+def run_agent(args):
     cmd = ["go", "run", "cmd/agent2/main.go", "--serv", args.name]
-    return cmd
+    print(" ".join(cmd))
+
+    output = "%s/agent.out" % args.out
+    f = open(output, "w")
+    files.append(f)
+
+    p = subprocess.Popen(cmd, stdout=f, stderr=f, cwd="../agent", preexec_fn=os.setsid)
+    return p
 
 
 def run(args):
@@ -66,35 +89,28 @@ def run(args):
         print("Delete shm files for %s? Press <return> to continue or CTRL-C to abort" % args.name)
         input()
 
+    mkdirs(args)
     reset_shm(args)
 
-    # cmds = [make_client_cmd(args), make_agent_cmd(args)]
+    exit_flag = threading.Event()
 
-    client = subprocess.Popen(make_client_cmd(args), stdout=subprocess.PIPE, cwd="../benchmark/build")
-    # agent = subprocess.Popen(make_agent_cmd(args), stdout=subprocess.PIPE, stderr=subprocess.PIPE, cwd="../agent")
-    agent = subprocess.Popen(make_agent_cmd(args), stdout=subprocess.PIPE, cwd="../agent", preexec_fn=os.setsid)
+    def signal_handler(sig, frame):
+        print("Killing experiment processes...")
+        exit_flag.set()
+    signal.signal(signal.SIGINT, signal_handler)
 
-    try:
-        lines = []
-        while True:
-            line = client.stdout.readline().decode().strip()
-            if not line:
-                break
-            lines.append(line)
+    client = run_client(args)
+    agent = run_agent(args)
 
-        with open(args.output, "w") as f:
-            for line in lines:
-                f.write(line + "\n")
+    exit_flag.wait(args.duration+1)
 
-        # agent.send_signal(signal.SIGTERM)
-        # agent.terminate()
-        os.killpg(os.getpgid(agent.pid), signal.SIGINT)
-        agent.wait()
-    except:
-        print("Killing agent")
-        os.killpg(os.getpgid(agent.pid), signal.SIGINT)
-        agent.wait()
-        raise
+    os.killpg(os.getpgid(client.pid), signal.SIGINT)
+    os.killpg(os.getpgid(agent.pid), signal.SIGINT)
+    client.wait()
+    agent.wait()
+
+    for f in files:
+        f.close()
 
 if __name__ == '__main__':
     args = parser.parse_args()

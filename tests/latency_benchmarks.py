@@ -15,12 +15,12 @@ shmname = "multi"
 duration = 60 # Duration per run
 threads = list(range(1,33))
 buffer_size = 32768
-payload_size = 4
+payload_size = 32
 tracepoints = 1000
 
 def make_cmd(args, threads, name):
     return [str(v) for v in [
-        "python3", "run_benchmark.py",
+        "python3", "run_benchmark2.py",
         "--threads", threads,
         "--duration", duration,
         "--buffer_size", buffer_size,
@@ -68,5 +68,5 @@ if __name__ == '__main__':
     run_experiments(args)
     df = process_output(args.outdir)
 
-    means = df.groupby("thread")[["begin", "tracepoint", "end"]].mean()
+    means = df.groupby("thread").mean()
     means.to_csv("latencies2.out")

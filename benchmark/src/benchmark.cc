@@ -251,7 +251,7 @@ void client_thread_main(volatile int *alive,
     for (int i = 0; i < payload_src_size/4; i++) {
       payload_ints[i] = rand();
     }
-    bool writeEvent = arguments->header;
+    bool writeEvent = arguments->header && payload_src_size >= sizeof(Event);
     Event* evt = (Event*) payload;
 
     int tracepoints_per_request = arguments->tracepoints_per_request;

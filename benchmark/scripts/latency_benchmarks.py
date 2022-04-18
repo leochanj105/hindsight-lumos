@@ -11,16 +11,18 @@ import pandas as pd
 parser = argparse.ArgumentParser(description='Run multiple benchmarks')
 parser.add_argument("out", metavar="OUT", type=str, help="Output directory")
 parser.add_argument("-s", "--from_scratch", action='store_true', help='If true, overwrite existing experiment results')
+parser.add_argument("-r", "--results", action='store_true', help='Process results only')
 
 shmname = "multi"
-duration = 10 # Duration per run
+duration = 60 # Duration per run
 # threads = list(range(1,33))
-threads = [1,2,4]
+threads = [1,2,4,6,8,12,16,20,24,28,32]
 buffer_size = 32768
-payload_size = 32
-tracepoints = 1000
+trace_sizes = [1024, 4096, 16384, 65536]
+payload_sizes = [4,8,16,32,64,128,256,512,1024,2048,4096]
 
-def make_cmd(args, threads, outdir):
+def make_cmd(args, threads, outdir, trace_size, payload_size):
+    tracepoints = int(trace_size / payload_size)
     return [str(v) for v in [
         "python3", "run_benchmark2.py",
         "--threads", threads,
@@ -37,14 +39,18 @@ def make_cmd(args, threads, outdir):
 def make_experiments(args):
     exps = []
     for t in threads:
-        outdir = "%s/%dthreads" % (args.out, t)
-        exps.append({
-            "name": "%dthreads" % t,
-            "cmd": make_cmd(args, t, outdir),
-            "threads": t,
-            "outdir": outdir,
-            "exists": os.path.exists(outdir)
-        })
+        for trace_size in trace_sizes:
+            for payload_size in payload_sizes:
+                outdir = "%s/%d_%d_%dthreads" % (args.out, trace_size, payload_size, t)
+                exps.append({
+                    "name": "%dthreads" % t,
+                    "cmd": make_cmd(args, t, outdir, trace_size, payload_size),
+                    "threads": t,
+                    "trace_size": trace_size,
+                    "payload_size": payload_size,
+                    "outdir": outdir,
+                    "exists": os.path.exists(outdir)
+                })
     return exps
 
 
@@ -53,21 +59,27 @@ def run_experiments(args):
 
     to_run = []
     to_skip = []
-    if args.from_scratch:
+    if args.results:
+        to_skip = exps
+    elif args.from_scratch:
         to_run = exps
     else:
         to_run = [exp for exp in exps if not exp["exists"]]
         to_skip = [exp for exp in exps if exp["exists"]]
 
     if len(to_skip) > 0:
-        print("Skipping %d existing results" % len(to_skip))
+        print("Skipping %d experiments" % len(to_skip))
     if len(to_run) > 0:
-        print("Running %d: %s" % (len(to_run), ",".join([str(exp["threads"]) for exp in to_run])))
+        print("Running %d experiments (%.2f hours):" % (len(to_run), (len(to_run) * duration)/3600))
+        print("  threads %s" % threads)
+        print("  trace_sizes %s" % trace_sizes)
+        print("  payload_sizes %s" % payload_sizes)
         print("Press <return> to continue or CTRL-C to abort")
         input()
 
     for i, exp in enumerate(to_run):
         print("Running %d/%d" % (i+1, len(to_run)))
+        print(exp["cmd"])
         runner = subprocess.Popen(exp["cmd"])
         runner.wait()
     
@@ -88,6 +100,8 @@ def process_results(exps):
             rows = [dict(zip(headers, d)) for d in data]
             for row in rows:
                 row["threads"] = exp["threads"]
+                row["trace_size"] = exp["trace_size"]
+                row["payload_size"] = exp["payload_size"]
             if df is None:
                 df = pd.DataFrame(rows)
             else:
@@ -107,7 +121,7 @@ def process_results(exps):
         "p9999triggers", "percentiletriggersets", "end"
     ]
 
-    means = df.groupby("threads")[columns].mean()
+    means = df.groupby(["threads", "trace_size", "payload_size"])[columns].mean()
     means.to_csv("%s/latencies.out" % args.out)
 
 if __name__ == '__main__':
