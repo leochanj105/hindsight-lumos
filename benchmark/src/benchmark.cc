@@ -36,18 +36,25 @@ static struct argp_option options[] = {
   {"retroactive", 'R', "NUM", 0, "Retroactive sampling percentage between 0 and 1, default 1, float"},
   {"duration", 'd', "NUM", 0, "Duration in seconds before exiting. 0 to run forever"},
   {"output",   'o', "FILE", 0, "Output stats to FILE" },
+  {"header",  'h', 0,  0,  "If set, each tracepoint writes a TraceEvent header from Hindsight's OT library" },
   { 0 }
 };
 
 static inline uint64_t ticksbegin(void) {
     uint32_t lo, hi;
-    asm volatile("lfence;rdtsc;lfence" : "=a" (lo), "=d" (hi));
+    asm volatile("lfence;rdtsc" : "=a" (lo), "=d" (hi));
+    return (uint64_t) hi << 32 | lo;
+}
+
+static inline uint64_t ticks(void) {
+    uint32_t lo, hi;
+    asm volatile("rdtsc" : "=a" (lo), "=d" (hi));
     return (uint64_t) hi << 32 | lo;
 }
 
 static inline uint64_t ticksend(void) {
     uint32_t lo, hi;
-    asm volatile("rdtscp;lfence" : "=a" (lo), "=d" (hi));
+    asm volatile("rdtsc;lfence" : "=a" (lo), "=d" (hi));
     return (uint64_t) hi << 32 | lo;
 }
 
@@ -64,6 +71,7 @@ struct arguments {
   uint64_t duration;
   char* output_file;
   char* process_name;
+  bool header;
 };
 
 static error_t parse_opt (int key, char *arg, struct argp_state *state) {
@@ -101,6 +109,9 @@ static error_t parse_opt (int key, char *arg, struct argp_state *state) {
       break;
     case 'o':
       arguments->output_file = arg;
+      break;
+    case 'h':
+      arguments->header = true;
       break;
 
     case ARGP_KEY_ARG:
@@ -185,22 +196,63 @@ void init_latency_trigger(LatencyTrigger* t, size_t size) {
   t->tail = 0;
 }
 
+/* From hindsight opentelemetry extensions */
+enum class EventType {
+  // Core span fields
+  kSpanStart = 0,
+  kSpanEnd,
+  kSpanName,
+  kSpanParent,
+
+  // Generic attributes
+  kAttributeKey,
+  kAttributeValue,
+
+  // Generic events
+  kEvent,
+  kEventAttributeKey,
+  kEventAttributeValue,
+
+  // Generic links -- not implemented yet
+  kLink, // payload is the links span context
+  kLinkAttributeKey,
+  kLinkAttributeValue,
+
+  // Specific span fields used by otel
+  // See https://github.com/open-telemetry/opentelemetry-cpp/blob/main/sdk/src/trace/span.cc
+  kStatus,
+  kStatusDescription,
+  kSpanKind,
+  kTracer
+};
+
+/* From hindsight opentelemetry extensions */
+struct Event {
+  EventType type;
+  uint64_t span_id; // Most events belong to a span
+  uint64_t timestamp;   // optional
+  size_t size; // payload size, some events have no payload  
+};
+
 void client_thread_main(volatile int *alive, 
         int client_id, struct arguments *arguments, exp_stats* stats) {
 
     // Bind to core
     int cores[1];
     cores[0] = client_id % get_nprocs();
+    // cores[0] = ((2*client_id) % get_nprocs()) + ((2*client_id) / get_nprocs()) % 2;
     set_cores(cores, 1);
 
     printf("Client %d started on core %d\n", client_id, cores[0]);
 
     size_t payload_src_size = arguments->payload_size;
-    char payload[payload_src_size];
+    char payload[payload_src_size+sizeof(Event)]; // Add sizeof(event) for simplicity in casting to event
     int* payload_ints = (int*) payload;
     for (int i = 0; i < payload_src_size/4; i++) {
       payload_ints[i] = rand();
     }
+    bool writeEvent = arguments->header;
+    Event* evt = (Event*) payload;
 
     int tracepoints_per_request = arguments->tracepoints_per_request;
     uint64_t ts[18];
@@ -232,6 +284,8 @@ void client_thread_main(volatile int *alive,
     TriggerSet trigset(10);
     PercentileTrigger<uint64_t> pt_ts(0.9999);
 
+    size_t event_size = sizeof(Event);
+
     uint64_t begin = nanos();
     uint64_t tbegin = ticksbegin();
     while (*alive) {
@@ -242,11 +296,20 @@ void client_thread_main(volatile int *alive,
         tracestate_begin_with_sampling(&tracestate, mgr, trace_id, 0, UINT64_MAX);
         ts[1] = ticksend();
         ts[2] = ticksbegin();
-        for (int i = 0; i < tracepoints_per_request; i++) {
-            // hindsight_tracepoint(payload, payload_src_size);
-            if (!tracestate_try_write(&tracestate, payload, payload_src_size)) {
-              tracestate_write(&tracestate, mgr, payload, payload_src_size);
-            }
+        if (writeEvent) {
+          for (int i = 0; i < tracepoints_per_request; i++) {
+              // hindsight_tracepoint(payload, payload_src_size);
+              *evt = {EventType::kEvent, trace_id, ticks(), 0};
+              if (!tracestate_try_write(&tracestate, payload, payload_src_size)) {
+                tracestate_write(&tracestate, mgr, payload, payload_src_size);
+              }
+          }
+        } else {
+          for (int i = 0; i < tracepoints_per_request; i++) {
+              if (!tracestate_try_write(&tracestate, payload, payload_src_size)) {
+                tracestate_write(&tracestate, mgr, payload, payload_src_size);
+              }
+          }
         }
         ts[3] = ticksend();
 
@@ -278,7 +341,7 @@ void client_thread_main(volatile int *alive,
 
         ts[10] = ticksbegin();
         {
-          if (pt2.addSample(ts[8] - ts[0])) {
+          if (pt2.addSample(ts[10] - ts[0])) {
             hindsight_trigger_manual(trace_id, 4);
           }
         }
@@ -286,7 +349,7 @@ void client_thread_main(volatile int *alive,
 
         ts[12] = ticksbegin();
         {
-          if (pt3.addSample(ts[8] - ts[0])) {
+          if (pt3.addSample(ts[12] - ts[0])) {
             hindsight_trigger_manual(trace_id, 5);
           }
         }
@@ -294,7 +357,7 @@ void client_thread_main(volatile int *alive,
 
         ts[14] = ticksbegin();
         trigset.addTrace(trace_id);
-        if (pt_ts.addSample(ts[10] - ts[0])) {
+        if (pt_ts.addSample(ts[14] - ts[0])) {
           auto& lateral_ids = trigset.get();
           for (auto &lateral_id : lateral_ids) {
             hindsight_trigger_lateral(6, trace_id, lateral_id);
@@ -302,19 +365,18 @@ void client_thread_main(volatile int *alive,
         }
         ts[15] = ticksend();
 
+        bool is_valid = (tracestate.header.null_buffer_count == 0);
 
         ts[16] = ticksbegin();
-        // usleep(50);
         // hindsight_end();
         tracestate_end(&tracestate, mgr);
         ts[17] = ticksend();
         uint64_t end = nanos();
 
         uint64_t duration = (end - begin);
-        uint64_t ts_duration = ts[13] - tbegin;
+        uint64_t ts_duration = ts[17] - tbegin;
 
         traces++;
-        bool is_valid = (hindsight_null_buffer_count() == 0);
         if (!is_valid)
             invalid_traces++;
         count += tracepoints_per_request;
@@ -326,7 +388,6 @@ void client_thread_main(volatile int *alive,
         sum_pts2 += (duration * (ts[11]-ts[10])) / ts_duration;
         sum_pts3 += (duration * (ts[13]-ts[12])) / ts_duration;
         sum_pttss += (duration * (ts[15]-ts[14])) / ts_duration;
-
         sum_ends += (duration * (ts[17]-ts[16])) / ts_duration;
 
         if (traces == batchsize) {
