@@ -58,7 +58,7 @@ func (r *Coordinator) sendTriggers(rpcclient datapb.CoordinatorClient, triggers 
 	}
 
 	if r.enabled {
-		ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 
 		_, err := rpcclient.LocalTrigger(ctx, &request)
@@ -108,7 +108,7 @@ func (r *Coordinator) BreadcrumbsLoop(ctx context.Context) {
 			break
 		}
 
-		conn, err := grpc.Dial(r.remote_addr, grpc.WithInsecure(), grpc.WithTimeout(100*time.Millisecond))
+		conn, err := grpc.Dial(r.remote_addr, grpc.WithInsecure(), grpc.WithTimeout(10*time.Second))
 		if err != nil {
 			if firsttime {
 				log.Printf("Unable to send breadcrumbs to %s; will retry every 2 seconds (reason: %s)\n", r.remote_addr, err.Error())
@@ -208,7 +208,7 @@ func (r *Coordinator) ReportBreadcrumbs(ctx context.Context, rpcclient datapb.Co
 		}
 
 		if r.enabled {
-			ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 			defer cancel()
 
 			_, err := rpcclient.Breadcrumbs(ctx, &request)
@@ -229,7 +229,7 @@ func (r *Coordinator) TriggersLoop(ctx context.Context) {
 			break
 		}
 
-		conn, err := grpc.Dial(r.remote_addr, grpc.WithInsecure(), grpc.WithTimeout(100*time.Millisecond))
+		conn, err := grpc.Dial(r.remote_addr, grpc.WithInsecure(), grpc.WithTimeout(10*time.Second))
 		if err != nil {
 			if firsttime {
 				log.Printf("Unable to send local triggers to %s; will retry every 2 seconds (reason: %s)\n", r.remote_addr, err.Error())

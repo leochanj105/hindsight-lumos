@@ -6,6 +6,7 @@ import (
 	"log"
 	"net"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/geraldleizhang/hindsight/agent/pkg/datapb"
@@ -35,8 +36,12 @@ type CoordinatorServer struct {
 	incoming_triggers    chan *IncomingTriggers
 	incoming_breadcrumbs chan *IncomingBreadcrumbs
 
-	dropped_incoming_triggers    int
-	dropped_incoming_breadcrumbs int
+	dropped_incoming_triggers    uint64
+	dropped_incoming_breadcrumbs uint64
+	trigger_warn_mutex           sync.Mutex
+	breadcrumb_warn_mutex        sync.Mutex
+	last_trigger_warning         time.Time
+	last_breadcrumb_warning      time.Time
 
 	logger *CsvLogger
 }
@@ -46,6 +51,7 @@ type Agent struct {
 	id_to_addr        map[int32]string
 	outgoing_triggers chan []Trigger
 	dropped_triggers  int
+	last_warn         time.Time
 }
 
 func (s *CoordinatorServer) Init(port string, logfile string) (err error) {
@@ -60,6 +66,8 @@ func (s *CoordinatorServer) Init(port string, logfile string) (err error) {
 	} else {
 		s.logger = nil
 	}
+	s.last_trigger_warning = time.Now()
+	s.last_breadcrumb_warning = time.Now()
 	return
 }
 
@@ -67,6 +75,8 @@ func (a *Agent) Init(addr string) {
 	a.addr = addr
 	a.id_to_addr = make(map[int32]string)
 	a.outgoing_triggers = make(chan []Trigger, 10000)
+	a.dropped_triggers = 0
+	a.last_warn = time.Now()
 }
 
 func (s *CoordinatorServer) Run(ctx context.Context) {
@@ -256,7 +266,6 @@ func (cs *CoordinatorServer) runCoordinator(ctx context.Context) {
 
 /* An agent has sent us a trigger */
 func (s *CoordinatorServer) LocalTrigger(ctx context.Context, req *datapb.TriggerRequest) (rsp *datapb.TriggerReply, err error) {
-	// fmt.Println("Received a local trigger!", in.Src, in.Triggers)
 	var incoming IncomingTriggers
 	incoming.req = req
 	incoming.ret = make(chan error, 1)
@@ -270,18 +279,28 @@ func (s *CoordinatorServer) LocalTrigger(ctx context.Context, req *datapb.Trigge
 			return
 		case err = <-incoming.ret:
 			if err != nil {
-				fmt.Println("Breadcrumbs error:", err.Error())
+				log.Println("Breadcrumbs error:", err.Error())
 			}
 		}
 	default:
-		s.dropped_incoming_triggers += len(req.Triggers)
+		atomic.AddUint64(&s.dropped_incoming_triggers, uint64(len(req.Triggers)))
+		if s.trigger_warn_mutex.TryLock() {
+			defer s.trigger_warn_mutex.Unlock()
+
+			if time.Now().After(s.last_trigger_warning.Add(1 * time.Second)) {
+				dropped := s.dropped_incoming_triggers
+				atomic.AddUint64(&s.dropped_incoming_triggers, -dropped)
+
+				s.last_trigger_warning = time.Now()
+				log.Printf("Warning: coordinator is bottlenecked; %d incoming triggers dropped\n", dropped)
+			}
+		}
 	}
 	return
 }
 
 /* An agent has sent us breadcrumbs */
 func (s *CoordinatorServer) Breadcrumbs(ctx context.Context, req *datapb.BreadcrumbsRequest) (rsp *datapb.BreadcrumbsReply, err error) {
-	// fmt.Println("Received breadcrumbs!", in.Src, in.Breadcrumbs)
 	var incoming IncomingBreadcrumbs
 	incoming.req = req
 	incoming.ret = make(chan error, 1)
@@ -295,11 +314,22 @@ func (s *CoordinatorServer) Breadcrumbs(ctx context.Context, req *datapb.Breadcr
 			return
 		case err = <-incoming.ret:
 			if err != nil {
-				fmt.Println("Breadcrumbs error:", err)
+				log.Println("Breadcrumbs error:", err)
 			}
 		}
 	default:
-		s.dropped_incoming_breadcrumbs += len(req.Breadcrumbs)
+		atomic.AddUint64(&s.dropped_incoming_breadcrumbs, uint64(len(req.Breadcrumbs)))
+		if s.breadcrumb_warn_mutex.TryLock() {
+			defer s.breadcrumb_warn_mutex.Unlock()
+
+			if time.Now().After(s.last_breadcrumb_warning.Add(1 * time.Second)) {
+				dropped := s.dropped_incoming_breadcrumbs
+				atomic.AddUint64(&s.dropped_incoming_breadcrumbs, -dropped)
+
+				s.last_breadcrumb_warning = time.Now()
+				log.Printf("Warning: coordinator is bottlenecked; %d incoming breadcrumbs dropped\n", dropped)
+			}
+		}
 	}
 	return
 }
@@ -312,7 +342,6 @@ func (a *Agent) Run(ctx context.Context) {
 
 /* Connects to an agent in a loop, then sends triggers once connected */
 func (a *Agent) AgentLoop(ctx context.Context) {
-	fmt.Println("Connecting to agent", a.addr)
 	for {
 		select {
 		case <-ctx.Done():
@@ -321,7 +350,8 @@ func (a *Agent) AgentLoop(ctx context.Context) {
 			break
 		}
 
-		conn, err := grpc.Dial(a.addr, grpc.WithInsecure(), grpc.WithTimeout(100*time.Millisecond))
+		log.Println("Connecting to agent", a.addr)
+		conn, err := grpc.Dial(a.addr, grpc.WithInsecure(), grpc.WithTimeout(2*time.Second))
 		if err != nil {
 			log.Println("Unable to connect to", a.addr, "retrying in 2 seconds:", err)
 			select {
@@ -338,7 +368,7 @@ func (a *Agent) AgentLoop(ctx context.Context) {
 
 		err = a.ReportTriggers(ctx, rpcclient)
 		if err != nil {
-			log.Println("Unable to connect to", a.addr, "retrying in 2 seconds:", err)
+			log.Println("Connection error", a.addr, "retrying in 2 seconds:", err)
 			select {
 			case <-ctx.Done():
 				return
@@ -402,7 +432,7 @@ func (a *Agent) doSend(rpcclient datapb.AgentClient, triggers []Trigger) error {
 		request.Triggers = append(request.Triggers, &t)
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 
 	_, err := rpcclient.RemoteTrigger(ctx, &request)
@@ -411,11 +441,16 @@ func (a *Agent) doSend(rpcclient datapb.AgentClient, triggers []Trigger) error {
 }
 
 func (a *Agent) SendTriggers(triggers []Trigger) {
-	// fmt.Println("Forwarding triggers!", a.addr, triggers)
 	select {
 	case a.outgoing_triggers <- triggers:
 		break
 	default:
 		a.dropped_triggers += len(triggers)
+		now := time.Now()
+		if now.After(a.last_warn.Add(1 * time.Second)) {
+			log.Printf("Warning: agent %s is bottlenecked; dropping %d triggers\n", a.addr, a.dropped_triggers)
+			a.dropped_triggers = 0
+			a.last_warn = now
+		}
 	}
 }
