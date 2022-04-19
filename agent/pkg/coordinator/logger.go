@@ -15,9 +15,10 @@ type CsvLogger struct {
 	file     *os.File
 	writer   *csv.Writer
 
-	begin    time.Time
-	wg       *sync.WaitGroup
-	Finished chan []FinishedTrigger
+	begin            time.Time
+	wg               *sync.WaitGroup
+	Finished         chan []FinishedTrigger
+	dropped_finished int
 }
 
 func NewCsvLogger(filename string) (r *CsvLogger, err error) {

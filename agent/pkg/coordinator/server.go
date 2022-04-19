@@ -35,6 +35,9 @@ type CoordinatorServer struct {
 	incoming_triggers    chan *IncomingTriggers
 	incoming_breadcrumbs chan *IncomingBreadcrumbs
 
+	dropped_incoming_triggers    int
+	dropped_incoming_breadcrumbs int
+
 	logger *CsvLogger
 }
 
@@ -42,6 +45,7 @@ type Agent struct {
 	addr              string
 	id_to_addr        map[int32]string
 	outgoing_triggers chan []Trigger
+	dropped_triggers  int
 }
 
 func (s *CoordinatorServer) Init(port string, logfile string) (err error) {
@@ -49,8 +53,8 @@ func (s *CoordinatorServer) Init(port string, logfile string) (err error) {
 	s.timeout = -60 * time.Second
 	s.agents = make(map[string]*Agent)
 	s.listen_port = port
-	s.incoming_triggers = make(chan *IncomingTriggers, 1000)
-	s.incoming_breadcrumbs = make(chan *IncomingBreadcrumbs, 1000)
+	s.incoming_triggers = make(chan *IncomingTriggers, 10000)
+	s.incoming_breadcrumbs = make(chan *IncomingBreadcrumbs, 10000)
 	if logfile != "" {
 		s.logger, err = NewCsvLogger(logfile)
 	} else {
@@ -62,7 +66,7 @@ func (s *CoordinatorServer) Init(port string, logfile string) (err error) {
 func (a *Agent) Init(addr string) {
 	a.addr = addr
 	a.id_to_addr = make(map[int32]string)
-	a.outgoing_triggers = make(chan []Trigger, 100)
+	a.outgoing_triggers = make(chan []Trigger, 10000)
 }
 
 func (s *CoordinatorServer) Run(ctx context.Context) {
@@ -131,8 +135,9 @@ func (cs *CoordinatorServer) checkExpirations() {
 	if cs.logger != nil && len(finished) > 0 {
 		select {
 		case cs.logger.Finished <- finished:
+			return
 		default:
-			// finished queue full, skip
+			cs.logger.dropped_finished += len(finished)
 		}
 	}
 }
@@ -162,7 +167,10 @@ func (cs *CoordinatorServer) processTriggersRequest(incoming *IncomingTriggers) 
 	}
 
 	cs.checkExpirations()
-	incoming.ret <- nil
+	select {
+	case incoming.ret <- nil:
+	default:
+	}
 }
 
 func (cs *CoordinatorServer) processBreadcrumbRequest(incoming *IncomingBreadcrumbs) {
@@ -182,7 +190,11 @@ func (cs *CoordinatorServer) processBreadcrumbRequest(incoming *IncomingBreadcru
 			if addr, ok := origin.id_to_addr[addr_id]; ok {
 				breadcrumbs[b.TraceId] = append(breadcrumbs[b.TraceId], addr)
 			} else {
-				incoming.ret <- fmt.Errorf("Received addr_id %d from %s that hasn't been mapped to an address", addr_id, req.Src)
+				e := fmt.Errorf("Received addr_id %d from %s that hasn't been mapped to an address", addr_id, req.Src)
+				select {
+				case incoming.ret <- e:
+				default:
+				}
 				return
 			}
 		}
@@ -208,7 +220,10 @@ func (cs *CoordinatorServer) processBreadcrumbRequest(incoming *IncomingBreadcru
 	}
 
 	cs.checkExpirations()
-	incoming.ret <- nil
+	select {
+	case incoming.ret <- nil:
+	default:
+	}
 }
 
 /* The "main" thread that receives incoming stuff and sends outgoing stuff */
@@ -223,8 +238,9 @@ func (cs *CoordinatorServer) runCoordinator(ctx context.Context) {
 				finished := cs.c.checkTriggerExpiration(time.Now().Add(1 * time.Second))
 				select {
 				case cs.logger.Finished <- finished:
+					break
 				default:
-					// finished queue full, skip
+					cs.logger.dropped_finished += len(finished)
 				}
 			}
 			return
@@ -243,7 +259,7 @@ func (s *CoordinatorServer) LocalTrigger(ctx context.Context, req *datapb.Trigge
 	// fmt.Println("Received a local trigger!", in.Src, in.Triggers)
 	var incoming IncomingTriggers
 	incoming.req = req
-	incoming.ret = make(chan error)
+	incoming.ret = make(chan error, 1)
 
 	rsp = &datapb.TriggerReply{}
 
@@ -258,8 +274,7 @@ func (s *CoordinatorServer) LocalTrigger(ctx context.Context, req *datapb.Trigge
 			}
 		}
 	default:
-		// TODO: counters here
-		fmt.Println("LocalTrigger incoming_triggers bottlenecked!")
+		s.dropped_incoming_triggers += len(req.Triggers)
 	}
 	return
 }
@@ -269,7 +284,7 @@ func (s *CoordinatorServer) Breadcrumbs(ctx context.Context, req *datapb.Breadcr
 	// fmt.Println("Received breadcrumbs!", in.Src, in.Breadcrumbs)
 	var incoming IncomingBreadcrumbs
 	incoming.req = req
-	incoming.ret = make(chan error)
+	incoming.ret = make(chan error, 1)
 
 	rsp = &datapb.BreadcrumbsReply{}
 
@@ -284,8 +299,7 @@ func (s *CoordinatorServer) Breadcrumbs(ctx context.Context, req *datapb.Breadcr
 			}
 		}
 	default:
-		// TODO: counters here
-		fmt.Println("LocalTrigger incoming_breadcrumbs bottlenecked!")
+		s.dropped_incoming_breadcrumbs += len(req.Breadcrumbs)
 	}
 	return
 }
@@ -299,7 +313,6 @@ func (a *Agent) Run(ctx context.Context) {
 /* Connects to an agent in a loop, then sends triggers once connected */
 func (a *Agent) AgentLoop(ctx context.Context) {
 	fmt.Println("Connecting to agent", a.addr)
-	firsttime := true
 	for {
 		select {
 		case <-ctx.Done():
@@ -310,10 +323,7 @@ func (a *Agent) AgentLoop(ctx context.Context) {
 
 		conn, err := grpc.Dial(a.addr, grpc.WithInsecure(), grpc.WithTimeout(100*time.Millisecond))
 		if err != nil {
-			if firsttime {
-				fmt.Println("Unable to connect to coordinator, retrying every 2 seconds", a.addr, err)
-				firsttime = false
-			}
+			log.Println("Unable to connect to", a.addr, "retrying in 2 seconds:", err)
 			select {
 			case <-ctx.Done():
 				return
@@ -328,10 +338,7 @@ func (a *Agent) AgentLoop(ctx context.Context) {
 
 		err = a.ReportTriggers(ctx, rpcclient)
 		if err != nil {
-			if firsttime {
-				fmt.Println("Error with agent", a.addr, err, " -- will retry every 2 seconds")
-				firsttime = false
-			}
+			log.Println("Unable to connect to", a.addr, "retrying in 2 seconds:", err)
 			select {
 			case <-ctx.Done():
 				return
@@ -340,8 +347,6 @@ func (a *Agent) AgentLoop(ctx context.Context) {
 			}
 			continue
 		}
-
-		firsttime = true
 	}
 }
 
@@ -411,8 +416,6 @@ func (a *Agent) SendTriggers(triggers []Trigger) {
 	case a.outgoing_triggers <- triggers:
 		break
 	default:
-		// TODO: counters here
-		// This can happen if the agent isn't running / contactable
-		// fmt.Println("Agent SendTriggers bottlenecked!", a.addr)
+		a.dropped_triggers += len(triggers)
 	}
 }

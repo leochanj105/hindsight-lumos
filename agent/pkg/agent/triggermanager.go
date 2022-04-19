@@ -1,6 +1,8 @@
 package agent
 
-import "github.com/juju/ratelimit"
+import (
+	"github.com/juju/ratelimit"
+)
 
 /*
 This file defines the TriggerManager, which wraps the trigger queues of
