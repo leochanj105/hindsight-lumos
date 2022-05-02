@@ -43,19 +43,6 @@ void tracestate_begin(TraceState* trace, BufManager* mgr, uint64_t trace_id) {
     tracestate_begin_with_sampling(trace, mgr, trace_id, 0, UINT64_MAX);
 }
 
-// TODO: Merge this with tracestate_begin_with_sampling
-void tracestate_begin_sampling(TraceState* trace, 
-    BufManager* mgr, 
-    uint64_t trace_id,
-    int sample_rate) {
-    if(trace_id % 10000000 > 10000000 / sample_rate) {
-        trace->active = false;
-        trace->header.trace_id = trace_id;
-        return;
-    }
-    tracestate_begin(trace, mgr, trace_id);
-}
-
 void tracestate_begin_with_sampling(TraceState* trace, BufManager* mgr, uint64_t trace_id, uint64_t head_sampling_threshold, uint64_t retroactive_sampling_threshold) {
     if (trace->active) {
         // If the trace ID is the same, ignore this call

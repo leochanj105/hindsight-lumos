@@ -143,8 +143,6 @@ char* hindsight_serialize();
 
 void hindsight_deserialize(char* baggage);
 
-int hindsight_payload();
-
 float hindsight_retroactive_sampling_percentage();
 
 float hindsight_head_sampling_probability();

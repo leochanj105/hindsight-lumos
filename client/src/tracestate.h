@@ -35,9 +35,6 @@ TraceState tracestate_create();
 // This call will always enable retroactive sampling, and will never apply head-sampling
 void tracestate_begin(TraceState* trace, BufManager* mgr, uint64_t trace_id);
 
-// TODO: Merge this with tracestate_begin_with_sampling
-void tracestate_begin_sampling(TraceState* trace, BufManager* mgr, uint64_t trace_id, int sample_rate);
-
 // Version of tracestate_begin that will potentially not sample the trace if retroactive_sampling_percentage is set
 // This call will only start a trace if trace_id <= retroactive_sampling_threshold
 void tracestate_begin_with_sampling(TraceState* trace, BufManager* mgr, uint64_t trace_id, uint64_t head_sampling_threshold, uint64_t retroactive_sampling_threshold);
