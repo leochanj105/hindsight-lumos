@@ -153,7 +153,7 @@ void drain_forever_client() {
 }
 
 void client() {
-	hindsight_init_with_config(PROCESS_NAME, config());
+	hindsight_init_with_config(PROCESS_NAME, hindsight_load_config_file("/etc/hindsight_conf/default.conf"));
 
 	drain_forever_client();
 }

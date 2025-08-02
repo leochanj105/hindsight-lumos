@@ -11,18 +11,19 @@ BINDIR = bin
 TESTDIR = test
 JNIDIR = jni
 DEPDIR = .deps
+JAVA_HOME=/usr/lib/jvm/java-8-openjdk-amd64
 
 CFLAGS = -Wall -rdynamic -O3 -pedantic
 STATIC_LDFLAGS = -fPIC
 LDFLAGS = $(STATIC_LDFLAGS) -shared
 LIBRARY = $(LIBDIR)/libtracer.so
 STATIC_LIBRARY = $(LIBDIR)/libtracer.a
-SRCFILES = $(SRCDIR)/agentapi.c $(SRCDIR)/breadcrumb.c $(SRCDIR)/buffer.c $(SRCDIR)/common.c $(SRCDIR)/hindsight.c $(SRCDIR)/queue.c $(SRCDIR)/tracestate.c $(SRCDIR)/trigger.c
+SRCFILES = $(SRCDIR)/agentapi.c $(SRCDIR)/breadcrumb.c $(SRCDIR)/buffer.c $(SRCDIR)/common.c $(SRCDIR)/hindsight.c $(SRCDIR)/queue.c $(SRCDIR)/tracestate.c $(SRCDIR)/trigger.c #$(JNIDIR)/JNI.c
 
 DEPFILES := $(SRCFILES:%.c=$(DEPDIR)/%.d)
 DEPFLAGS = -MT $@ -MMD -MP -MF $(DEPDIR)/$*.d
 OBJFILES = ${SRCFILES:.c=.o}
-INCLUDEFLAGS = -I $(SRCDIR) -I $(INCLUDEDIR)
+INCLUDEFLAGS = -I $(SRCDIR) -I $(INCLUDEDIR) #-I$(JAVA_HOME)/include -I$(JAVA_HOME)/include/linux
 PTHREADFLAGS = -lpthread -lm
 
 TARGET = dirs bin/breadcrumbs_test bin/benchmark_test bin/triggers_test bin/trigger_benchmark_test bin/buffer_test bin/queue_test bin/hindsight_test bin/hindsight2_test bin/sampling_test bin/lumos_test $(LIBRARY) $(STATIC_LIBRARY)
