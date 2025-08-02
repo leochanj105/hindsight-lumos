@@ -23,7 +23,6 @@ char* bufmanager_pool_init(const char* fname, size_t fsize) {
     assert(fd >= 0);
 
     int i = ftruncate(fd, fsize);
-    printf("err:%s, %d\n", strerror(errno), fsize);
     assert(i == 0);
 
     shm = mmap(NULL, fsize, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
