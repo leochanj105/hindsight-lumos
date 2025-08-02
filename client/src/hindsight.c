@@ -28,7 +28,7 @@ HindsightConfig hindsight_default_config() {
     conf.triggers_capacity = -1;
     conf.retroactive_sampling_percentage = 1.0;
     conf._retroactive_sampling_threshold = UINT64_MAX;
-    conf.head_sampling_probability = 0.0;
+    conf.head_sampling_probability = 1.0;
     conf._head_sampling_threshold = 0;
     return conf;
 }

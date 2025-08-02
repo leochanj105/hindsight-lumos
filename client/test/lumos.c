@@ -17,7 +17,7 @@
 // TODO: configurable number of each thread.  Implement drainer in go. Compare
 
 HindsightConfig config() {
-	HindsightConfig conf = hindsight_default_config();
+	HindsightConfig conf = hindsight_load_config("default");//hindsight_default_config(); 
 	conf.pool_capacity = 10000;
 	conf.buffer_size = BUFFERSIZE;
 	conf.breadcrumbs_capacity = conf.pool_capacity;
@@ -144,8 +144,8 @@ void drain_forever_client() {
 			/* count += check_every; */
 		/* } */
 		/* if ((trace_id % 100000) == 0) { */
-		printf("triggering... %d\n", trace_id);
-			hindsight_trigger(0);
+		/* printf("triggering... %d\n", trace_id); */
+		/* 	hindsight_trigger(0); */
 		/* } */
 		/* hindsight_breadcrumb("Hello World!"); */
 		hindsight_end();
