@@ -8,6 +8,8 @@
 
 #include "buffer.h"
 #include "common.h"
+#include <errno.h>
+#include <string.h>
 
 #define POOL_SHM_FILENAME(name) get_shm_fname(name, "pool")
 #define AVAILABLE_SHM_FILENAME(name) get_shm_fname(name, "available_queue")
@@ -37,7 +39,7 @@ char* bufmanager_pool_init_existing(const char* fname) {
 
     // Wait until the file exists
     while (access(fname, F_OK) != 0) {
-        printf("%s does not exist, waiting...\n", fname);
+        printf("[LUMOS] %s does not exist, waiting...\n", fname);
         usleep(1000000);
     }
     
@@ -51,6 +53,7 @@ char* bufmanager_pool_init_existing(const char* fname) {
 
     // Map it
     shm = mmap(NULL, fsize, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+    printf("mmap: %d\n", errno);
     assert(shm != MAP_FAILED);
     close(fd);
 

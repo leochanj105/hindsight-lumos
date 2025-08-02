@@ -3,6 +3,7 @@
 #include <assert.h>
 
 HindsightAgentAPI* hindsight_agentapi_init(const char* servicename) {
+    printf("[LUMOS] initing...\n");
     HindsightAgentAPI* api = malloc(sizeof(HindsightAgentAPI));
     api->mgr = bufmanager_init_existing(servicename);
     api->triggers = triggers_init_existing(servicename);
