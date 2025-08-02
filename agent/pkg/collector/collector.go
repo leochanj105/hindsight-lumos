@@ -98,17 +98,13 @@ func (c *Collector) handleConnection(conn net.Conn) {
 			r.trace_id = header.Trace_id
 			r.source_agent = agent_addr
 			r.buffer = buf
+			fmt.Println("trace", header.Trace_id,agent_addr,len(buf));
 			c.incoming <- &r
 		}
 	}
 }
 
 func (c *Collector) fileWriter(filename string) {
-	f, err := os.Create(filename)
-	if err != nil {
-		fmt.Println("Error creating /local/buffers.out: ", err)
-		return
-	}
 	ticker := time.NewTicker(1 * time.Second)
 	count := 0
 	last_report := time.Now()
@@ -126,6 +122,12 @@ func (c *Collector) fileWriter(filename string) {
 		case r := <-c.incoming:
 			{
 				count += len(r.buffer)
+
+				f, err := os.Create(fmt.Sprintf("%s/%d",filename,r.trace_id))
+				if err != nil {
+					fmt.Println("Error creating /local/buffers.out: ", err)
+					return
+				}
 				err = r.WriteToFile(f)
 				if err != nil {
 					fmt.Println("Error writing buffer to file: ", err)

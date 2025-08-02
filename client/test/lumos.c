@@ -9,10 +9,10 @@
 #include <time.h>
 
 #define PROCESS_NAME "hs_lumos_test"
-#define BUFFERSIZE 128000
-#define TRACEPOINTSPERTRACE 3000
-#define WRITESIZE 1000
-#define CHECKEVERY 1
+#define BUFFERSIZE 128
+#define TRACEPOINTSPERTRACE 1
+#define WRITESIZE 8
+#define CHECKEVERY 4
 
 // TODO: configurable number of each thread.  Implement drainer in go. Compare
 
@@ -96,18 +96,18 @@ void drain_forever_client() {
 	uint64_t trace_id = 700;
 	int check_every = CHECKEVERY;
 
-	size_t total_buf_size = write_size * check_every;
+	size_t total_buf_size = BUFFERSIZE;//write_size * check_every;
 	char* buf = (char*) malloc(total_buf_size);
 	for (int i = 0; i < total_buf_size/4; i++) {
 		((int*) buf)[i] = rand();
 	}
 
 	while (true) {
-		if(trace_id > 710){
+		if(trace_id > 700){
 			break;
 		}
 		hindsight_begin(++trace_id);
-		for (int i = 0; i < tracepoints_per_trace; i+=1) {
+		/* for (int i = 0; i < tracepoints_per_trace; i+=1) { */
 			/* uint64_t now = nanos(); */
 			// printf("nanos %ld\n", now);
 			/* if ((now - last_print) > print_every) { */
@@ -134,11 +134,15 @@ void drain_forever_client() {
 			/* 	stats = current; */
 			/* } */
 
-			for (size_t j = 0; j < total_buf_size; j += write_size) {
-				hindsight_tracepoint(buf, write_size);
-			}
+			/* for (size_t j = 0; j < total_buf_size; j += write_size) { */
+		char* x = "hello\n";
+				hindsight_tracepoint(x, strlen(x));
+		char* y = "wtf!!!";
+				hindsight_tracepoint(y, strlen(y));
+
+			/* } */
 			/* count += check_every; */
-		}
+		/* } */
 		/* if ((trace_id % 100000) == 0) { */
 		printf("triggering... %d\n", trace_id);
 			hindsight_trigger(0);
