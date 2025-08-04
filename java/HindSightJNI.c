@@ -1,8 +1,8 @@
-#include "A.h"
+#include "HindSightJNI.h"
 #include "stdio.h"
 #include "hindsight.h"
 
-JNIEXPORT void JNICALL Java_A_hindsightInit
+JNIEXPORT void JNICALL Java_HindsightJNI_hindsightInit
   (JNIEnv * env, jclass cls, jstring proc, jstring config){
     printf("start initing...\n");
     const char *procString = (*env)->GetStringUTFChars(env, proc, 0);
@@ -13,7 +13,7 @@ JNIEXPORT void JNICALL Java_A_hindsightInit
     printf("finished initting\n");
   }
 
-JNIEXPORT void JNICALL Java_A_hindsightTracepoint
+JNIEXPORT void JNICALL Java_HindsightJNI_hindsightTracepoint
   (JNIEnv * env, jclass cls, jbyteArray payload, jint size){
     jboolean isCopy;
     char * pCData = (char*)(*env)->GetByteArrayElements(env, payload, &isCopy);
@@ -25,17 +25,12 @@ JNIEXPORT void JNICALL Java_A_hindsightTracepoint
     }
   }
 
-JNIEXPORT void JNICALL Java_A_hindsightBegin
+JNIEXPORT void JNICALL Java_HindsightJNI_hindsightBegin
   (JNIEnv * env, jclass cls, jlong traceId){
     hindsight_begin(traceId);
   }
 
-JNIEXPORT void JNICALL Java_A_hindsightEnd
+JNIEXPORT void JNICALL Java_HindsightJNI_hindsightEnd
   (JNIEnv *env, jclass cls){
     hindsight_end();
-  }
-JNIEXPORT void JNICALL Java_A_test
-  (JNIEnv *env, jclass cls, jstring s){
-    const char *nativeString = (*env)->GetStringUTFChars(env, s, 0);
-    printf("%s\n", nativeString);
   }
