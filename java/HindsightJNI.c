@@ -1,4 +1,4 @@
-#include "HindSightJNI.h"
+#include "HindsightJNI.h"
 #include "stdio.h"
 #include "hindsight.h"
 
