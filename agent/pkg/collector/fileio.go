@@ -113,10 +113,10 @@ func (b *ReceivedBuffer) WriteToFile(f *os.File) (err error) {
 	  source_agent (length prefixed)
 		buffer (length prefixed)
 	*/
-	// err = writeFileLengthPrefixed(f, []byte(b.source_agent))
-	// if err != nil {
-	// 	return
-	// }
+	err = writeFileLengthPrefixed(f, []byte(b.source_agent))
+	if err != nil {
+		return
+	}
 	err = writeFileLengthPrefixed(f, b.buffer)
 	return
 }
