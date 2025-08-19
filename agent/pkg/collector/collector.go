@@ -123,7 +123,9 @@ func (c *Collector) fileWriter(filename string) {
 			{
 				count += len(r.buffer)
 
-				f, err := os.Create(fmt.Sprintf("%s/%d",filename,r.trace_id))
+				fname := fmt.Sprintf("%s/%d",filename,r.trace_id)
+				f, err := os.OpenFile(fname,os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+
 				if err != nil {
 					fmt.Println("Error creating /local/buffers.out: ", err)
 					return
