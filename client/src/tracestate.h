@@ -42,6 +42,8 @@ void tracestate_begin_with_sampling(TraceState* trace, BufManager* mgr, uint64_t
 // Ends the current trace state, flushes the buffer
 void tracestate_end(TraceState* trace, BufManager* mgr);
 
+void switchBuffer(TraceState* trace, BufManager* mgr);
+
 // Acquires a buffer to write to, that will be in the trace
 void tracestate_write_data(TraceState* trace, 
                            BufManager* mgr,

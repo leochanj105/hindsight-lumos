@@ -135,11 +135,19 @@ void drain_forever_client() {
 			/* } */
 
 			/* for (size_t j = 0; j < total_buf_size; j += write_size) { */
-		char* x = "hello\n";
-				hindsight_tracepoint(x, strlen(x));
-		char* y = "wtf!!!";
-				hindsight_tracepoint(y, strlen(y));
+		/* char* x = "hello\n"; */
+		/* 		hindsight_tracepoint(x, strlen(x)); */
 
+		uint64_t now = nanos(); 
+		int N = 10000;
+
+		for(size_t i = 0; i < N; i++){
+				char* y = "wtf!!!";
+				hindsight_tracepoint(y, strlen(y));
+		}
+
+		uint64_t end = nanos(); 
+		printf("time : %d\n", (end-now)/N );
 			/* } */
 			/* count += check_every; */
 		/* } */

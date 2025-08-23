@@ -109,6 +109,25 @@ void tracestate_end(TraceState* trace, BufManager* mgr) {
     trace->current = &trace->header;
 }
 
+
+void switchBuffer(TraceState* trace, BufManager* mgr){
+    int prev_buffer_id = trace->header.buffer_id;
+
+    // Buffer is full, return old buffer
+    bufmanager_return(mgr, trace->header.trace_id, &trace->buffer);
+
+    // Acquire new buffer and write header
+    bufmanager_acquire(mgr, &trace->buffer);
+    trace->header.buffer_number++;
+    trace->header.acquired = tracestate_get_time();
+    trace->header.buffer_id = trace->buffer.id;
+    trace->header.prev_buffer_id = prev_buffer_id;
+    if (trace->buffer.id == -2) {
+        trace->header.null_buffer_count++;
+    }
+    tracestate_write_header(trace);
+}
+
 void tracestate_write_data(TraceState* trace, 
                            BufManager* mgr,
                            size_t write_size, 

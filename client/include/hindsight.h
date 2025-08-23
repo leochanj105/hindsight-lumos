@@ -60,7 +60,7 @@ extern Hindsight hindsight;
 extern BufManager* mgr;
 
 // Thread-local trace state
-extern __thread TraceState hindsight_tracestate;
+extern __thread TraceState hindsight_tls;
 
 // Load a hindsight config from the specified file
 HindsightConfig hindsight_load_config_file(const char* fname);

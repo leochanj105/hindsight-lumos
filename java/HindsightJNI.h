@@ -17,26 +17,26 @@ JNIEXPORT void JNICALL Java_HindsightJNI_hindsightInit
 
 /*
  * Class:     HindsightJNI
- * Method:    hindsightTracepoint
- * Signature: ([BI)V
- */
-JNIEXPORT void JNICALL Java_HindsightJNI_hindsightTracepoint
-  (JNIEnv *, jclass, jbyteArray, jint);
-
-/*
- * Class:     HindsightJNI
  * Method:    hindsightBegin
- * Signature: (J)V
+ * Signature: (J)LHindsightJNI/Trace;
  */
-JNIEXPORT void JNICALL Java_HindsightJNI_hindsightBegin
+JNIEXPORT jobject JNICALL Java_HindsightJNI_hindsightBegin
   (JNIEnv *, jclass, jlong);
 
 /*
  * Class:     HindsightJNI
- * Method:    hindsightEnd
+ * Method:    returnBufferNative
  * Signature: ()V
  */
-JNIEXPORT void JNICALL Java_HindsightJNI_hindsightEnd
+JNIEXPORT void JNICALL Java_HindsightJNI_returnBufferNative
+  (JNIEnv *, jclass);
+
+/*
+ * Class:     HindsightJNI
+ * Method:    switchBufferNative
+ * Signature: ()Ljava/nio/ByteBuffer;
+ */
+JNIEXPORT jobject JNICALL Java_HindsightJNI_switchBufferNative
   (JNIEnv *, jclass);
 
 #ifdef __cplusplus
