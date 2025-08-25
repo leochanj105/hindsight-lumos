@@ -16,10 +16,11 @@ JNIEXPORT void JNICALL Java_HindsightJNI_hindsightInit
     hindsight_init_with_config(procString,c);
     printf("finished initting\n");
   }
-/*
+
 JNIEXPORT void JNICALL Java_HindsightJNI_hindsightTracepoint
   (JNIEnv * env, jclass cls, jbyteArray payload, jint size){
     jboolean isCopy;
+    /* printf("writing...\n"); */
     char * pCData = (char*)(*env)->GetByteArrayElements(env, payload, &isCopy);
 
     hindsight_tracepoint(pCData, size);
@@ -28,7 +29,7 @@ JNIEXPORT void JNICALL Java_HindsightJNI_hindsightTracepoint
       (*env)->ReleaseByteArrayElements(env, payload, pCData, JNI_ABORT);
     }
   }
-*/
+
 JNIEXPORT jobject JNICALL Java_HindsightJNI_hindsightBegin
   (JNIEnv * env, jclass cls, jlong traceId){
     hindsight_begin(traceId);
@@ -71,5 +72,11 @@ JNIEXPORT jobject JNICALL Java_HindsightJNI_switchBufferNative
 JNIEXPORT void JNICALL Java_HindsightJNI_returnBufferNative
   (JNIEnv *env, jclass cls){
     bufmanager_return(mgr, hindsight_tls.header.trace_id, &hindsight_tls.buffer);
+  }
+
+
+JNIEXPORT void JNICALL Java_HindsightJNI_hindsightEnd
+  (JNIEnv *env, jclass cls){
+    hindsight_end();
   }
 

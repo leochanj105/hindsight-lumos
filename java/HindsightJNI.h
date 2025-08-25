@@ -17,11 +17,27 @@ JNIEXPORT void JNICALL Java_HindsightJNI_hindsightInit
 
 /*
  * Class:     HindsightJNI
+ * Method:    hindsightTracepoint
+ * Signature: ([BI)V
+ */
+JNIEXPORT void JNICALL Java_HindsightJNI_hindsightTracepoint
+  (JNIEnv *, jclass, jbyteArray, jint);
+
+/*
+ * Class:     HindsightJNI
  * Method:    hindsightBegin
  * Signature: (J)LHindsightJNI/Trace;
  */
 JNIEXPORT jobject JNICALL Java_HindsightJNI_hindsightBegin
   (JNIEnv *, jclass, jlong);
+
+/*
+ * Class:     HindsightJNI
+ * Method:    hindsightEnd
+ * Signature: ()V
+ */
+JNIEXPORT void JNICALL Java_HindsightJNI_hindsightEnd
+  (JNIEnv *, jclass);
 
 /*
  * Class:     HindsightJNI
